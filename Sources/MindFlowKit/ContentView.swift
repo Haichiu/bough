@@ -313,6 +313,9 @@ public struct ContentView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(Color(hex: 0xF5C542))
             }
+            if let key = row.colorTag, let c = Theme.colorTag(named: key) {
+                Circle().fill(c).frame(width: 7, height: 7)
+            }
             if row.hasChildren && outlineEditingID != row.id {
                 Button {
                     vm.toggleCollapse(id: row.id)

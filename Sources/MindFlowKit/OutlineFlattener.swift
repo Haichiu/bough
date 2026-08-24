@@ -9,6 +9,7 @@ public struct OutlineRow: Equatable, Identifiable {
     public let isRoot: Bool
     public let hasChildren: Bool
     public let collapsed: Bool
+    public let colorTag: String?
 }
 
 /// Flattens the node tree into ordered rows for the outline view,
@@ -24,7 +25,8 @@ public enum OutlineFlattener {
                                    depth: depth,
                                    isRoot: isRoot,
                                    hasChildren: !node.children.isEmpty,
-                                   collapsed: node.collapsed))
+                                   collapsed: node.collapsed,
+                                   colorTag: node.colorTag))
             guard !node.collapsed else { return }
             for child in node.children {
                 walk(child, depth: depth + 1, isRoot: false)

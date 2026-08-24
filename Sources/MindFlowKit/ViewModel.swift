@@ -557,6 +557,15 @@ public final class MindMapViewModel: ObservableObject {
         notify("已關閉右側 \(removedRange.count) 個分頁")
     }
 
+    /// ⌘W semantics: close the tab; on the last tab, close the window.
+    public func closeActiveTabOrWindow() {
+        if sessions.count > 1 {
+            closeTab(activeIndex)
+        } else {
+            NSApp.keyWindow?.performClose(nil)
+        }
+    }
+
     public func cycleTab(_ offset: Int) {
         guard sessions.count > 1 else { return }
         switchTab(to: (activeIndex + offset + sessions.count) % sessions.count)

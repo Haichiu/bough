@@ -89,8 +89,8 @@ struct MindFlowApp: App {
                 Button("上一個分頁") { vm.cycleTab(-1) }
                     .keyboardShortcut(.tab, modifiers: [.control, .shift])
                 Divider()
-                Button("關閉分頁") {
-                    vm.closeTab(vm.activeIndex)
+                Button("關閉分頁／視窗") {
+                    vm.closeActiveTabOrWindow()
                 }
                 .keyboardShortcut("w", modifiers: [.command])
                 Button("重新開啟上次關閉的分頁") { vm.reopenLastClosedTab() }
