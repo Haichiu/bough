@@ -108,7 +108,6 @@ struct NodeView: View {
             Text(node.text.isEmpty ? " " : node.text)
                 .font(Font(LayoutEngine.font(for: depth)))
                 .foregroundStyle(depth <= 1 ? Color.white : Color.primary)
-                .strikethrough(false)
                 .lineLimit(3)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 6)
