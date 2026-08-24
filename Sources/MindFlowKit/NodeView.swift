@@ -8,6 +8,7 @@ struct NodeView: View {
     let isSelected: Bool
     let isEditing: Bool
     let isDropTarget: Bool
+    var onToggleCollapse: (() -> Void)? = nil
     var isFresh: Bool = false
     var isDragging: Bool = false
     var dragOffset: CGSize? = nil
@@ -160,6 +161,8 @@ struct NodeView: View {
                 .background(Circle().fill(branchColor))
                 .overlay(Circle().stroke(Color(nsColor: .controlBackgroundColor), lineWidth: 1.5))
                 .offset(x: 10)
+                .onTapGesture { onToggleCollapse?() }
+                .help("展開子主題")
         }
     }
 }

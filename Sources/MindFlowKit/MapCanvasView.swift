@@ -54,10 +54,11 @@ struct MapCanvasView: View {
                     linksCanvas(layouts: layouts, origin: origin)
                     dragIndicator(origin: origin)
                     reorderIndicator(origin: origin)
-                    ForEach(items) { item in
+                    ForEach(visibleItems(items: items, geoSize: geo.size)) { item in
                         nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                                  layouts: layouts, geoSize: geo.size, bounds: bounds,
-                                 isSearchHit: vm.searchResults.contains(item.node.id))
+                                 isSearchHit: vm.searchResults.contains(item.node.id),
+                 onToggleCollapse: item.node.collapsed ? { vm.toggleCollapse(id: item.node.id) } : nil)
                     }
                 }
                 .frame(width: bounds.width, height: bounds.height)
@@ -134,15 +135,37 @@ struct MapCanvasView: View {
         }
     }
 
+    /// Only materializes nodes intersecting the viewport, keeping huge maps responsive.
+    private func visibleItems(items: [NodeItem], geoSize: CGSize) -> [NodeItem] {
+        let layouts = LayoutEngine.layout(root: vm.document.root, direction: vm.direction)
+        let bounds = LayoutEngine.contentBounds(of: layouts)
+        let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
+        let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
+
+        func toMap(_ screen: CGPoint) -> CGPoint {
+            let sx = screen.x - (geoSize.width - bounds.width) / 2 - pan.width
+            let sy = screen.y - (geoSize.height - bounds.height) / 2 - pan.height
+            let qx = center.x + (sx - center.x) / scale
+            let qy = center.y + (sy - center.y) / scale
+            return CGPoint(x: qx - origin.x, y: qy - origin.y)
+        }
+        let a = toMap(CGPoint.zero)
+        let b = toMap(CGPoint(x: geoSize.width, y: geoSize.height))
+        let viewport = CGRect(x: min(a.x, b.x) - 200, y: min(a.y, b.y) - 150,
+                              width: abs(a.x - b.x) + 400, height: abs(a.y - b.y) + 300)
+        return items.filter { viewport.intersects($0.layout.frame) }
+    }
+
     private func nodeView(item: NodeItem, theme: Theme, dropTarget: UUID?, origin: CGPoint,
                           layouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect,
-                          isSearchHit: Bool) -> some View {
+                          isSearchHit: Bool, onToggleCollapse: (() -> Void)? = nil) -> some View {
         NodeView(node: item.node,
                  layout: item.layout,
                  branchColor: theme.color(forIndex: item.layout.colorIndex),
                  isSelected: vm.selection == item.node.id,
                  isEditing: vm.editingID == item.node.id,
                  isDropTarget: dropTarget == item.node.id,
+                 onToggleCollapse: onToggleCollapse,
                  isFresh: vm.recentlyAddedID == item.node.id,
                  isDragging: drag?.id == item.node.id,
                  dragOffset: drag?.id == item.node.id ? drag?.translation : nil,
