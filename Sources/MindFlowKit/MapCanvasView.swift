@@ -181,6 +181,9 @@ struct MapCanvasView: View {
                 Button("加入兄弟主題") { vm.addSibling(of: item.node.id) }
             }
             Button("複製整棵子樹") { vm.duplicate(id: item.node.id) }
+            if vm.document.offsets[item.node.id.uuidString] != nil {
+                Button("重設此節點位置") { vm.clearOffset(id: item.node.id) }
+            }
             if let selected = vm.selection, selected != item.node.id,
                !vm.document.links.contains(where: {
                    ($0.from == selected && $0.to == item.node.id) || ($0.from == item.node.id && $0.to == selected)

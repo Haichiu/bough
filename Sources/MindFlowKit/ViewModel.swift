@@ -371,6 +371,14 @@ public final class MindMapViewModel: ObservableObject {
     public func clearOffset(id: UUID) {
         guard document.root.contains(id) else { return }
         mutate { $0.offsets.removeValue(forKey: id.uuidString) }
+        notify("已將節點歸位")
+    }
+
+    /// Resets every manual nudge back to pure auto layout.
+    public func resetAllOffsets() {
+        guard !document.offsets.isEmpty else { return }
+        mutate { $0.offsets = [:] }
+        notify("已重設所有手動位置")
     }
 
     // MARK: - Associative links

@@ -491,6 +491,27 @@ do {
     }
 }
 
+// MARK: - v4.7: reset offsets
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let a = vm.addChild(to: nil)!
+        vm.nudgeOffset(id: a, dx: 40, dy: 20)
+        check(vm.document.offsets.isEmpty == false, "nudge creates offset")
+        vm.resetAllOffsets()
+        check(vm.document.offsets.isEmpty, "resetAll clears every offset")
+        let frameAfterReset = LayoutEngine.layout(root: vm.document.root,
+                                                  direction: .logicRight,
+                                                  offsets: vm.document.offsets)[a]!.frame
+        let pureAuto = LayoutEngine.layout(root: MindNode(text: vm.document.root.text,
+                                                          children: vm.document.root.children),
+                                           direction: .logicRight)[a]?.frame
+        check(frameAfterReset == (pureAuto ?? frameAfterReset), "reset returns to pure auto layout")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

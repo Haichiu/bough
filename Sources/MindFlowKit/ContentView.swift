@@ -68,6 +68,9 @@ public struct ContentView: View {
                     Button("平衡圖（左右）") { vm.setDirection(.balanced) }
                     Button("魚骨圖") { vm.setDirection(.fishbone) }
                     Button("括號圖") { vm.setDirection(.bracket) }
+                    Divider()
+                    Button("重設手動位置") { vm.resetAllOffsets() }
+                        .disabled(vm.document.offsets.isEmpty)
                 } label: {
                     Label("版面", systemImage: "arrow.triangle.branch")
                 }
