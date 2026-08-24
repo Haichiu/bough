@@ -602,6 +602,8 @@ public final class MindMapViewModel: ObservableObject {
         searchResults = ids
         searchIndex = 0
         if let first = ids.first {
+            // Clear branch focus so search results are fully visible.
+            focusBranchID = nil
             expandTo(id: first)
             selection = first
         }
