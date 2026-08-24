@@ -244,6 +244,7 @@ public struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                         .help("關閉此分頁")
+                        .accessibilityLabel("關閉分頁：\(tabTitle(vm.sessions[index]))")
                     }
                 }
             }

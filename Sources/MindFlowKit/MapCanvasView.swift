@@ -54,7 +54,7 @@ struct MapCanvasView: View {
                 ZStack {
                     connectionsCanvas(items: items, layouts: layouts, theme: theme,
                                       origin: origin, focusIDs: focusIDs)
-                    linksCanvas(layouts: layouts, origin: origin)
+                    linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs)
                     dragIndicator(origin: origin)
                     reorderIndicator(origin: origin)
                     ForEach(visibleItems(items: items, geoSize: geo.size, bounds: bounds)) { item in
@@ -388,9 +388,11 @@ struct MapCanvasView: View {
 
     /// Dashed associative curves between arbitrary nodes, with a tap-to-select handle.
     @ViewBuilder
-    private func linksCanvas(layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
+    private func linksCanvas(layouts: [UUID: NodeLayout], origin: CGPoint,
+                             focusIDs: Set<UUID>) -> some View {
         ForEach(vm.document.links) { link in
-            if let fromLayout = layouts[link.from], let toLayout = layouts[link.to] {
+            if let fromLayout = layouts[link.from], let toLayout = layouts[link.to],
+               focusIDs.isEmpty || (focusIDs.contains(link.from) && focusIDs.contains(link.to)) {
                 let p0 = CGPoint(x: fromLayout.center.x + origin.x, y: fromLayout.center.y + origin.y)
                 let p1 = CGPoint(x: toLayout.center.x + origin.x, y: toLayout.center.y + origin.y)
                 let mid = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
