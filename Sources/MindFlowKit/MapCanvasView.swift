@@ -170,9 +170,16 @@ struct MapCanvasView: View {
                  isFresh: vm.recentlyAddedID == item.node.id,
                  isDragging: drag?.id == item.node.id,
                  dragOffset: drag?.id == item.node.id ? drag?.translation : nil,
-                 onCancelEdit: { vm.stopEditing() },
+                 onCancelEdit: { text in
+                     // Esc on a brand-new empty node discards it.
+                     if text.trimmingCharacters(in: .whitespaces).isEmpty && item.node.text.isEmpty {
+                         vm.delete(id: item.node.id)
+                         vm.notify("已捨棄空白主題")
+                     }
+                     vm.stopEditing()
+                 },
                  onCommitEdit: { text in
-                     vm.rename(id: item.node.id, to: text)
+                     vm.commitNodeText(id: item.node.id, text: text)
                      vm.stopEditing()
                  })
         .contextMenu {

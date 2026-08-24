@@ -512,6 +512,25 @@ do {
     }
 }
 
+// MARK: - v4.8: empty-start nodes
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        while vm.sessions.count > 1 { vm.closeTab(0) }
+        let startCount = vm.sessions.count
+        let node = vm.addChild(to: nil)!
+        check(vm.document.root.find(node)?.text.isEmpty == true, "new nodes start empty")
+        vm.commitNodeText(id: node, text: "   ")
+        check(vm.sessions.count == startCount, "empty commit discards brand-new node")
+        let kept = vm.addChild(to: nil)!
+        vm.rename(id: kept, to: "既有文字")
+        vm.commitNodeText(id: kept, text: "")
+        check(vm.document.root.find(kept)?.text == "既有文字", "esc on existing node keeps original")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

@@ -12,7 +12,7 @@ struct NodeView: View {
     var isDragging: Bool = false
     var dragOffset: CGSize? = nil
     var isSearchHit: Bool = false
-    let onCancelEdit: () -> Void
+    let onCancelEdit: (String) -> Void
     let onCommitEdit: (String) -> Void
 
     @State private var editText = ""
@@ -96,14 +96,22 @@ struct NodeView: View {
     @ViewBuilder
     private func content(depth: Int) -> some View {
         if isEditing {
-            TextField("", text: $editText)
+            ZStack(alignment: .center) {
+                if editText.isEmpty {
+                    Text("輸入文字…")
+                        .font(Font(LayoutEngine.font(for: depth)))
+                        .foregroundStyle(Color.secondary.opacity(0.6))
+                        .allowsHitTesting(false)
+                }
+                TextField("", text: $editText)
                 .textFieldStyle(.plain)
                 .font(Font(LayoutEngine.font(for: depth)))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 10)
                 .focused($editFocused)
                 .onSubmit { onCommitEdit(editText) }
-                .onExitCommand { onCancelEdit() }
+                .onExitCommand { onCancelEdit(editText) }
+            }
         } else {
             Text(node.text.isEmpty ? " " : node.text)
                 .font(Font(LayoutEngine.font(for: depth)))

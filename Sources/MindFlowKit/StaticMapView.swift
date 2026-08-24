@@ -120,7 +120,7 @@ struct StaticMapView: View {
                          isDropTarget: false,
                          isFresh: false,
                          isDragging: false,
-                         onCancelEdit: {},
+                         onCancelEdit: { _ in },
                          onCommitEdit: { _ in })
                     .position(x: item.layout.center.x + origin.x,
                               y: item.layout.center.y + origin.y)

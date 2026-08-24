@@ -220,7 +220,8 @@ public final class MindMapViewModel: ObservableObject {
     public func addChild(to parentID: UUID?) -> UUID? {
         let target = parentID ?? document.root.id
         guard document.root.contains(target) else { return nil }
-        let newNode = MindNode(text: "新主題")
+        // Start empty: typing replaces cleanly, empty commit discards the node.
+        let newNode = MindNode(text: "")
         mutate { doc in
             doc.root.update(target) { node in
                 node.collapsed = false
@@ -239,7 +240,7 @@ public final class MindMapViewModel: ObservableObject {
         guard id != document.root.id,
               let parentNode = document.root.parent(of: id),
               document.root.contains(id) else { return nil }
-        let newNode = MindNode(text: "新主題")
+        let newNode = MindNode(text: "")
         mutate { doc in
             doc.root.update(parentNode.id) { parent in
                 if let index = parent.children.firstIndex(where: { $0.id == id }) {
@@ -254,6 +255,23 @@ public final class MindMapViewModel: ObservableObject {
         flash(newNode.id)
         notify("已新增兄弟主題，直接輸入文字")
         return newNode.id
+    }
+
+    /// Commits inline editing. Empty text on a brand-new node discards it.
+    public func commitNodeText(id: UUID, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = document.root.find(id)?.text ?? ""
+        if trimmed.isEmpty {
+            if current.isEmpty {
+                // Brand-new node abandoned mid-creation.
+                delete(id: id)
+                notify("已捨棄空白主題")
+            } else {
+                notify("主題不能空白，已保留原文字")
+            }
+            return
+        }
+        rename(id: id, to: trimmed)
     }
 
     public func delete(id: UUID) {
