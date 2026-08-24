@@ -185,10 +185,6 @@ public final class MindMapViewModel: ObservableObject {
             ]))
     }
 
-    var selectedNode: MindNode? {
-        selection.flatMap { document.root.find($0) }
-    }
-
     // MARK: - Mutation core
 
     /// Applies a mutation. Passing a coalesce key merges rapid successive edits

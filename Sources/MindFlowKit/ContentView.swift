@@ -351,6 +351,13 @@ public struct ContentView: View {
             let focusSet = vm.focusSet()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
+                    if vm.focusBranchID != nil {
+                        Text("聚焦模式中——非此分支的主題已淡化")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.bottom, 4)
+                    }
                     ForEach(outlineRows) { row in
                         outlineRowView(row, focusSet: focusSet)
                             .id(row.id)
