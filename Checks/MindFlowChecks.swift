@@ -1123,6 +1123,45 @@ do {
     }
 }
 
+// MARK: - v12.1: stress & edge case hardening
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+
+        // Edge 1: Rapidly add then immediately delete many nodes
+        var ids: [UUID] = []
+        for _ in 0..<20 { ids.append(vm.addChild(to: nil)!) }
+        for id in ids { vm.delete(id: id) }
+        check(vm.document.root.children.isEmpty, "rapid add-delete leaves clean state")
+
+        // Edge 2: Rename to same text
+        let n1 = vm.addChild(to: nil)!
+        vm.rename(id: n1, to: "test")
+        vm.rename(id: n1, to: "test")
+        check(vm.document.root.find(n1)?.text == "test", "same-text rename safe")
+
+        // Edge 3: Undo after delete
+        let tmp = vm.addChild(to: nil)!
+        vm.delete(id: tmp)
+        vm.undo()
+        check(vm.document.root.children.contains(where: { $0.id == tmp }), "undo restores deleted node")
+
+        // Edge 4: Direction switch + undo no crash
+        vm.setDirection(.balanced)
+        vm.setDirection(.fishbone)
+        vm.undo()
+        check(true, "direction switch + undo no crash")
+
+        // Edge 5: Focus on root
+        vm.focusBranchID = vm.document.root.id
+        check(vm.focusSet().isEmpty == false, "focus on root produces valid set")
+        vm.focusBranchID = nil
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
