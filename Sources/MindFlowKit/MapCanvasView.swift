@@ -32,6 +32,7 @@ struct MapCanvasView: View {
     @State private var drag: ReparentDrag?
     @State private var reorderHint: ReorderHint?
     @State private var canvasSize: CGSize = .zero
+    @State private var freeMoveID: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let zoomRange: ClosedRange<CGFloat> = 0.25...3
@@ -235,21 +236,32 @@ struct MapCanvasView: View {
                                  geoSize: CGSize, bounds: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { value in
+                // Hold Option while dragging for free placement.
+                if NSEvent.modifierFlags.contains(.option) {
+                    freeMoveID = item.node.id
+                }
                 // Keep coordinates in map space; the drawing layer applies origin.
                 let current = CGPoint(x: item.layout.center.x + value.translation.width / scale,
                                       y: item.layout.center.y + value.translation.height / scale)
                 drag = ReparentDrag(id: item.node.id, source: item.layout.center, current: current,
                                     translation: value.translation)
-                reorderHint = reorderHint(at: current, draggedID: item.node.id, layouts: layouts)
-                autoScrollToward(current, geoSize: geoSize, bounds: bounds)
+                if freeMoveID == nil {
+                    reorderHint = reorderHint(at: current, draggedID: item.node.id, layouts: layouts)
+                    autoScrollToward(current, geoSize: geoSize, bounds: bounds)
+                }
             }
             .onEnded { _ in
                 defer {
                     drag = nil
                     reorderHint = nil
+                    freeMoveID = nil
                 }
                 guard let dragState = drag else { return }
-                if let target = hitTest(point: dragState.current, draggedID: dragState.id, layouts: layouts) {
+                if freeMoveID == dragState.id {
+                    vm.nudgeOffset(id: dragState.id,
+                                   dx: dragState.translation.width / scale,
+                                   dy: dragState.translation.height / scale)
+                } else if let target = hitTest(point: dragState.current, draggedID: dragState.id, layouts: layouts) {
                     vm.move(id: dragState.id, toParent: target)
                 } else if let hint = reorderHint {
                     vm.moveSibling(id: dragState.id, toIndex: hint.targetIndex)
