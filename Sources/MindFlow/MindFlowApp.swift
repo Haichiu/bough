@@ -46,9 +46,10 @@ private struct SettingsView: View {
 @main
 struct MindFlowApp: App {
     @StateObject private var vm = MindMapViewModel()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        WindowGroup("MindFlow") {
+        WindowGroup("MindFlow", id: "main") {
             ContentView()
                 .environmentObject(vm)
                 .frame(minWidth: 960, minHeight: 620)
@@ -67,6 +68,9 @@ struct MindFlowApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("新增心智圖…") { vm.showTemplatePicker = true }
+                    .keyboardShortcut("n")
+                Button("新增視窗") { openWindow(id: "main") }
+                    .keyboardShortcut("n", modifiers: [.command, .option])
                     .keyboardShortcut("n")
                 Button("開啟…") { vm.open() }
                     .keyboardShortcut("o")
