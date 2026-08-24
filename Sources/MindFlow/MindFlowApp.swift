@@ -99,6 +99,8 @@ struct MindFlowApp: App {
                 Button("上一個分頁") { vm.cycleTab(-1) }
                     .keyboardShortcut(.tab, modifiers: [.control, .shift])
                 Divider()
+                Button("建立目前分頁副本") { vm.duplicateActiveTab() }
+                    .keyboardShortcut("d", modifiers: [.command, .option])
                 Button("關閉分頁／視窗") {
                     vm.closeActiveTabOrWindow()
                 }

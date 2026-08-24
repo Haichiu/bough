@@ -631,6 +631,17 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
+    /// Opens a duplicate of the active tab.
+    public func duplicateActiveTab() {
+        var copy = document
+        copy.title += " 副本"
+        stashActive()
+        sessions.append(EditorSession(document: copy))
+        loadFromSession(sessions.count - 1)
+        selection = copy.root.id
+        notify("已建立分頁副本")
+    }
+
     public func cycleTab(_ offset: Int) {
         guard sessions.count > 1 else { return }
         switchTab(to: (activeIndex + offset + sessions.count) % sessions.count)

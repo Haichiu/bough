@@ -30,7 +30,7 @@ public struct ContentView: View {
             }
         }
         .toolbar(vm.zenMode ? .hidden : .visible, for: .windowToolbar)
-        .overlay(alignment: .topLeading) {
+        .overlay(alignment: .topTrailing) {
             if vm.zenMode {
                 Button {
                     vm.toggleZen()
