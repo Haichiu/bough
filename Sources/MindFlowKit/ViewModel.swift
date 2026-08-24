@@ -404,6 +404,29 @@ public final class MindMapViewModel: ObservableObject {
         notify("已重設所有手動位置")
     }
 
+    // MARK: - Branch focus
+
+    @Published public var focusBranchID: UUID?
+
+    public func toggleFocus(on id: UUID) {
+        focusBranchID = (focusBranchID == id) ? nil : id
+        notify(focusBranchID == nil ? "已取消聚焦" : "已聚焦分支（Esc 取消）")
+    }
+
+    /// IDs visible during focus: the focused subtree plus its ancestor chain.
+    public func focusSet() -> Set<UUID> {
+        guard let fid = focusBranchID, let fnode = document.root.find(fid) else { return [] }
+        var set: Set<UUID> = [fid]
+        set.formUnion(fnode.descendantIDs())
+        var cursor: UUID? = fid
+        while let currentID = cursor, let parent = document.root.parent(of: currentID) {
+            set.insert(parent.id)
+            cursor = parent.id
+            if parent.id == document.root.id { break }
+        }
+        return set
+    }
+
     // MARK: - Associative links
 
     @Published public var selectedLinkID: UUID?

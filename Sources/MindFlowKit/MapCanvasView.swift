@@ -46,12 +46,14 @@ struct MapCanvasView: View {
             let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
             let items = nodeItems(layouts: layouts)
             let dropTarget = drag.flatMap { hitTest(point: $0.current, draggedID: $0.id, layouts: layouts) }
+            let focusIDs = vm.focusSet()
 
             ZStack {
                 backgroundLayer
 
                 ZStack {
-                    connectionsCanvas(items: items, layouts: layouts, theme: theme, origin: origin)
+                    connectionsCanvas(items: items, layouts: layouts, theme: theme,
+                                      origin: origin, focusIDs: focusIDs)
                     linksCanvas(layouts: layouts, origin: origin)
                     dragIndicator(origin: origin)
                     reorderIndicator(origin: origin)
@@ -59,6 +61,7 @@ struct MapCanvasView: View {
                         nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                                  layouts: layouts, geoSize: geo.size, bounds: bounds,
                                  isSearchHit: vm.searchResults.contains(item.node.id),
+                                 dimmed: !focusIDs.isEmpty && !focusIDs.contains(item.node.id),
                                  colorTag: item.node.colorTag,
                                  onToggleCollapse: item.node.collapsed ? { vm.toggleCollapse(id: item.node.id) } : nil)
                     }
@@ -120,9 +123,10 @@ struct MapCanvasView: View {
     }
 
     private func connectionsCanvas(items: [NodeItem], layouts: [UUID: NodeLayout],
-                                   theme: Theme, origin: CGPoint) -> some View {
+                                   theme: Theme, origin: CGPoint,
+                                   focusIDs: Set<UUID>) -> some View {
         MapConnectionsView(items: items, layouts: layouts, theme: theme,
-                           origin: origin, direction: vm.direction)
+                           origin: origin, direction: vm.direction, focusIDs: focusIDs)
     }
 
     @ViewBuilder
@@ -160,7 +164,7 @@ struct MapCanvasView: View {
 
     private func nodeView(item: NodeItem, theme: Theme, dropTarget: UUID?, origin: CGPoint,
                           layouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect,
-                          isSearchHit: Bool, colorTag: String? = nil,
+                          isSearchHit: Bool, dimmed: Bool = false, colorTag: String? = nil,
                           onToggleCollapse: (() -> Void)? = nil) -> some View {
         NodeView(node: item.node,
                  layout: item.layout,
@@ -205,6 +209,12 @@ struct MapCanvasView: View {
             Divider()
             if !item.node.children.isEmpty {
                 Button(item.node.collapsed ? "展開" : "收合") { vm.toggleCollapse(id: item.node.id) }
+            }
+            Divider()
+            if vm.focusBranchID == nil {
+                Button("聚焦此分支") { vm.focusBranchID = item.node.id }
+            } else {
+                Button("取消聚焦") { vm.focusBranchID = nil }
             }
             Divider()
             Button("刪除", role: .destructive) { vm.delete(id: item.node.id) }

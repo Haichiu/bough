@@ -13,6 +13,7 @@ struct NodeView: View {
     var dragOffset: CGSize? = nil
     var isSearchHit: Bool = false
     var colorTag: String? = nil
+    var dimmed: Bool = false
     let onCancelEdit: (String) -> Void
     let onCommitEdit: (String) -> Void
 
@@ -35,6 +36,7 @@ struct NodeView: View {
         .overlay(selectionRing(radius: radius))
         .scaleEffect(freshScale)
         .opacity(freshOpacity)
+        .opacity(dimmed ? 0.15 : 1)
         .opacity(isDragging ? 0.85 : 1)
         .offset(x: dragOffset?.width ?? 0, y: dragOffset?.height ?? 0)
         .overlay(alignment: .trailing) { collapsedBadge }

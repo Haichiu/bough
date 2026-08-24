@@ -7,6 +7,7 @@ struct MapConnectionsView: View {
     let theme: Theme
     let origin: CGPoint
     var direction: MapDirection = .logicRight
+    var focusIDs: Set<UUID> = []
 
     var body: some View {
         Canvas { context, _ in
@@ -17,6 +18,7 @@ struct MapConnectionsView: View {
             for item in items where !item.node.collapsed {
                 for child in item.node.children {
                     guard let childLayout = layouts[child.id] else { continue }
+                    if !focusIDs.isEmpty && !(focusIDs.contains(item.node.id) && focusIDs.contains(child.id)) { continue }
                     let toLeft = childLayout.side == .left
                     let from = CGPoint(x: (toLeft ? item.layout.frame.minX : item.layout.frame.maxX) + origin.x,
                                        y: item.layout.frame.midY + origin.y)
