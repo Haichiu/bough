@@ -105,6 +105,13 @@ public struct ContentView: View {
                     Label("主題", systemImage: "paintpalette")
                 }
 
+                Button {
+                    vm.copyAsMarkdown()
+                } label: {
+                    Label("複製 MD", systemImage: "doc.on.doc")
+                }
+                .help("把整張圖複製成 Markdown 到剪貼簿（⌘⇧C）")
+
                 Toggle(isOn: $showInspector) {
                     Label("檢閱器", systemImage: "sidebar.trailing")
                 }
