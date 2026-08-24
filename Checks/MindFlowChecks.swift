@@ -1037,7 +1037,7 @@ do {
         vm.newDocument()
         let before = vm.document
 
-        // Root cannot be moved or wrapped.
+        // Root cannot be moved || wrapped.
         vm.move(id: vm.document.root.id, toParent: vm.document.root.id)
         vm.insertParent(id: vm.document.root.id)
         check(vm.document.root.text == before.root.text, "root guards hold")
@@ -1278,6 +1278,51 @@ do {
         check(md.contains("每週新產出"), "J6: markdown contains content")
         vm.newDocument()
         check(vm.document.root.children.isEmpty, "J7: new doc starts fresh")
+    }
+}
+
+// MARK: - v13.0: cross-feature combination tests
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+
+        // Combo 1: Focus + Search + Collapse
+        let target = vm.addChild(to: nil)!
+        vm.rename(id: target, to: "search-target")
+        vm.toggleCollapse(id: target)
+        vm.searchQuery = "search"
+        vm.performSearch()
+        check(vm.searchResults.contains(target), "Combo1: search finds collapsed+focused")
+        vm.focusBranchID = nil
+
+        // Combo 2: Duplicate + Layout Switch
+        let orig = vm.addChild(to: nil)!
+        vm.rename(id: orig, to: "branch")
+        let copyID = vm.duplicate(id: orig)!
+        vm.setDirection(.balanced)
+        let bl = LayoutEngine.layout(root: vm.document.root, direction: .balanced)
+        check(bl[orig] != nil && bl[copyID] != nil, "Combo2: both laid out after switch")
+        vm.setDirection(.logicRight)
+
+        // Combo 3: Star + Export Markdown
+        vm.toggleMark(id: orig)
+        let md = MapExporter.markdown(vm.document)
+        check(md.contains("★"), "Combo3: star appears in markdown export")
+
+        // Combo 4: Insert Parent + Collapse Parent
+        let leaf = vm.addChild(to: orig)!
+        vm.rename(id: leaf, to: "leaf")
+        let wrapperID = vm.insertParent(id: leaf)!
+        vm.rename(id: wrapperID, to: "wrapper")
+        vm.toggleCollapse(id: wrapperID)
+        check(vm.document.root.find(wrapperID)?.collapsed == true, "Combo4: wrapped collapsible")
+
+        // Combo 5: Tab switch preserves isolation
+        vm.applyTemplate("blank")
+        check(vm.focusBranchID == nil && vm.searchResults.isEmpty, "Combo5: state clean")
     }
 }
 
