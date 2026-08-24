@@ -306,6 +306,12 @@ public struct ContentView: View {
         }
     }
 
+    private func outlineDimmed(_ row: OutlineRow) -> Double {
+        guard let fid = vm.focusBranchID else { return 1 }
+        let set = vm.focusSet()
+        return set.contains(row.id) ? 1 : 0.3
+    }
+
     private func outlineRowView(_ row: OutlineRow) -> some View {
         HStack(spacing: 5) {
             if row.marked {
@@ -350,6 +356,7 @@ public struct ContentView: View {
         .padding(.trailing, 6)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .opacity(outlineDimmed(row))
         .background(
             vm.selection == row.id
                 ? Color.accentColor.opacity(0.16)

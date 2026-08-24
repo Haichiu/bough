@@ -569,6 +569,21 @@ do {
     }
 }
 
+// MARK: - v5.5: search covers notes
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let a = vm.addChild(to: nil)!
+        vm.rename(id: a, to: "標題文字")
+        vm.setNote(id: a, to: "藏在備註裡的線索")
+        vm.searchQuery = "線索"
+        vm.performSearch()
+        check(vm.searchResults == [a], "search covers notes")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

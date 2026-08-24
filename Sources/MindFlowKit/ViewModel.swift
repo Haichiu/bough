@@ -301,7 +301,7 @@ public final class MindMapViewModel: ObservableObject {
         mutate { $0.root.update(id) { $0.text = text } }
     }
 
-    func setNote(id: UUID, to note: String) {
+    public func setNote(id: UUID, to note: String) {
         guard document.root.contains(id) else { return }
         mutate("note:\(id)") { doc in
             doc.root.update(id) { node in node.note = note }
@@ -500,7 +500,10 @@ public final class MindMapViewModel: ObservableObject {
         }
         var ids: [UUID] = []
         func walk(_ node: MindNode) {
-            if node.text.localizedCaseInsensitiveContains(query) { ids.append(node.id) }
+            if node.text.localizedCaseInsensitiveContains(query)
+                || node.note.localizedCaseInsensitiveContains(query) {
+                ids.append(node.id)
+            }
             node.children.forEach(walk)
         }
         walk(document.root)
