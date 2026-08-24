@@ -50,6 +50,18 @@ public struct MindNode: Codable, Identifiable, Equatable {
         find(id) != nil
     }
 
+    /// Ordered texts of every hidden descendant (breadth-first), capped at limit.
+    public func hiddenTopicPreview(limit: Int = 6) -> [String] {
+        var out: [String] = []
+        var queue: [MindNode] = children
+        while !queue.isEmpty && out.count < limit {
+            let node = queue.removeFirst()
+            out.append(node.text)
+            queue.append(contentsOf: node.children)
+        }
+        return out
+    }
+
     public var displayText: String {
         (marked ? "★ " : "") + text
     }

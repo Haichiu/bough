@@ -187,10 +187,14 @@ struct NodeView: View {
         }
     }
 
+    private var hiddenCount: Int {
+        node.descendantIDs().count
+    }
+
     @ViewBuilder
     private var collapsedBadge: some View {
         if node.collapsed && !node.children.isEmpty {
-            Text("\(node.children.count)")
+            Text("\(hiddenCount)")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 18, height: 18)
@@ -198,7 +202,7 @@ struct NodeView: View {
                 .overlay(Circle().stroke(Color(nsColor: .controlBackgroundColor), lineWidth: 1.5))
                 .offset(x: 10)
                 .onTapGesture { onToggleCollapse?() }
-                .help("收合中：\n" + node.children.prefix(6).map(\.text).joined(separator: "\n"))
+                .help("收合中（共 \(hiddenCount) 個主題）：\n" + node.hiddenTopicPreview().joined(separator: "\n"))
         }
     }
 }

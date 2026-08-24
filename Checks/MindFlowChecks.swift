@@ -983,6 +983,21 @@ do {
     check(collectIDs(orig).isDisjoint(with: collectIDs(copy)), "reassign mints fully unique IDs")
 }
 
+// MARK: - v9.1: hidden descendant preview
+
+do {
+    let root = MindNode(text: "R", children: [
+        MindNode(text: "A", children: [MindNode(text: "A1"), MindNode(text: "A2")]),
+        MindNode(text: "B"),
+    ])
+    let a = root.children[0]
+    check(a.hiddenTopicPreview(limit: 6) == ["A1", "A2"], "preview lists direct topics breadth-first")
+    check(a.descendantIDs().count == 2, "hidden count matches descendants")
+    let rootPreview = root.hiddenTopicPreview(limit: 6)
+    check(rootPreview.count == 4, "root preview includes all descendants")
+    check(Array(rootPreview.prefix(2)) == ["A", "B"], "root preview breadth-first ordering")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
