@@ -72,6 +72,8 @@ public final class MindMapViewModel: ObservableObject {
         (undoStack, redoStack) = inactiveStacks[sessions[index].id] ?? ([], [])
         selection = inactiveSelections[sessions[index].id] ?? document.root.id
         selectedLinkID = nil
+        // Focus belongs to a specific document — never leak across tabs.
+        focusBranchID = nil
         // Search results belong to a specific document — never leak across tabs.
         searchQuery = ""
         searchResults = []

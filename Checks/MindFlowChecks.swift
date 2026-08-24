@@ -817,6 +817,25 @@ do {
     }
 }
 
+// MARK: - v7.9: focus state does not leak across tabs
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let startCount = vm.sessions.count
+        vm.applyTemplate("空白")
+        let a = vm.addChild(to: nil)!
+        vm.focusBranchID = a
+        check(!vm.focusSet().isEmpty, "focus active before switching")
+        vm.switchTab(to: 0)
+        check(vm.focusBranchID == nil, "switching tabs clears focus")
+        check(vm.focusSet().isEmpty, "no stale focus after switch")
+        vm.closeTab(vm.activeIndex)
+        check(vm.sessions.count == startCount, "tab count restored")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
