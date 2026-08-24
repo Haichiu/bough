@@ -194,10 +194,10 @@ public struct ContentView: View {
 
     private var breadcrumbBar: some View {
         Group {
-            if vm.selection != nil {
+            if let selID = vm.selection {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 4) {
-                        ForEach(vm.breadcrumbPath(to: vm.selection!), id: \.id) { node in
+                        ForEach(vm.breadcrumbPath(to: selID), id: \.id) { node in
                             Button(node.text.isEmpty ? "\u{2026}" : node.text) {
                                 vm.selection = node.id
                             }
