@@ -73,6 +73,13 @@ public struct ContentView: View {
 
                 Button { vm.expandAll() } label: { Label("全部展開", systemImage: "rectangle.expand.vertical") }
                 Button { vm.collapseAll() } label: { Label("全部收合", systemImage: "rectangle.compress.vertical") }
+                Menu {
+                    ForEach([1, 2, 3, 4], id: \.self) { level in
+                        Button("顯示到第 \(level) 層") { vm.expandToLevel(level) }
+                    }
+                } label: {
+                    Label("展開至", systemImage: "lineweight.thin")
+                }
                 Button { NotificationCenter.default.post(name: .mindFlowFit, object: nil) } label: {
                     Label("符合視窗", systemImage: "arrow.down.right.and.arrow.up.left")
                 }

@@ -337,9 +337,37 @@ public final class MindMapViewModel: ObservableObject {
         _ = target
     }
 
-    func expandAll() {
-        mutate { $0.root.update($0.root.id) { _ in } }
+    public func expandAll() {
         mutate { doc in collapse(node: &doc.root, collapsed: false) }
+    }
+
+    /// Expands so exactly `levels` layers of topics are visible.
+    public func expandToLevel(_ levels: Int) {
+        guard levels >= 1 else { return }
+        mutate { doc in
+            func resetDeep(_ node: inout MindNode) {
+                node.collapsed = !node.children.isEmpty
+                for index in node.children.indices {
+                    resetDeep(&node.children[index])
+                }
+            }
+
+            func walk(_ node: inout MindNode, depth: Int) {
+                guard !node.children.isEmpty else { return }
+                let hideChildren = (depth + 1) >= levels
+                node.collapsed = hideChildren
+                if hideChildren {
+                    for index in node.children.indices {
+                        resetDeep(&node.children[index])
+                    }
+                } else {
+                    for index in node.children.indices {
+                        walk(&node.children[index], depth: depth + 1)
+                    }
+                }
+            }
+            walk(&doc.root, depth: 0)
+        }
     }
 
     func collapseAll() {

@@ -682,6 +682,26 @@ do {
 
 // MARK: - v5.x legacy blocks above
 
+// MARK: - v6.6: expand to level
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!
+        let b = vm.addChild(to: a)!
+        let c = vm.addChild(to: b)!
+        vm.expandToLevel(2)
+        check(vm.document.root.find(a)?.collapsed == true, "level-2 view collapses layer-2 nodes")
+        check(vm.document.root.find(b)?.collapsed == true, "deeper nodes stay collapsed")
+        vm.expandToLevel(3)
+        check(vm.document.root.find(a)?.collapsed == false, "level-3 expands layer-2 node")
+        check(vm.document.root.find(b)?.collapsed == true, "layer-3 node with children collapses")
+        check(vm.document.root.find(c)?.collapsed == false, "leaf nodes never collapsed")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
