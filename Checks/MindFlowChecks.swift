@@ -998,6 +998,36 @@ do {
     check(Array(rootPreview.prefix(2)) == ["A", "B"], "root preview breadth-first ordering")
 }
 
+// MARK: - v9.2: end-to-end workflow scenarios
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        vm.applyTemplate("會議記錄")
+
+        guard let issues = vm.document.root.children.first(where: { $0.text == "討論議題" }) else {
+            check(false, "template has discussion branch")
+            return
+        }
+        let idea = vm.addChild(to: issues.id)!
+        vm.rename(id: idea, to: "新想法")
+        vm.setNote(id: idea, to: "關鍵字線索")
+
+        vm.searchQuery = "新想法"
+        vm.performSearch()
+        check(vm.searchResults == [idea], "workflow: search finds new idea")
+
+        vm.collapseAll()
+        check(vm.document.stats().collapsedCount > 0, "collapseAll marks branches")
+
+        vm.expandAll()
+        let md = MapExporter.markdown(vm.document)
+        check(md.contains("新想法"), "markdown export includes workflow content")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

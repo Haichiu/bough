@@ -372,7 +372,7 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
-    func collapseAll() {
+    public func collapseAll() {
         mutate { doc in
             collapse(node: &doc.root, collapsed: false)
             for index in doc.root.children.indices {
