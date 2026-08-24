@@ -34,6 +34,22 @@ public struct Theme: Identifiable, Equatable {
 }
 
 extension Theme {
+    /// Named marker colors for color-tagging nodes.
+    public static let colorTags: [(name: String, key: String, color: Color)] = [
+        ("紅", "red", Color(hex: 0xE05252)),
+        ("橙", "orange", Color(hex: 0xF08C3A)),
+        ("黃", "yellow", Color(hex: 0xF0C542)),
+        ("綠", "green", Color(hex: 0x51B573)),
+        ("藍", "blue", Color(hex: 0x4A90D9)),
+        ("紫", "purple", Color(hex: 0x9B6FD0)),
+    ]
+
+    public static func colorTag(named key: String) -> Color? {
+        colorTags.first(where: { $0.key == key })?.color
+    }
+}
+
+extension Theme {
     /// Root fill adapts to light/dark so the central topic stays crisp in both.
     public static let rootBackground = Color(NSColor(name: nil) { appearance in
         let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua

@@ -596,6 +596,12 @@ public final class MindMapViewModel: ObservableObject {
         return copy.id
     }
 
+    public func setColorTag(id: UUID, tag: String?) {
+        guard document.root.contains(id) else { return }
+        mutate { $0.root.update(id) { node in node.colorTag = tag } }
+        notify(tag == nil ? "已清除顏色標記" : "已加上顏色標記")
+    }
+
     public func toggleMark(id: UUID) {
         guard document.root.contains(id) else { return }
         mutate { doc in

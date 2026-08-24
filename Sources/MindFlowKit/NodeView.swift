@@ -12,6 +12,7 @@ struct NodeView: View {
     var isDragging: Bool = false
     var dragOffset: CGSize? = nil
     var isSearchHit: Bool = false
+    var colorTag: String? = nil
     let onCancelEdit: (String) -> Void
     let onCommitEdit: (String) -> Void
 
@@ -38,6 +39,7 @@ struct NodeView: View {
         .offset(x: dragOffset?.width ?? 0, y: dragOffset?.height ?? 0)
         .overlay(alignment: .trailing) { collapsedBadge }
         .overlay(alignment: .leading) { markedBadge }
+        .overlay(alignment: .leading) { colorBar }
         .overlay(alignment: .topLeading) { noteBadge }
         .accessibilityLabel(node.displayText + (node.note.isEmpty ? "" : "，有備註"))
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
@@ -135,6 +137,17 @@ struct NodeView: View {
                             : (isSelected ? Color.accentColor : Color.secondary.opacity(0.45)),
                         lineWidth: isDropTarget ? 3 : (isSelected ? 2 : 1.5))
                 .padding(-4)
+        }
+    }
+
+    @ViewBuilder
+    private var colorBar: some View {
+        if let key = colorTag, let color = Theme.colorTag(named: key) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(color)
+                .frame(width: 4)
+                .padding(.vertical, 7)
+                .padding(.leading, 3)
         }
     }
 

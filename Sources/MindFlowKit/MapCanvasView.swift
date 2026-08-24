@@ -59,7 +59,8 @@ struct MapCanvasView: View {
                         nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                                  layouts: layouts, geoSize: geo.size, bounds: bounds,
                                  isSearchHit: vm.searchResults.contains(item.node.id),
-                 onToggleCollapse: item.node.collapsed ? { vm.toggleCollapse(id: item.node.id) } : nil)
+                                 colorTag: item.node.colorTag,
+                                 onToggleCollapse: item.node.collapsed ? { vm.toggleCollapse(id: item.node.id) } : nil)
                     }
                 }
                 .frame(width: bounds.width, height: bounds.height)
@@ -159,7 +160,8 @@ struct MapCanvasView: View {
 
     private func nodeView(item: NodeItem, theme: Theme, dropTarget: UUID?, origin: CGPoint,
                           layouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect,
-                          isSearchHit: Bool, onToggleCollapse: (() -> Void)? = nil) -> some View {
+                          isSearchHit: Bool, colorTag: String? = nil,
+                          onToggleCollapse: (() -> Void)? = nil) -> some View {
         NodeView(node: item.node,
                  layout: item.layout,
                  branchColor: theme.color(forIndex: item.layout.colorIndex),
@@ -170,6 +172,8 @@ struct MapCanvasView: View {
                  isFresh: vm.recentlyAddedID == item.node.id,
                  isDragging: drag?.id == item.node.id,
                  dragOffset: drag?.id == item.node.id ? drag?.translation : nil,
+                 isSearchHit: vm.searchResults.contains(item.node.id),
+                 colorTag: item.node.colorTag,
                  onCancelEdit: { text in
                      // Esc on a brand-new empty node discards it.
                      if text.trimmingCharacters(in: .whitespaces).isEmpty && item.node.text.isEmpty {
