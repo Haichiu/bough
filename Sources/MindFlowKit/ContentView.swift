@@ -308,6 +308,9 @@ public struct ContentView: View {
             .onChange(of: vm.selection) { sel in
                 if let sel { proxy.scrollTo(sel) }
             }
+            .onChange(of: outlineEditingID) { id in
+                if let id { proxy.scrollTo(id, anchor: .center) }
+            }
         }
     }
 
@@ -454,6 +457,16 @@ public struct ContentView: View {
                   let png = rep.representation(using: .png, properties: [:]) else { return }
             if FileIO.saveData(png, suggestedName: exportBaseName + "-transparent.png") != nil {
                 vm.notify("已匯出透明背景 PNG ✓")
+            }
+        case .pngLarge:
+            let renderer = ImageRenderer(content: StaticMapView(document: vm.document))
+            renderer.scale = 3
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { return }
+            if FileIO.saveData(png, suggestedName: exportBaseName + "-3x.png") != nil {
+                vm.notify("已匯出大圖 PNG ✓")
             }
         case .pdf:
             let renderer = ImageRenderer(content: StaticMapView(document: vm.document))
