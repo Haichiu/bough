@@ -332,13 +332,13 @@ do {
         return node
     }
     var counter = 0
-    let bigRoot = build(8, &counter) // 511 nodes
+    let bigRoot = build(10, &counter) // 2047 nodes
     let start = Date()
     let layouts = LayoutEngine.layout(root: bigRoot)
     let elapsed = Date().timeIntervalSince(start)
-    check(layouts.count == counter && counter >= 500,
+    check(layouts.count == counter && counter >= 2000,
           "big map fully laid out (\(counter) nodes)")
-    check(elapsed < 0.5, String(format: "layout under 0.5s (%.3fs)", elapsed))
+    check(elapsed < 1.0, String(format: "layout under 1.0s (%.3fs)", elapsed))
 }
 
 // MARK: - v3.0: multi-document tabs
