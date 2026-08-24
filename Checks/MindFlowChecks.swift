@@ -1077,6 +1077,52 @@ do {
     }
 }
 
+// MARK: - v11.6: edge case & boundary tests
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+
+        // Edge 1: Extremely long node text
+        let longText = String(repeating: "\u{9019}\u{662f}\u{4e00}\u{6bb5}\u{5f88}\u{9577}\u{7684}\u{6587}\u{5b57}", count: 50)
+        let longNode = vm.addChild(to: nil)!
+        vm.rename(id: longNode, to: longText)
+        check(vm.document.root.find(longNode)?.text == longText, "long text stored")
+        let layouts = LayoutEngine.layout(root: vm.document.root)
+        check(layouts[longNode] != nil, "long text laid out")
+
+        // Edge 2: Empty string operations
+        vm.rename(id: longNode, to: "")
+        check(vm.document.root.find(longNode)?.text == "", "empty rename works")
+
+        // Edge 3: Unicode & emoji
+        let emojiNode = vm.addChild(to: nil)!
+        vm.rename(id: emojiNode, to: "\u{1f9e0}\u{8166}\u{5716}\u{2728}\u{1f31f}")
+        check(vm.document.root.find(emojiNode)?.text == "\u{1f9e0}\u{8166}\u{5716}\u{2728}\u{1f31f}", "emoji preserved")
+
+        // Edge 4: Deep nesting (20 levels)
+        var prevID = emojiNode
+        for _ in 0..<19 {
+            let next = vm.addChild(to: prevID)!
+            prevID = next
+        }
+        let deepLayouts = LayoutEngine.layout(root: vm.document.root)
+        check(deepLayouts.count > 0, "deep nesting laid out without crash")
+
+        // Edge 5: Rapid toggle collapse
+        vm.toggleCollapse(id: emojiNode)
+        vm.toggleCollapse(id: emojiNode)
+        check(vm.document.root.find(emojiNode)?.collapsed == false, "rapid toggle consistent")
+
+        // Edge 6: Search with special regex chars
+        vm.searchQuery = "()[]{}.*+?"
+        vm.performSearch()
+        check(vm.searchResults.isEmpty, "regex chars don't crash search")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

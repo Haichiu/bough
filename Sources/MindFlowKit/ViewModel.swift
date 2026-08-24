@@ -324,7 +324,7 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
-    func toggleCollapse(id: UUID) {
+    public func toggleCollapse(id: UUID) {
         guard document.root.contains(id) else { return }
         mutate { $0.root.update(id) { $0.collapsed.toggle() } }
     }
