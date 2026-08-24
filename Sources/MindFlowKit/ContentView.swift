@@ -337,6 +337,7 @@ public struct ContentView: View {
                         .frame(width: 14)
                 }
                 .buttonStyle(.plain)
+                .help(row.collapsed ? "展開子主題" : "收合子主題")
             } else if !row.hasChildren {
                 Color.clear.frame(width: 14)
             }
