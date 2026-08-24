@@ -145,7 +145,10 @@ public final class KeyboardMonitor {
             vm.selectChild()
             return nil
         case "\u{1B}": // esc
-            if vm.zenMode { vm.toggleZen() }
+            if vm.zenMode {
+                vm.toggleZen()
+                return nil // exiting focus mode should not also clear selection
+            }
             vm.focusBranchID = nil
             vm.stopEditing()
             vm.selection = nil
