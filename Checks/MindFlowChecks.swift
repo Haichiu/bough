@@ -1326,6 +1326,60 @@ do {
     }
 }
 
+// MARK: - v13.2: full integration test
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+
+        // Phase 1: Brainstorm
+        let topic = vm.addChild(to: nil)!
+        vm.rename(id: topic, to: "產品發想")
+        let ideaA = vm.addChild(to: topic)!
+        vm.rename(id: ideaA, to: "功能A")
+        let ideaB = vm.addChild(to: topic)!
+        vm.rename(id: ideaB, to: "功能B")
+        check(vm.document.root.find(topic)?.children.count == 2, "E2E: two ideas brainstormed")
+
+        // Phase 2: Organize with tags and stars
+        vm.setColorTag(id: ideaA, tag: "red")
+        vm.toggleMark(id: ideaB)
+        check(vm.document.root.find(ideaA)?.colorTag == "red", "E2E: color tag set")
+        check(vm.document.root.find(ideaB)?.marked == true, "E2E: star set")
+
+        // Phase 3: Search and navigate
+        vm.searchQuery = "功能"
+        vm.performSearch()
+        check(vm.searchResults.count == 2, "E2E: search finds both ideas")
+        vm.focusBranchID = ideaA
+        check(vm.focusSet().contains(ideaA), "E2E: focus set correct")
+        vm.focusBranchID = nil
+
+        // Phase 4: Restructure
+        vm.move(id: ideaB, toParent: ideaA)
+        check(vm.document.root.find(ideaA)?.children.count == 1, "E2E: moved B under A")
+
+        // Phase 5: Switch layouts
+        for dir in [MapDirection.logicRight, .balanced, .fishbone, .bracket] {
+            let l = LayoutEngine.layout(root: vm.document.root, direction: dir)
+            check(l.count > 0, "E2E: layout works for " + dir.rawValue)
+        }
+
+        // Phase 6: Export
+        let md = MapExporter.markdown(vm.document)
+        check(md.contains("功能A"), "E2E: markdown contains content")
+        let opml = MapExporter.opml(vm.document)
+        check(opml.contains("<outline"), "E2E: OPML export valid")
+
+        // Phase 7: Stress undo
+        for _ in 0..<30 { vm.undo() }
+        check(true, "E2E: undo chain no crash")
+    }
+}
+
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
