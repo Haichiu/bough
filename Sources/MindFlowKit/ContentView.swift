@@ -128,7 +128,7 @@ public struct ContentView: View {
             }
         }
         .navigationTitle(vm.document.root.text.isEmpty ? vm.document.title : vm.document.root.text)
-        .navigationSubtitle(vm.dirty ? "未儲存" : (vm.filePath?.lastPathComponent ?? "自動儲存中"))
+        .navigationSubtitle("v14.0 · \(vm.dirty ? "未儲存" : (vm.filePath?.lastPathComponent ?? "自動儲存中"))")
         .overlay(alignment: .bottom) { breadcrumbBar }
         .overlay(alignment: .topLeading) {
             if let fid = vm.focusBranchID, let fnode = vm.document.root.find(fid) {
