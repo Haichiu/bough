@@ -473,6 +473,36 @@ public final class MindMapViewModel: ObservableObject {
         return set
     }
 
+    // MARK: - Clipboard paste as nodes
+
+    /// Parses clipboard text (Markdown outline or plain lines) and creates
+    /// child nodes under the currently selected topic.
+    public func pasteAsNodes() {
+        let text = NSPasteboard.general.string(forType: .string) ?? ""
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            notify("剪貼簿是空的")
+            return
+        }
+        guard let imported = MapImporter.markdown(text) else {
+            notify("無法解析剪貼簿內容")
+            return
+        }
+        // Attach imported tree under the selected node (or root).
+        let parentID = selection ?? document.root.id
+        let importedChildren = imported.root.children
+        guard !importedChildren.isEmpty else {
+            notify("剪貼簿裡沒有可用的條列")
+            return
+        }
+        mutate { doc in
+            doc.root.update(parentID) { node in
+                node.children.append(contentsOf: importedChildren)
+            }
+        }
+        dirty = true
+        notify("已從剪貼簿加入 \(importedChildren.count) 個主題 ✓")
+    }
+
     // MARK: - Associative links
 
     @Published public var selectedLinkID: UUID?

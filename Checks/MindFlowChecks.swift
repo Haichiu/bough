@@ -1056,6 +1056,27 @@ do {
     }
 }
 
+// MARK: - v11.1: paste-as-nodes
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let parentID = vm.document.root.id
+        let md = "- idea A\n- idea B\n  - sub idea"
+        guard let imported = MapImporter.markdown(md) else {
+            check(false, "paste import succeeds"); return
+        }
+        var doc = vm.document
+        doc.root.update(parentID) { node in
+            node.children.append(contentsOf: imported.root.children)
+        }
+        vm.document = doc
+        check(vm.document.root.children.count == 2, "paste creates two branches")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
