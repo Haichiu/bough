@@ -2,6 +2,18 @@ import Foundation
 
 /// Text-based export formats for mind maps.
 public enum MapExporter {
+    private static func colorEmoji(_ key: String?) -> String {
+        switch key {
+        case "red": return "\u{1F534} "
+        case "orange": return "\u{1F7E0} "
+        case "yellow": return "\u{1F7E1} "
+        case "green": return "\u{1F7E2} "
+        case "blue": return "\u{1F535} "
+        case "purple": return "\u{1F7E3} "
+        default: return ""
+        }
+    }
+
     public static func markdown(_ document: MindDocument) -> String {
         var lines: [String] = ["# \(document.root.text)"]
         if !document.root.note.isEmpty {
@@ -10,8 +22,9 @@ public enum MapExporter {
         func walk(_ node: MindNode, level: Int) {
             for child in node.children {
                 let indent = String(repeating: "  ", count: level)
+                let emoji = colorEmoji(child.colorTag)
                 let star = child.marked ? "★ " : ""
-                lines.append("\(indent)- \(star)\(child.text)")
+                lines.append("\(indent)- \(emoji)\(star)\(child.text)")
                 if !child.note.isEmpty {
                     lines.append("\(indent)  > \(child.note)")
                 }

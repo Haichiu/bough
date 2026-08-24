@@ -891,6 +891,27 @@ do {
           String(format: "bracket 2047 under 1.0s (%.3fs)", elapsedK))
 }
 
+// MARK: - v8.5: duplicate tab + color emoji export
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let startCount = vm.sessions.count
+        vm.duplicateActiveTab()
+        check(vm.sessions.count == startCount + 1, "duplicateActiveTab opens a tab")
+        check(vm.document.title.hasSuffix("\u{526f}\u{672c}"), "duplicate title carries suffix")
+    }
+}
+
+do {
+    let doc = MindDocument(title: "T", root: MindNode(text: "R", children: [
+        MindNode(text: "C", colorTag: "red"),
+    ]))
+    let md = MapExporter.markdown(doc)
+    check(md.contains("- \u{1F534} C"), "markdown export carries red emoji")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
