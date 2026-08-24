@@ -688,6 +688,17 @@ public final class MindMapViewModel: ObservableObject {
         return true
     }
 
+    /// Opens a .mindmap file (via Finder double-click or drag) into a new tab.
+    public func openFromURL(_ url: URL) {
+        guard let doc = FileIO.load(from: url) else {
+            notify("無法開啟「\(url.lastPathComponent)」，格式可能不正確")
+            return
+        }
+        openInNewTab(doc, filePath: url)
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        notify("已開啟「\(url.lastPathComponent)」")
+    }
+
     public func importMarkdown() {
         guard let (text, url) = FileIO.readText() else { return }
         guard var imported = MapImporter.markdown(text) else {

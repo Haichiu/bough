@@ -145,6 +145,7 @@ public final class KeyboardMonitor {
             vm.selectChild()
             return nil
         case "\u{1B}": // esc
+            if vm.zenMode { vm.toggleZen() }
             vm.stopEditing()
             vm.selection = nil
             if vm.showSearch {

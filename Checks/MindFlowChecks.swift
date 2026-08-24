@@ -551,6 +551,24 @@ do {
     }
 }
 
+// MARK: - v5.2: open from URL
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let startCount = vm.sessions.count
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("mf-test-\(UUID().uuidString).mindmap")
+        let doc = MindDocument(title: "URL測試", root: MindNode(text: "從檔案長出來"))
+        try JSONEncoder().encode(doc).write(to: tmp)
+        vm.openFromURL(tmp)
+        check(vm.sessions.count == startCount + 1, "openFromURL opens a tab")
+        check(vm.document.root.text == "從檔案長出來", "openFromURL loads content")
+        check(vm.filePath == tmp, "openFromURL records the file path")
+        try? FileManager.default.removeItem(at: tmp)
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

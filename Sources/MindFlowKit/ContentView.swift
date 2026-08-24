@@ -112,6 +112,7 @@ public struct ContentView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: vm.showSearch)
         .sheet(isPresented: $vm.showHelp) { helpSheet }
+        .onOpenURL { url in vm.openFromURL(url) }
         .sheet(isPresented: $vm.showTemplatePicker) { templatePicker }
         .onChange(of: vm.showSearch) { showing in
             if showing {
