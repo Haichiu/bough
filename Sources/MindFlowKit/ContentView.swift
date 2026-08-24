@@ -179,6 +179,8 @@ public struct ContentView: View {
 
     private var tabBar: some View {
         HStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
             ForEach(vm.sessions.indices, id: \.self) { index in
                 let isActive = index == vm.activeIndex
                 HStack(spacing: 4) {
@@ -260,6 +262,8 @@ public struct ContentView: View {
             .buttonStyle(.plain)
             .help("新增分頁（⌘N）")
             Spacer(minLength: 0)
+        }
+        }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
