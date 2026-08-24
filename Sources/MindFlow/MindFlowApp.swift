@@ -119,6 +119,16 @@ struct MindFlowApp: App {
                 Button(vm.zenMode ? "離開專注模式" : "專注模式") { vm.toggleZen() }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
             }
+            CommandMenu("版面") {
+                Button("邏輯圖（右展）") { vm.setDirection(.logicRight) }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+                Button("平衡圖（左右）") { vm.setDirection(.balanced) }
+                    .keyboardShortcut("2", modifiers: [.command, .option])
+                Button("魚骨圖") { vm.setDirection(.fishbone) }
+                    .keyboardShortcut("3", modifiers: [.command, .option])
+                Button("括號圖") { vm.setDirection(.bracket) }
+                    .keyboardShortcut("4", modifiers: [.command, .option])
+            }
             CommandMenu("尋找") {
                 Button("搜尋主題…") { vm.showSearch = true }
                     .keyboardShortcut("f", modifiers: [.command])

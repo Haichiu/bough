@@ -272,6 +272,8 @@ public struct ContentView: View {
                     .help("切換到此分頁（拖曳可排序；雙擊改標題）")
                     .accessibilityLabel("切換到分頁：\(tabTitle(vm.sessions[index]))")
                     .contextMenu {
+                        Button("建立分頁副本") { vm.duplicateActiveTab() }
+                        Divider()
                         Button("關閉此分頁") { vm.closeTab(index) }
                         Button("關閉其他分頁") { vm.closeOtherTabs(keeping: index) }
                         if index < vm.sessions.count - 1 {
