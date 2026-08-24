@@ -86,6 +86,7 @@ public final class MindMapViewModel: ObservableObject {
         sessions.append(EditorSession(document: doc, filePath: filePath))
         loadFromSession(sessions.count - 1)
         selection = doc.root.id
+        if zenMode { zenMode = false }
     }
 
     public func switchTab(to index: Int) {

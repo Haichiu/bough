@@ -19,6 +19,7 @@ struct NodeView: View {
 
     @State private var editText = ""
     @State private var isHovered = false
+    @State private var escDiscard = false
     @State private var freshScale: CGFloat = 1
     @State private var freshOpacity: Double = 1
     @FocusState private var editFocused: Bool
@@ -47,6 +48,16 @@ struct NodeView: View {
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .help(node.note.isEmpty ? "" : "備註：\(node.note)")
         .help(node.note.isEmpty ? "" : "備註：\(node.note)")
+        .onChange(of: isEditing) { editing in
+            // Clicking away confirms the edit; only Esc discards.
+            if !editing && !escDiscard {
+                let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed != node.text.trimmingCharacters(in: .whitespacesAndNewlines) {
+                    onCommitEdit(editText)
+                }
+            }
+            escDiscard = false
+        }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15),
                    value: isSelected || isHovered || isDropTarget)
         .onChange(of: isEditing) { editing in
@@ -114,7 +125,10 @@ struct NodeView: View {
                 .padding(.horizontal, 10)
                 .focused($editFocused)
                 .onSubmit { onCommitEdit(editText) }
-                .onExitCommand { onCancelEdit(editText) }
+                .onExitCommand {
+                    escDiscard = true
+                    onCancelEdit(editText)
+                }
             }
         } else {
             Text(node.text.isEmpty ? " " : node.text)

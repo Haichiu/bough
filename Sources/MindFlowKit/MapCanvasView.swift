@@ -187,6 +187,11 @@ struct MapCanvasView: View {
                      vm.stopEditing()
                  },
                  onCommitEdit: { text in
+                     guard text.trimmingCharacters(in: .whitespacesAndNewlines)
+                           != item.node.text.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                         vm.stopEditing()
+                         return
+                     }
                      vm.commitNodeText(id: item.node.id, text: text)
                      vm.stopEditing()
                  })
