@@ -1380,6 +1380,45 @@ do {
 }
 
 
+// MARK: - v13.1: performance benchmarks
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        var childIDs: [UUID] = []
+        for _ in 0..<50 { childIDs.append(vm.addChild(to: nil)!) }
+        for i in 0..<10 { vm.addChild(to: childIDs[i]) }
+
+        // Layout speed on ~70 nodes
+        let layoutStart = Date()
+        _ = LayoutEngine.layout(root: vm.document.root)
+        let layoutTime = Date().timeIntervalSince(layoutStart)
+        check(layoutTime < 0.5, "Layout fast enough")
+
+        // Search speed
+        vm.searchQuery = "\u{6e2c}\u{8a66}"
+        let searchStart = Date()
+        vm.performSearch()
+        let searchTime = Date().timeIntervalSince(searchStart)
+        check(searchTime < 0.5, "Search fast enough")
+
+        // Stats speed
+        let statsStart = Date()
+        _ = vm.document.stats()
+        let statsTime = Date().timeIntervalSince(statsStart)
+        check(statsTime < 0.5, "Stats fast enough")
+
+        // Serialization round-trip
+        let serStart = Date()
+        let data = try JSONEncoder().encode(vm.document)
+        _ = try JSONDecoder().decode(MindDocument.self, from: data)
+        let serTime = Date().timeIntervalSince(serStart)
+        check(serTime < 0.5, "Serialization fast enough")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
