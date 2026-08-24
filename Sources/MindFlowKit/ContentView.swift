@@ -332,10 +332,11 @@ public struct ContentView: View {
 
     private var outlineView: some View {
         ScrollViewReader { proxy in
+            let focusSet = vm.focusSet()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(outlineRows) { row in
-                        outlineRowView(row)
+                        outlineRowView(row, focusSet: focusSet)
                             .id(row.id)
                     }
                 }
@@ -350,13 +351,12 @@ public struct ContentView: View {
         }
     }
 
-    private func outlineDimmed(_ row: OutlineRow) -> Double {
-        guard let fid = vm.focusBranchID else { return 1 }
-        let set = vm.focusSet()
-        return set.contains(row.id) ? 1 : 0.3
+    private func outlineDimmed(_ row: OutlineRow, focusSet: Set<UUID>) -> Double {
+        guard !focusSet.isEmpty else { return 1 }
+        return focusSet.contains(row.id) ? 1 : 0.3
     }
 
-    private func outlineRowView(_ row: OutlineRow) -> some View {
+    private func outlineRowView(_ row: OutlineRow, focusSet: Set<UUID>) -> some View {
         HStack(spacing: 5) {
             if row.marked {
                 Image(systemName: "star.fill")
@@ -411,7 +411,7 @@ public struct ContentView: View {
         .padding(.trailing, 6)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .opacity(outlineDimmed(row))
+        .opacity(outlineDimmed(row, focusSet: focusSet))
         .background(
             vm.selection == row.id
                 ? Color.accentColor.opacity(0.16)
