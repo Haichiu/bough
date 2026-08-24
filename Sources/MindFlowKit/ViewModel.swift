@@ -717,6 +717,22 @@ public final class MindMapViewModel: ObservableObject {
         return newParent.id
     }
 
+    /// Inserts an empty child under the given node (outline Tab key).
+    @discardableResult
+    public func insertChildUnder(id: UUID) -> UUID? {
+        guard document.root.contains(id) else { return nil }
+        let newNode = MindNode(text: "")
+        mutate { doc in
+            doc.root.update(id) { node in
+                node.children.append(newNode)
+                node.collapsed = false
+            }
+        }
+        selection = newNode.id
+        flash(newNode.id)
+        return newNode.id
+    }
+
     /// Inserts an empty sibling directly after the given node (outline quick-entry).
     @discardableResult
     public func insertSiblingAfter(id: UUID) -> UUID? {
