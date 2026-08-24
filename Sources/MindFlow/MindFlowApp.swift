@@ -56,6 +56,7 @@ struct MindFlowApp: App {
                 .onAppear {
                     KeyboardMonitor.shared.start(vm: vm)
                     installQuitAutosave(vm)
+                    vm.startSnapshotTimer()
                 }
         }
         .commands {

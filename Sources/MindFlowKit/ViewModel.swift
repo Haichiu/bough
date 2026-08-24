@@ -138,6 +138,19 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
+    private var snapshotTimer: Timer?
+
+    /// Every 5 minutes, drop a recovery copy so long thinking sessions are protected.
+    public func startSnapshotTimer() {
+        snapshotTimer?.invalidate()
+        snapshotTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.document.root.text.isEmpty || self.dirty else { return }
+                FileIO.writeRecoveryCopy(self.document)
+            }
+        }
+    }
+
     /// Writes every open tab to per-tab autosave slots.
     public func autosaveAllSessions() {
         var snapshot = sessions
