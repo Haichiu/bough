@@ -26,11 +26,9 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
     private var inTitle = false
     private var titleBuffer = ""
 
-    var rootNodeConverted: MindNode? {
+    var root: MindNode? {
         rootNode.map(convert)
     }
-
-    fileprivate var root: MindNode? { rootNodeConverted }
 
     private func convert(_ node: Node) -> MindNode {
         MindNode(text: node.text, note: node.note, children: node.children.map(convert))

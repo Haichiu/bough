@@ -1,5 +1,4 @@
 import SwiftUI
-import MindFlowKit
 
 struct ReparentDrag: Equatable {
     let id: UUID

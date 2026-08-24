@@ -1,5 +1,4 @@
 import SwiftUI
-import MindFlowKit
 
 struct NodeView: View {
     let node: MindNode
