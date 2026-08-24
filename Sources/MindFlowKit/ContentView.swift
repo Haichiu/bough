@@ -316,7 +316,8 @@ public struct ContentView: View {
                         Text("備註…").foregroundStyle(.secondary).padding(6).allowsHitTesting(false)
                     }
                 }
-            Text("子主題數量：\(node.children.count)")
+            let s = vm.document.stats()
+            Text("\(s.nodeCount) 個主題 · 最深 \(s.maxDepth) 層 · ★ \(s.markedCount) · 備註 \(s.noteCount)")
                 .font(.caption).foregroundStyle(.secondary)
         } else {
             Text("尚未選取主題")

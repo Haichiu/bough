@@ -912,6 +912,31 @@ do {
     check(md.contains("- \u{1F534} C"), "markdown export carries red emoji")
 }
 
+// MARK: - v8.6: map stats
+
+do {
+    let doc = MindDocument(title: "T", root: MindNode(text: "R", note: "n1", children: [
+        MindNode(text: "A", marked: true, children: [MindNode(text: "A1")]),
+        MindNode(text: "B", collapsed: true),
+    ]))
+    let st = doc.stats()
+    check(st.nodeCount == 4, "stats counts all nodes")
+    check(st.maxDepth == 3, "stats computes max depth")
+    check(st.noteCount == 1 && st.markedCount == 1, "stats counts notes and stars")
+    check(st.collapsedCount == 1, "stats counts collapsed branches")
+}
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!
+        vm.setNote(id: a, to: "hello")
+        let s3 = vm.document.stats()
+        check(s3.linkCount == 0, "stats link count zero by default")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
