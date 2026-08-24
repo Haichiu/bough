@@ -72,6 +72,11 @@ public final class MindMapViewModel: ObservableObject {
         (undoStack, redoStack) = inactiveStacks[sessions[index].id] ?? ([], [])
         selection = inactiveSelections[sessions[index].id] ?? document.root.id
         selectedLinkID = nil
+        // Search results belong to a specific document — never leak across tabs.
+        searchQuery = ""
+        searchResults = []
+        searchIndex = 0
+        showSearch = false
         stopEditing()
     }
 

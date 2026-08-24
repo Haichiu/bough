@@ -531,6 +531,26 @@ do {
     }
 }
 
+// MARK: - v4.9: search state never leaks across tabs
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let startCount = vm.sessions.count
+        vm.applyTemplate("空白")
+        let a = vm.addChild(to: nil)!
+        vm.rename(id: a, to: "獵物關鍵字")
+        vm.searchQuery = "獵物"
+        vm.performSearch()
+        check(vm.searchResults == [a], "search finds target in active tab")
+        vm.switchTab(to: 0)
+        check(vm.searchResults.isEmpty && vm.searchQuery == "",
+              "switching tabs clears stale search state")
+        check(vm.showSearch == false, "search overlay closes on tab switch")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
