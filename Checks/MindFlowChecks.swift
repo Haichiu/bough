@@ -584,6 +584,20 @@ do {
     }
 }
 
+// MARK: - v5.7: cycleTab coverage
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.applyTemplate("空白")
+        vm.applyTemplate("會議記錄")
+        vm.switchTab(to: 0)
+        vm.cycleTab(1)
+        check(vm.activeIndex == 1, "cycleTab advances and wraps")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
