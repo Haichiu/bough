@@ -57,7 +57,7 @@ struct MapCanvasView: View {
                     linksCanvas(layouts: layouts, origin: origin)
                     dragIndicator(origin: origin)
                     reorderIndicator(origin: origin)
-                    ForEach(visibleItems(items: items, geoSize: geo.size)) { item in
+                    ForEach(visibleItems(items: items, geoSize: geo.size, bounds: bounds)) { item in
                         nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                                  layouts: layouts, geoSize: geo.size, bounds: bounds,
                                  isSearchHit: vm.searchResults.contains(item.node.id),
@@ -142,9 +142,7 @@ struct MapCanvasView: View {
     }
 
     /// Only materializes nodes intersecting the viewport, keeping huge maps responsive.
-    private func visibleItems(items: [NodeItem], geoSize: CGSize) -> [NodeItem] {
-        let layouts = LayoutEngine.layout(root: vm.document.root, direction: vm.direction)
-        let bounds = LayoutEngine.contentBounds(of: layouts)
+    private func visibleItems(items: [NodeItem], geoSize: CGSize, bounds: CGRect) -> [NodeItem] {
         let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
         let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
 
