@@ -265,7 +265,11 @@ public final class MindMapViewModel: ObservableObject {
 
     /// Commits inline editing. Empty text on a brand-new node discards it.
     public func commitNodeText(id: UUID, text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let flattened = text
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+        let trimmed = flattened.trimmingCharacters(in: .whitespaces)
         let current = document.root.find(id)?.text ?? ""
         if trimmed.isEmpty {
             if current.isEmpty {

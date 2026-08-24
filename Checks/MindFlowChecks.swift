@@ -632,6 +632,20 @@ do {
     }
 }
 
+// MARK: - v5.9: newline sanitization on commit
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let a = vm.addChild(to: nil)!
+        vm.commitNodeText(id: a, text: "多行\n貼上\t文字")
+        let stored = vm.document.root.find(a)?.text ?? ""
+        check(!stored.contains("\n") && !stored.contains("\t"), "newlines and tabs flattened")
+        check(stored.contains("多行"), "pasted content preserved")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
