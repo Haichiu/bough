@@ -695,6 +695,24 @@ public final class MindMapViewModel: ObservableObject {
         notify("已建立分頁副本")
     }
 
+    /// Collapses all sibling branches except the selected one.
+    public func collapseOtherSiblings(id: UUID) {
+        guard id != document.root.id,
+              let parent = document.root.parent(of: id) else { return }
+        mutate { doc in
+            doc.root.update(parent.id) { p in
+                for i in p.children.indices where p.children[i].id != id {
+                    p.children[i].collapsed = true
+                }
+                // Ensure target is expanded
+                if let idx = p.children.firstIndex(where: { $0.id == id }) {
+                    p.children[idx].collapsed = false
+                }
+            }
+        }
+        notify("已收合其他分支")
+    }
+
     public func cycleTab(_ offset: Int) {
         guard sessions.count > 1 else { return }
         switchTab(to: (activeIndex + offset + sessions.count) % sessions.count)

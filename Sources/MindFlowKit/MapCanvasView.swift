@@ -213,6 +213,7 @@ struct MapCanvasView: View {
             Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: item.node.id) }
             if item.node.id != vm.document.root.id {
                 Button("插入父主題") { vm.insertParent(id: item.node.id) }
+            Button("收合同類兄弟") { vm.collapseOtherSiblings(id: item.node.id) }
             }
             Divider()
             if !item.node.children.isEmpty {
