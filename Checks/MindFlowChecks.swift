@@ -1198,6 +1198,59 @@ do {
     }
 }
 
+// MARK: - v12.3: extreme operation stress test
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+
+        // Build a moderately complex tree (30 nodes across 4 levels)
+        var level1IDs: [UUID] = []
+        for i in 0..<6 {
+            let l1 = vm.addChild(to: nil)!
+            level1IDs.append(l1)
+            for j in 0..<3 {
+                let l2 = vm.addChild(to: l1)!
+                if j == 0 {
+                    vm.addChild(to: l2)
+                }
+            }
+        }
+        check(vm.document.stats().nodeCount >= 25, "stress tree built")
+
+        // Rapidly switch all 4 layouts multiple times
+        for _ in 0..<10 {
+            for dir in [MapDirection.logicRight, .balanced, .fishbone, .bracket] {
+                vm.setDirection(dir)
+            }
+        }
+        check(true, "rapid direction switching no crash")
+
+        // Toggle collapse on every node rapidly
+        let allIDs = vm.document.root.descendantIDs()
+        for id in allIDs { vm.toggleCollapse(id: id) }
+        for id in allIDs { vm.toggleCollapse(id: id) }
+        check(true, "rapid collapse toggle no crash")
+
+        // Undo/redo stress
+        for _ in 0..<20 { vm.undo() }
+        for _ in 0..<20 { vm.redo() }
+        check(true, "undo/redo stress no crash")
+
+        // Search stress with special chars
+        for q in ["(", ")", "[", "]", "{", "}", "*", "+", "?", "^", "$", "\\", "|"] {
+            vm.searchQuery = q
+            vm.performSearch()
+        }
+        check(true, "special char search no crash")
+
+        // Verify document integrity after all stress
+        check(vm.document.root.children.count >= 6, "document structure intact after stress")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
