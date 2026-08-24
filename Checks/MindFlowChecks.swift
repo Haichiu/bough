@@ -866,6 +866,31 @@ do {
     }
 }
 
+// MARK: - v8.3: balanced & bracket performance at scale
+
+do {
+    func buildP(_ depth: Int, _ counter: inout Int) -> MindNode {
+        var node = MindNode(text: "P\\(counter)")
+        counter += 1
+        if depth > 0 {
+            node.children = [buildP(depth - 1, &counter), buildP(depth - 1, &counter)]
+        }
+        return node
+    }
+    var counter = 0
+    let bigRoot = buildP(10, &counter)
+    let startB = Date()
+    let balancedLayouts = LayoutEngine.layout(root: bigRoot, direction: .balanced)
+    let elapsedB = Date().timeIntervalSince(startB)
+    check(balancedLayouts.count == counter && elapsedB < 1.0,
+          String(format: "balanced 2047 under 1.0s (%.3fs)", elapsedB))
+    let startK = Date()
+    let bracketLayouts = LayoutEngine.layout(root: bigRoot, direction: .bracket)
+    let elapsedK = Date().timeIntervalSince(startK)
+    check(bracketLayouts.count == counter && elapsedK < 1.0,
+          String(format: "bracket 2047 under 1.0s (%.3fs)", elapsedK))
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

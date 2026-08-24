@@ -1,4 +1,4 @@
-import AppKit
+@preconcurrency import AppKit
 
 extension Notification.Name {
     public static let mindFlowPan = Notification.Name("mindflow.pan")
