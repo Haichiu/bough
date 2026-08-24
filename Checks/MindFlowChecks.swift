@@ -1251,6 +1251,36 @@ do {
     }
 }
 
+// MARK: - v12.4: full user journey walkthrough
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        vm.applyTemplate("專案計畫")
+        check(vm.document.root.children.count >= 3, "J1: template loaded with branches")
+        let goalBranch = vm.document.root.children[0]
+        let idea = vm.addChild(to: goalBranch.id)!
+        vm.rename(id: idea, to: "每週新產出")
+        check(vm.document.root.find(idea)?.text == "每週新產出", "J2: idea added")
+        vm.toggleMark(id: idea)
+        check(vm.document.root.find(idea)?.marked == true, "J3: starred")
+        vm.searchQuery = "產出"
+        vm.performSearch()
+        check(vm.searchResults.contains(idea), "J4: search finds it")
+        vm.setDirection(.balanced)
+        let bl = LayoutEngine.layout(root: vm.document.root, direction: .balanced)
+        check(bl.count > 0, "J5: balanced layout works")
+        vm.collapseAll()
+        vm.expandToLevel(2)
+        let md = MapExporter.markdown(vm.document)
+        check(md.contains("每週新產出"), "J6: markdown contains content")
+        vm.newDocument()
+        check(vm.document.root.children.isEmpty, "J7: new doc starts fresh")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
