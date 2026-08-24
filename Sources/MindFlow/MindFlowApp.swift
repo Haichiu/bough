@@ -17,6 +17,32 @@ func installQuitAutosave(_ vm: MindMapViewModel) {
     }
 }
 
+private struct SettingsView: View {
+    @AppStorage("defaultTheme") private var defaultTheme = "ocean"
+    @AppStorage("defaultDirection") private var defaultDirection = MapDirection.logicRight.rawValue
+
+    var body: some View {
+        Form {
+            Picker("預設主題", selection: $defaultTheme) {
+                ForEach(Theme.all) { theme in
+                    Text(theme.name).tag(theme.id)
+                }
+            }
+            Picker("預設版面", selection: $defaultDirection) {
+                Text("邏輯圖（右展）").tag(MapDirection.logicRight.rawValue)
+                Text("平衡圖（左右）").tag(MapDirection.balanced.rawValue)
+                Text("魚骨圖").tag(MapDirection.fishbone.rawValue)
+                Text("括號圖").tag(MapDirection.bracket.rawValue)
+            }
+            Text("設定會套用之後新建的文件。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(width: 380)
+    }
+}
+
 @main
 struct MindFlowApp: App {
     @StateObject private var vm = MindMapViewModel()

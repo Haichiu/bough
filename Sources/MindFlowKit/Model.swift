@@ -145,6 +145,11 @@ public struct MindDocument: Codable, Equatable {
     }
 
     public static func new() -> MindDocument {
-        MindDocument(title: "未命名心智圖", themeName: "ocean", root: MindNode(text: "中心主題"))
+        let defaults = UserDefaults.standard
+        let theme = defaults.string(forKey: "defaultTheme") ?? "ocean"
+        let direction = defaults.string(forKey: "defaultDirection")
+            ?? MapDirection.logicRight.rawValue
+        return MindDocument(title: "未命名心智圖", themeName: theme,
+                            directionName: direction, root: MindNode(text: "中心主題"))
     }
 }

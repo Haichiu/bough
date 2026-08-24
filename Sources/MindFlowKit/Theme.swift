@@ -1,15 +1,15 @@
 import SwiftUI
 
-struct Theme: Identifiable, Equatable {
-    let id: String
-    let name: String
-    let branchColors: [Color]
+public struct Theme: Identifiable, Equatable {
+    public let id: String
+    public let name: String
+    public let branchColors: [Color]
 
-    func color(forIndex index: Int) -> Color {
+    public func color(forIndex index: Int) -> Color {
         branchColors.isEmpty ? .accentColor : branchColors[((index % branchColors.count) + branchColors.count) % branchColors.count]
     }
 
-    static let all: [Theme] = [
+    public static let all: [Theme] = [
         Theme(id: "ocean", name: "海洋", branchColors: [
             Color(hex: 0x3B82C4), Color(hex: 0x2FA39A), Color(hex: 0x8A63C9),
             Color(hex: 0xD98A3D), Color(hex: 0xC75B6B), Color(hex: 0x5B8C5A),
@@ -31,6 +31,16 @@ struct Theme: Identifiable, Equatable {
     static func named(_ id: String) -> Theme {
         all.first { $0.id == id } ?? all[0]
     }
+}
+
+extension Theme {
+    /// Root fill adapts to light/dark so the central topic stays crisp in both.
+    public static let rootBackground = Color(NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return isDark
+            ? NSColor(calibratedRed: 0.42, green: 0.52, blue: 0.68, alpha: 1)
+            : NSColor(calibratedRed: 0.18, green: 0.23, blue: 0.31, alpha: 1)
+    })
 }
 
 extension Color {

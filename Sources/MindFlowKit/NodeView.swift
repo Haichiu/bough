@@ -79,7 +79,7 @@ struct NodeView: View {
     private func background(depth: Int, radius: CGFloat) -> some View {
         if depth == 0 {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Color(hex: 0x2E3A4E))
+                .fill(Theme.rootBackground)
         } else if depth == 1 {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(branchColor)
