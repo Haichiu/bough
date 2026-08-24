@@ -408,6 +408,14 @@ public final class MindMapViewModel: ObservableObject {
 
     public func setDirection(_ direction: MapDirection) {
         mutate { $0.directionName = direction.rawValue }
+        let name: String
+        switch direction {
+        case .logicRight: name = "邏輯圖（右展）"
+        case .balanced: name = "平衡圖（左右）"
+        case .fishbone: name = "魚骨圖"
+        case .bracket: name = "括號圖"
+        }
+        notify("\u{5df2}\u{5207}\u{63db}\u{81f3}\(name)")
     }
 
     public func moveSibling(id: UUID, offset: Int) {
