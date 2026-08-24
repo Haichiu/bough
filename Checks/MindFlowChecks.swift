@@ -646,6 +646,22 @@ do {
     }
 }
 
+// MARK: - v6.2: offsets respected across directions
+
+do {
+    let root = MindNode(text: "R", children: [MindNode(text: "A"), MindNode(text: "B")])
+    let key = root.children[0].id.uuidString
+    let offsets = [key: CGPoint(x: 33, y: 44)]
+    for dir in [MapDirection.balanced, .fishbone] {
+        let plain = LayoutEngine.layout(root: root, direction: dir)
+        let shifted = LayoutEngine.layout(root: root, direction: dir, offsets: offsets)
+        let moved = shifted[root.children[0].id]!.frame
+        check(moved.minX == plain[root.children[0].id]!.frame.minX + 33
+              && moved.minY == plain[root.children[0].id]!.frame.minY + 44,
+              "offsets respected in \(dir.rawValue)")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

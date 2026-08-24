@@ -188,7 +188,12 @@ public struct ContentView: View {
                                 tabDragX = 0
                             }
                     )
-                    .help("切換到此分頁（拖曳可排序）")
+                    .onTapGesture(count: 2) {
+                        vm.switchTab(to: index)
+                        vm.selection = vm.sessions[index].document.root.id
+                        vm.editingID = vm.sessions[index].document.root.id
+                    }
+                    .help("切換到此分頁（拖曳可排序；雙擊改標題）")
                     .accessibilityLabel("切換到分頁：\(tabTitle(vm.sessions[index]))")
                     .contextMenu {
                         Button("關閉此分頁") { vm.closeTab(index) }
