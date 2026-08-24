@@ -347,6 +347,11 @@ public struct ContentView: View {
                     .onSubmit {
                         vm.rename(id: row.id, to: outlineDraft)
                         outlineEditingID = nil
+                        // XMind-style rapid entry: Return spawns the next sibling.
+                        if let next = vm.insertSiblingAfter(id: row.id) {
+                            outlineEditingID = next
+                            outlineDraft = ""
+                        }
                     }
                     .onExitCommand { outlineEditingID = nil }
             } else {

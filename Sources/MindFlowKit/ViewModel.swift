@@ -643,6 +643,27 @@ public final class MindMapViewModel: ObservableObject {
         notify(tag == nil ? "已清除顏色標記" : "已加上顏色標記")
     }
 
+    /// Inserts an empty sibling directly after the given node (outline quick-entry).
+    @discardableResult
+    public func insertSiblingAfter(id: UUID) -> UUID? {
+        guard id != document.root.id,
+              let parentNode = document.root.parent(of: id),
+              document.root.contains(id) else { return nil }
+        let newNode = MindNode(text: "")
+        mutate { doc in
+            doc.root.update(parentNode.id) { parent in
+                if let index = parent.children.firstIndex(where: { $0.id == id }) {
+                    parent.children.insert(newNode, at: parent.children.index(after: index))
+                } else {
+                    parent.children.append(newNode)
+                }
+            }
+        }
+        selection = newNode.id
+        flash(newNode.id)
+        return newNode.id
+    }
+
     public func toggleMark(id: UUID) {
         guard document.root.contains(id) else { return }
         mutate { doc in

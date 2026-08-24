@@ -662,6 +662,26 @@ do {
     }
 }
 
+// MARK: - v6.3: insertSiblingAfter rapid entry
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!
+        vm.rename(id: a, to: "第一點")
+        let b = vm.insertSiblingAfter(id: a)!
+        vm.rename(id: b, to: "第二點")
+        let ids = vm.document.root.children.map(\.id)
+        check(ids == [a, b], "insertSiblingAfter inserts right after")
+        check(vm.insertSiblingAfter(id: vm.document.root.id) == nil,
+              "cannot insert sibling after root")
+    }
+}
+
+// MARK: - v5.x legacy blocks above
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
