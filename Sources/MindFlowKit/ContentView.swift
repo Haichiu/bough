@@ -351,6 +351,27 @@ public struct ContentView: View {
             let focusSet = vm.focusSet()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Button {
+                            vm.addChild(to: vm.selection ?? vm.document.root.id)
+                        } label: {
+                            Label("子主題", systemImage: "plus.circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderless)
+                        Button {
+                            if let sel = vm.selection, sel != vm.document.root.id {
+                                vm.addSibling(of: sel)
+                            } else {
+                                vm.addChild(to: vm.document.root.id)
+                            }
+                        } label: {
+                            Label("兄弟", systemImage: "plus.square.on.square")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .padding(.bottom, 4)
                     if vm.focusBranchID != nil {
                         Text("聚焦模式中——非此分支的主題已淡化")
                             .font(.caption)
