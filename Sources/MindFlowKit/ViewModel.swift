@@ -503,6 +503,19 @@ public final class MindMapViewModel: ObservableObject {
         notify("已從剪貼簿加入 \(importedChildren.count) 個主題 ✓")
     }
 
+    /// Returns the chain of nodes from root to the given node (inclusive).
+    public func breadcrumbPath(to id: UUID) -> [MindNode] {
+        var chain: [MindNode] = []
+        var cursor: UUID? = id
+        while let currentID = cursor {
+            guard let node = document.root.find(currentID) else { break }
+            chain.insert(node, at: 0)
+            if currentID == document.root.id { break }
+            cursor = document.root.parent(of: currentID)?.id
+        }
+        return chain
+    }
+
     // MARK: - Associative links
 
     @Published public var selectedLinkID: UUID?

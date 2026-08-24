@@ -129,6 +129,7 @@ public struct ContentView: View {
         }
         .navigationTitle(vm.document.root.text.isEmpty ? vm.document.title : vm.document.root.text)
         .navigationSubtitle(vm.dirty ? "未儲存" : (vm.filePath?.lastPathComponent ?? "自動儲存中"))
+        .overlay(alignment: .bottom) { breadcrumbBar }
         .overlay(alignment: .topLeading) {
             if let fid = vm.focusBranchID, let fnode = vm.document.root.find(fid) {
                 HStack(spacing: 6) {
@@ -188,6 +189,33 @@ public struct ContentView: View {
         }
         .onAppear {
             if vm.selection == nil { vm.selection = vm.document.root.id }
+        }
+    }
+
+    private var breadcrumbBar: some View {
+        Group {
+            if vm.selection != nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(vm.breadcrumbPath(to: vm.selection!), id: \.id) { node in
+                            Button(node.text.isEmpty ? "\u{2026}" : node.text) {
+                                vm.selection = node.id
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            if node.id != vm.selection {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.bottom, 40)
+            }
         }
     }
 
