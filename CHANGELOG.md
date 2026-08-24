@@ -1,5 +1,13 @@
 # MindFlow 更新日誌
 
+## v7.2
+- 關聯線尊重聚焦分支（淡化時一併隱藏）
+- 分頁關閉鈕 VoiceOver 標籤
+
+## v7.1
+- 多視窗支援（檔案 → 新增視窗，⌘⌥N），分頁跨視窗共享同步
+- CHANGELOG 補完 v6.x 歷史
+
 ## v7.0
 - 效能門檻升級：2047 節點版面 < 1s（實測 0.036s）
 - scripts/install-hooks.sh：pre-commit 自動跑檢查

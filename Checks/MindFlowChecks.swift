@@ -512,6 +512,27 @@ do {
     }
 }
 
+// MARK: - v7.3: fishbone performance at scale
+
+do {
+    func buildFish(_ depth: Int, _ counter: inout Int) -> MindNode {
+        var node = MindNode(text: "F\(counter)")
+        counter += 1
+        if depth > 0 {
+            node.children = [buildFish(depth - 1, &counter), buildFish(depth - 1, &counter)]
+        }
+        return node
+    }
+    var counter = 0
+    let bigRoot = buildFish(10, &counter) // 2047 nodes
+    let start = Date()
+    let layouts = LayoutEngine.layout(root: bigRoot, direction: .fishbone)
+    let elapsed = Date().timeIntervalSince(start)
+    check(layouts.count == counter && counter >= 2000,
+          "fishbone fully laid out (\(counter) nodes)")
+    check(elapsed < 1.0, String(format: "fishbone layout under 1.0s (%.3fs)", elapsed))
+}
+
 // MARK: - v4.8: empty-start nodes
 
 do {
