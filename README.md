@@ -86,6 +86,14 @@ App 內按 **⌘/** 隨時查看。
 **Q：可以同時開好幾張圖嗎？**
 可以，用分頁；也可以「檔案 → 新增視窗」（⌘⌥N）開第二個視窗並排對照。
 
+## 分享給別人
+
+```bash
+cd projects/mindflow
+bash scripts/make-dmg.sh 9.4
+```
+會在桌面產生 `MindFlow-9.4.dmg`——對方雙擊、把 App 拖進應用程式資料夾即可使用。
+
 ## 給開發者
 
 ```bash
