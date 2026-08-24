@@ -70,7 +70,8 @@ public enum LayoutEngine {
 
     static func hGap(for depth: Int) -> CGFloat { depth == 0 ? 72 : 44 }
 
-    public static func layout(root: MindNode, direction: MapDirection = .logicRight) -> [UUID: NodeLayout] {
+    public static func layout(root: MindNode, direction: MapDirection = .logicRight,
+                              offsets: [String: CGPoint] = [:]) -> [UUID: NodeLayout] {
         var heights: [UUID: CGFloat] = [:]
         _ = subtreeHeight(root, depth: 0, heights: &heights)
         var result: [UUID: NodeLayout] = [:]
@@ -143,6 +144,15 @@ public enum LayoutEngine {
             if rightCount < indexed.count {
                 placeChildren(Array(indexed[rightCount...]), side: .left,
                               innerX: -rootSize.width / 2 - gap, centerY: 0)
+            }
+        }
+        // Manual nudges win over auto layout.
+        if !offsets.isEmpty {
+            for (key, offset) in offsets {
+                guard let id = UUID(uuidString: key), let layout = result[id] else { continue }
+                result[id] = NodeLayout(id: layout.id,
+                                        frame: layout.frame.offsetBy(dx: offset.x, dy: offset.y),
+                                        depth: layout.depth, colorIndex: layout.colorIndex, side: layout.side)
             }
         }
         return result

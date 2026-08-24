@@ -472,6 +472,25 @@ do {
     check(label == "★ 主題A，有備註", "a11y label composes text, star and note")
 }
 
+// MARK: - v4.4: manual offsets
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let a = vm.addChild(to: nil)!
+        let before = LayoutEngine.layout(root: vm.document.root, direction: .logicRight,
+                                         offsets: vm.document.offsets)[a]!.frame
+        vm.nudgeOffset(id: a, dx: 25, dy: -15)
+        let after = LayoutEngine.layout(root: vm.document.root, direction: .logicRight,
+                                        offsets: vm.document.offsets)[a]!.frame
+        check(after.minX == before.minX + 25, "offset shifts x")
+        check(after.midY == before.midY - 15, "offset shifts y")
+        vm.clearOffset(id: a)
+        check(vm.document.offsets.isEmpty, "clearOffset removes entry")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

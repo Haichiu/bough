@@ -72,19 +72,39 @@ public final class KeyboardMonitor {
             default:
                 break
             }
-            if flags.contains(.option), let selection = vm.selection {
+            if let selection = vm.selection {
+                // ⌘ arrows nudge the node's manual offset.
                 switch chars {
                 case "\u{F700}":
-                    vm.moveSibling(id: selection, offset: -1)
+                    vm.nudgeOffset(id: selection, dx: 0, dy: -10)
                     return nil
                 case "\u{F701}":
-                    vm.moveSibling(id: selection, offset: 1)
+                    vm.nudgeOffset(id: selection, dx: 0, dy: 10)
+                    return nil
+                case "\u{F702}":
+                    vm.nudgeOffset(id: selection, dx: -10, dy: 0)
+                    return nil
+                case "\u{F703}":
+                    vm.nudgeOffset(id: selection, dx: 10, dy: 0)
                     return nil
                 default:
-                    return event
+                    break
+                }
+                // ⌥⌘↑/↓ reorder siblings.
+                if flags.contains(.option) {
+                    switch chars {
+                    case "\u{F700}":
+                        vm.moveSibling(id: selection, offset: -1)
+                        return nil
+                    case "\u{F701}":
+                        vm.moveSibling(id: selection, offset: 1)
+                        return nil
+                    default:
+                        break
+                    }
                 }
             }
-            return event // let Cmd menu shortcuts pass through
+            return event // let remaining Cmd shortcuts pass through
         }
 
         guard flags.subtracting([.shift, .numericPad, .function]).isEmpty else { return event }

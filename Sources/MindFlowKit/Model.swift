@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 public struct MindNode: Codable, Identifiable, Equatable {
@@ -115,19 +116,21 @@ public struct MindDocument: Codable, Equatable {
     public var directionName: String
     public var root: MindNode
     public var links: [MindLink]
+    public var offsets: [String: CGPoint]
 
     private enum CodingKeys: String, CodingKey {
-        case title, themeName, directionName, root, links
+        case title, themeName, directionName, root, links, offsets
     }
 
     public init(title: String = "未命名心智圖", themeName: String = "ocean",
                 directionName: String = MapDirection.logicRight.rawValue, root: MindNode,
-                links: [MindLink] = []) {
+                links: [MindLink] = [], offsets: [String: CGPoint] = [:]) {
         self.title = title
         self.themeName = themeName
         self.directionName = directionName
         self.root = root
         self.links = links
+        self.offsets = offsets
     }
 
     public init(from decoder: Decoder) throws {
@@ -138,6 +141,7 @@ public struct MindDocument: Codable, Equatable {
             ?? MapDirection.logicRight.rawValue
         root = try container.decode(MindNode.self, forKey: .root)
         links = try container.decodeIfPresent([MindLink].self, forKey: .links) ?? []
+        offsets = try container.decodeIfPresent([String: CGPoint].self, forKey: .offsets) ?? [:]
     }
 
     public static func new() -> MindDocument {

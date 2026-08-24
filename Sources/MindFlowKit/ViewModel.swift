@@ -354,6 +354,25 @@ public final class MindMapViewModel: ObservableObject {
         selection = id
     }
 
+    // MARK: - Manual position nudges
+
+    /// Shifts a node's manual offset (used by ⌥-drag and ⌘-arrow keys).
+    public func nudgeOffset(id: UUID, dx: CGFloat, dy: CGFloat) {
+        guard document.root.contains(id), id != document.root.id else { return }
+        let key = id.uuidString
+        mutate("offset:\(key)") { doc in
+            var current = doc.offsets[key] ?? .zero
+            current.x += dx
+            current.y += dy
+            doc.offsets[key] = current
+        }
+    }
+
+    public func clearOffset(id: UUID) {
+        guard document.root.contains(id) else { return }
+        mutate { $0.offsets.removeValue(forKey: id.uuidString) }
+    }
+
     // MARK: - Associative links
 
     @Published public var selectedLinkID: UUID?
