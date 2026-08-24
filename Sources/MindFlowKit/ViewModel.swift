@@ -179,23 +179,26 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     static func sampleDocument() -> MindDocument {
-        func node(_ text: String, children: [MindNode] = []) -> MindNode {
-            MindNode(text: text, children: children)
+        func node(_ text: String, note: String = "", marked: Bool = false,
+                  colorTag: String? = nil, children: [MindNode] = []) -> MindNode {
+            MindNode(text: text, note: note, marked: marked, colorTag: colorTag, children: children)
         }
-        return MindDocument(
-            title: "歡迎使用 MindFlow",
-            root: MindNode(text: "歡迎使用 MindFlow 🎉", children: [
-                node("選取我之後按 Tab，就能長出子主題"),
-                node("按 Return 可以加一個隔壁的主題"),
-                node("連點兩下直接改文字"),
-                node("拖曳節點可以重新掛接或排序"),
-                node("更多小技巧", children: [
-                    node("⌘F 搜尋主題"),
-                    node("⌘D 複製整棵子樹"),
-                    node("⌘L 加上星星標記"),
-                    node("不用按儲存，全部自動保存"),
-                ]),
-            ]))
+        let welcome = MindNode(text: "歡迎使用 MindFlow 🎉", note: "這張圖會教你所有基本操作", children: [
+            node("選取我之後按 Tab，就能長出子主題", children: [
+                node("再按 Tab 可以繼續往 deeper 長"),
+            ]),
+            node("按 Return 可以加一個隔壁的主題", marked: true),
+            node("連點兩下直接改文字", colorTag: "blue"),
+            node("拖曳節點可以重新掛接或排序", note: "拖到其他節點上＝變成它的子主題"),
+            node("更多小技巧", children: [
+                node("⌘F 搜尋主題", colorTag: "green"),
+                node("⌘D 複製整棵子樹"),
+                node("⌘L 加上星星標記", marked: true),
+                node("⌥拖曳 自由放置節點位置"),
+                node("不用按儲存，全部自動保存"),
+            ]),
+        ])
+        return MindDocument(title: "歡迎使用 MindFlow", root: welcome)
     }
 
     // MARK: - Mutation core
