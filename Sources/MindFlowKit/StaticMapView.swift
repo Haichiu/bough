@@ -93,6 +93,7 @@ struct MapConnectionsView: View {
 /// Gesture-free rendering of the whole map, used for PNG export.
 struct StaticMapView: View {
     let document: MindDocument
+    var transparentBackground = false
 
     var body: some View {
         let direction = MapDirection(rawValue: document.directionName) ?? .logicRight
@@ -129,6 +130,6 @@ struct StaticMapView: View {
             }
         }
         .frame(width: bounds.width, height: bounds.height)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(transparentBackground ? Color.clear : Color(nsColor: .textBackgroundColor))
     }
 }

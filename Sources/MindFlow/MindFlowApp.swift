@@ -80,6 +80,7 @@ struct MindFlowApp: App {
                     Button("Markdown…") { vm.exportRequest = .markdown }
                     Button("OPML…") { vm.exportRequest = .opml }
                     Button("PNG 圖片…") { vm.exportRequest = .png }
+                    Button("PNG 圖片（透明背景）…") { vm.exportRequest = .pngTransparent }
                     Button("PDF 文件…") { vm.exportRequest = .pdf }
                 }
             }
