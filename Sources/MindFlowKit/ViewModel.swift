@@ -878,7 +878,7 @@ public final class MindMapViewModel: ObservableObject {
         notify("已匯入 OPML ✓")
     }
 
-    func setTheme(_ id: String) {
+    public func setTheme(_ id: String) {
         mutate { $0.themeName = id }
     }
 }

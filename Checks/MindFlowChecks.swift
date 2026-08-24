@@ -836,6 +836,36 @@ do {
     }
 }
 
+// MARK: - v8.2: per-tab undo isolation, zen & theme flags
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        while vm.sessions.count > 1 { vm.closeTab(0) }
+        vm.newDocument()
+        let x = vm.addChild(to: nil)!
+        vm.rename(id: x, to: "標記")
+
+        vm.applyTemplate("空白")          // opens tab 2 and activates it
+        check(vm.sessions.count == 2, "applyTemplate opened second tab")
+        vm.switchTab(to: 0)               // back to first tab
+        check(vm.document.root.find(x)?.text == "標記", "switching back preserves edits")
+
+        // Per-tab undo: undoing here must not touch the other tab.
+        vm.undo()
+        check(vm.document.root.find(x)?.text == "", "per-tab undo isolates stacks")
+
+        // Zen & theme flags.
+        vm.toggleZen()
+        check(vm.zenMode == true, "zen mode toggles on")
+        vm.toggleZen()
+        check(vm.zenMode == false, "zen mode toggles off")
+        vm.setTheme("candy")
+        check(vm.document.themeName == "candy", "setTheme applies")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
