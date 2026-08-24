@@ -598,6 +598,40 @@ do {
     }
 }
 
+// MARK: - v5.8: reparent guards + deep-copy independence
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        while vm.sessions.count > 1 { vm.closeTab(0) }
+        let parent = vm.addChild(to: nil)!
+        vm.rename(id: parent, to: "父")
+        let child = vm.addChild(to: parent)!
+        vm.rename(id: child, to: "子")
+
+        // Cycle guard: cannot move a node under its own descendant.
+        let beforeCount = vm.document.root.children.count
+        vm.move(id: parent, toParent: child)
+        check(vm.document.root.parent(of: child)?.id == parent,
+              "moving parent under its child is rejected")
+
+        // Deep-copy independence.
+        let copyID = vm.duplicate(id: parent)!
+        vm.rename(id: copyID, to: "父副本")
+        check(vm.document.root.find(copyID)?.text == "父副本", "duplicate renames independently")
+        check(vm.document.root.find(parent)?.text == "父", "original unaffected by copy rename")
+        let copyChild = vm.document.root.find(copyID)?.children.first?.id
+        vm.rename(id: copyChild!, to: "子的分身")
+        check(vm.document.root.find(child)?.text == "子",
+              "copy's descendants are fully independent")
+
+        // Root still holds both original branches.
+        check(vm.document.root.children.count == beforeCount + 1,
+              "duplicate appends after the original")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

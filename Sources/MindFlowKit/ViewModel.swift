@@ -314,7 +314,8 @@ public final class MindMapViewModel: ObservableObject {
         mutate { $0.root.update(id) { $0.collapsed.toggle() } }
     }
 
-    func move(id: UUID, toParent parentID: UUID) {
+    /// Moves a node (with its subtree) under another node.
+    public func move(id: UUID, toParent parentID: UUID) {
         guard id != document.root.id,
               id != parentID,
               !document.root.isAncestor(of: parentID) || parentID != id,
