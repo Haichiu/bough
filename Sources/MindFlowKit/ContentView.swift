@@ -350,6 +350,7 @@ public struct ContentView: View {
             Text(node.id == vm.document.root.id ? "中心主題" : "主題")
                 .font(.subheadline).foregroundStyle(.secondary)
             TextEditor(text: $noteDraft)
+                .accessibilityLabel("備註內容")
                 .onChange(of: noteDraft) { draft in
                     guard draft != (vm.document.root.find(id)?.note ?? "") else { return }
                     vm.setNote(id: id, to: draft)
@@ -502,6 +503,9 @@ public struct ContentView: View {
             vm.stopEditing()
             vm.selection = row.id
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(row.text)
+        .accessibilityAddTraits(vm.selection == row.id ? [.isSelected] : [])
         .contextMenu {
             Button("加入子主題") { vm.addChild(to: row.id) }
             Button("重新命名") {
