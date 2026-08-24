@@ -1028,6 +1028,34 @@ do {
     }
 }
 
+// MARK: - v10.1: root guards & expandAll equivalence
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let before = vm.document
+
+        // Root cannot be moved or wrapped.
+        vm.move(id: vm.document.root.id, toParent: vm.document.root.id)
+        vm.insertParent(id: vm.document.root.id)
+        check(vm.document.root.text == before.root.text, "root guards hold")
+
+        // expandAll == expandToLevel(99).
+        let a = vm.addChild(to: nil)!
+        let b = vm.addChild(to: a)!
+        let c = vm.addChild(to: b)!
+        vm.expandToLevel(1)
+        check(vm.document.root.find(a)?.collapsed == true, "level-1 collapses everything below")
+        vm.expandToLevel(99)
+        check(vm.document.root.find(a)?.collapsed == false
+              && vm.document.root.find(b)?.collapsed == false
+              && vm.document.root.find(c)?.collapsed == false,
+              "expandToLevel(99) equals expandAll")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
