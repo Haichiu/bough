@@ -722,6 +722,24 @@ do {
     }
 }
 
+// MARK: - v6.8: insert parent
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!
+        vm.rename(id: a, to: "原本")
+        let newParentID = vm.insertParent(id: a)!
+        vm.rename(id: newParentID, to: "新容器")
+        check(vm.document.root.children.count == 1, "insertParent keeps root child count")
+        check(vm.document.root.children[0].text == "新容器", "wrapper takes the slot")
+        check(vm.document.root.children[0].children[0].text == "原本", "original becomes child of wrapper")
+        check(vm.document.root.find(a)?.text == "原本", "original subtree preserved")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

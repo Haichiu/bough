@@ -671,6 +671,27 @@ public final class MindMapViewModel: ObservableObject {
         notify(tag == nil ? "已清除顏色標記" : "已加上顏色標記")
     }
 
+    /// Wraps the node in a brand-new parent at the same position.
+    @discardableResult
+    public func insertParent(id: UUID) -> UUID? {
+        guard id != document.root.id,
+              let node = document.root.find(id),
+              let parentNode = document.root.parent(of: id),
+              let index = parentNode.children.firstIndex(where: { $0.id == id }) else { return nil }
+        let newParent = MindNode(text: "新主題")
+        mutate { doc in
+            var wrapper = newParent
+            wrapper.children = [node]
+            doc.root.update(parentNode.id) { parent in
+                parent.children[index] = wrapper
+            }
+        }
+        selection = newParent.id
+        flash(newParent.id)
+        notify("已插入父主題")
+        return newParent.id
+    }
+
     /// Inserts an empty sibling directly after the given node (outline quick-entry).
     @discardableResult
     public func insertSiblingAfter(id: UUID) -> UUID? {
