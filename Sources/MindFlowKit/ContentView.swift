@@ -687,6 +687,15 @@ public struct ContentView: View {
                     ("⌘⇧T", "重新開啟關閉的分頁"),
                     ("⌃Tab", "切換分頁"),
                     ("⌘S", "另存新檔（平常自動保存）"),
+                    ("⌘⇧C", "複製為 Markdown 到剪貼簿"),
+                    ("⌘⌥D", "建立目前分頁副本"),
+                    ("⌘⇧V", "貼上剪貼簿條列建節點"),
+                    ("⌘方向鍵", "微調節點位置"),
+                    ("⌥拖曳", "自由放置節點"),
+                    ("⌃Tab", "切換分頁"),
+                    ("⌘⇧T", "重新開啟關閉的分頁"),
+                    ("⌘⇧F", "專注模式"),
+                    ("⌘⌥1-4", "切換版面"),
                 ], id: \.0) { pair in
                     GridRow {
                         Text(pair.0).font(.body.bold()).frame(width: 110, alignment: .trailing)
@@ -705,7 +714,7 @@ public struct ContentView: View {
         .padding(24)
         .frame(width: 420)
         .overlay(alignment: .bottomTrailing) {
-            Text("v11.7")
+            Text("v14.1")
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
                 .padding(6)
