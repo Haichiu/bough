@@ -800,6 +800,23 @@ do {
     }
 }
 
+// MARK: - v7.8: corrupted-file guard
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        let before = vm.sessions.count
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("broken-\(UUID().uuidString).mindmap")
+        try Data("not json at all {{{".utf8).write(to: tmp)
+        vm.openFromURL(tmp)
+        check(vm.sessions.count == before, "corrupted file opens no tab")
+        check(vm.statusMessage?.contains("\u{7121}\u{6cd5}\u{958b}\u{555f}") == true,
+              "user sees a friendly error message")
+        try? FileManager.default.removeItem(at: tmp)
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
