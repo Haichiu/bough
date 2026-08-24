@@ -18,13 +18,28 @@ public struct ContentView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            tabBar
+            if !vm.zenMode {
+                tabBar
+            }
             HStack(spacing: 0) {
                 MapCanvasView()
-                if showInspector {
+                if showInspector && !vm.zenMode {
                     inspector
                         .frame(width: 280)
                 }
+            }
+        }
+        .toolbar(vm.zenMode ? .hidden : .visible, for: .windowToolbar)
+        .overlay(alignment: .topLeading) {
+            if vm.zenMode {
+                Button {
+                    vm.toggleZen()
+                } label: {
+                    Label("離開專注", systemImage: "arrow.uturn.backward.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.bordered)
+                .padding(12)
             }
         }
         .toolbar {
@@ -112,6 +127,9 @@ public struct ContentView: View {
             guard let request else { return }
             performExport(request)
             vm.exportRequest = nil
+        }
+        .onChange(of: vm.zenMode) { _ in
+            if vm.zenMode { showInspector = showInspector } // state preserved
         }
         .onChange(of: vm.printRequest) { request in
             guard request else { return }

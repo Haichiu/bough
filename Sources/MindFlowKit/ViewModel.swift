@@ -452,6 +452,17 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var showSearch = false
     @Published public var showHelp = false
     @Published public var printRequest = false
+    @Published public var zenMode = false
+
+    public func toggleZen() {
+        zenMode.toggle()
+        if zenMode {
+            showSearch = false
+            showHelp = false
+            stopEditing()
+            notify("專注模式：按 Esc 或左上角按鈕離開")
+        }
+    }
     @Published public var showTemplatePicker = false
     @Published public var searchQuery = ""
     @Published public var searchResults: [UUID] = []

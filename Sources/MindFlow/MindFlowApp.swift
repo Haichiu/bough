@@ -99,6 +99,10 @@ struct MindFlowApp: App {
                 Button("列印…") { vm.printRequest = true }
                     .keyboardShortcut("p", modifiers: [.command])
             }
+            CommandMenu("顯示") {
+                Button(vm.zenMode ? "離開專注模式" : "專注模式") { vm.toggleZen() }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
+            }
             CommandMenu("尋找") {
                 Button("搜尋主題…") { vm.showSearch = true }
                     .keyboardShortcut("f", modifiers: [.command])
