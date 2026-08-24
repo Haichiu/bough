@@ -1162,6 +1162,42 @@ do {
     }
 }
 
+// MARK: - v12.2: comprehensive feature verification
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+
+        for dir in [MapDirection.logicRight, .balanced, .fishbone, .bracket] {
+            let l = LayoutEngine.layout(root: vm.document.root, direction: dir)
+            check(l.count > 0, "layout valid")
+        }
+
+        let parent = vm.addChild(to: nil)!
+        vm.rename(id: parent, to: "branch")
+        let child = vm.addChild(to: parent)!
+        check(vm.document.root.find(parent)?.children.count == 1, "child created")
+
+        vm.setTheme("candy")
+        check(vm.document.themeName == "candy", "theme persists")
+
+        let noteNode = vm.addChild(to: nil)!
+        vm.rename(id: noteNode, to: "note-test-node")
+        vm.setNote(id: noteNode, to: "hidden-keyword")
+        vm.searchQuery = "hidden-keyword"
+        vm.performSearch()
+        check(vm.searchResults.contains(noteNode), "search covers notes")
+
+        let md = MapExporter.markdown(vm.document)
+        check(md.contains("branch"), "markdown export works")
+
+        let st = vm.document.stats()
+        check(st.nodeCount >= 3, "stats counts nodes")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
