@@ -806,6 +806,14 @@ public final class MindMapViewModel: ObservableObject {
         return true
     }
 
+    /// Copies the whole map as Markdown straight to the clipboard.
+    public func copyAsMarkdown() {
+        let md = MapExporter.markdown(document)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(md, forType: .string)
+        notify("已複製 Markdown 到剪貼簿 ✓")
+    }
+
     /// Opens a .mindmap file (via Finder double-click or drag) into a new tab.
     public func openFromURL(_ url: URL) {
         guard let doc = FileIO.load(from: url) else {

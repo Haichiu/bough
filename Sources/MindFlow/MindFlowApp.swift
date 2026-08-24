@@ -86,6 +86,9 @@ struct MindFlowApp: App {
                     Button("PNG 圖片…") { vm.exportRequest = .png }
                     Button("PNG 圖片（透明背景）…") { vm.exportRequest = .pngTransparent }
                     Button("PNG 大圖（3x）…") { vm.exportRequest = .pngLarge }
+                    Divider()
+                    Button("複製為 Markdown") { vm.copyAsMarkdown() }
+                        .keyboardShortcut("c", modifiers: [.command, .shift])
                     Button("PDF 文件…") { vm.exportRequest = .pdf }
                 }
             }
