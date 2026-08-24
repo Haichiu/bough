@@ -85,6 +85,15 @@ public struct ContentView: View {
                 }
                 .help("縮放至整張圖")
 
+                if vm.focusBranchID != nil {
+                    Button {
+                        vm.focusBranchID = nil
+                    } label: {
+                        Label("取消聚焦", systemImage: "scope")
+                    }
+                    .help("回到全圖檢視")
+                }
+
                 Menu {
                     Button("邏輯圖（右展）") { vm.setDirection(.logicRight) }
                     Button("平衡圖（左右）") { vm.setDirection(.balanced) }
