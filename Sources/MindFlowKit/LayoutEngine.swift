@@ -111,6 +111,7 @@ public enum LayoutEngine {
                 var chain: [(node: MindNode, depth: Int)] = []
                 func collect(_ node: MindNode, depth: Int) {
                     chain.append((node, depth))
+                    guard !node.collapsed else { return }
                     for child in node.children { collect(child, depth: depth + 1) }
                 }
                 collect(branch, depth: 1)

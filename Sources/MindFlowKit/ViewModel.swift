@@ -714,6 +714,14 @@ public final class MindMapViewModel: ObservableObject {
         return newNode.id
     }
 
+    /// Copies the whole map as OPML straight to the clipboard.
+    public func copyAsOPML() {
+        let opml = MapExporter.opml(document)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(opml, forType: .string)
+        notify("已複製 OPML 到剪貼簿 ✓")
+    }
+
     public func toggleMark(id: UUID) {
         guard document.root.contains(id) else { return }
         mutate { doc in

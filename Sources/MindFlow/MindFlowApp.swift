@@ -89,6 +89,7 @@ struct MindFlowApp: App {
                     Divider()
                     Button("複製為 Markdown") { vm.copyAsMarkdown() }
                         .keyboardShortcut("c", modifiers: [.command, .shift])
+                    Button("複製為 OPML") { vm.copyAsOPML() }
                     Button("PDF 文件…") { vm.exportRequest = .pdf }
                 }
             }

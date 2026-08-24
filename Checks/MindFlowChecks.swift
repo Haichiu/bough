@@ -787,6 +787,19 @@ do {
     }
 }
 
+// MARK: - v7.5: collapsed respected across all four directions
+
+do {
+    let grand = MindNode(text: "G")
+    let mid = MindNode(text: "M", collapsed: true, children: [grand])
+    let root = MindNode(text: "R", children: [mid])
+    for dir in [MapDirection.logicRight, .balanced, .fishbone, .bracket] {
+        let layouts = LayoutEngine.layout(root: root, direction: dir)
+        check(layouts[grand.id] == nil, "collapsed descendants hidden in \(dir.rawValue)")
+        check(layouts[mid.id] != nil, "collapsed branch root visible in \(dir.rawValue)")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
