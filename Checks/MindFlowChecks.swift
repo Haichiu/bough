@@ -702,6 +702,26 @@ do {
     }
 }
 
+// MARK: - v6.7: focus set semantics
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!
+        let a1 = vm.addChild(to: a)!
+        let uncle = vm.addChild(to: nil)!
+        vm.focusBranchID = a1
+        let set = vm.focusSet()
+        check(set.contains(a1) && set.contains(a) && set.contains(vm.document.root.id),
+              "focus keeps subtree and ancestors")
+        check(!set.contains(uncle), "focus hides sibling branches")
+        vm.focusBranchID = nil
+        check(vm.focusSet().isEmpty, "clearing focus empties the set")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

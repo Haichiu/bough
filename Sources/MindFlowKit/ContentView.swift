@@ -113,6 +113,29 @@ public struct ContentView: View {
         }
         .navigationTitle(vm.document.root.text.isEmpty ? vm.document.title : vm.document.root.text)
         .navigationSubtitle(vm.dirty ? "未儲存" : (vm.filePath?.lastPathComponent ?? "自動儲存中"))
+        .overlay(alignment: .topLeading) {
+            if let fid = vm.focusBranchID, let fnode = vm.document.root.find(fid) {
+                HStack(spacing: 6) {
+                    Image(systemName: "scope")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("聚焦：\(fnode.text)")
+                        .font(.callout)
+                        .lineLimit(1)
+                    Button {
+                        vm.focusBranchID = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(12)
+            }
+        }
         .overlay(alignment: .top) {
             searchOverlay
                 .transition(.move(edge: .top).combined(with: .opacity))
