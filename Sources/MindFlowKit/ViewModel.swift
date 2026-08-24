@@ -520,6 +520,8 @@ public final class MindMapViewModel: ObservableObject {
             showSearch = false
             showHelp = false
             stopEditing()
+            // Give a clean, framed view of the whole map.
+            NotificationCenter.default.post(name: .mindFlowFit, object: nil)
             notify("專注模式：按 Esc 或左上角按鈕離開")
         }
     }
