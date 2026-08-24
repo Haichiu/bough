@@ -700,5 +700,11 @@ public struct ContentView: View {
         }
         .padding(24)
         .frame(width: 420)
+        .overlay(alignment: .bottomTrailing) {
+            Text("v11.7")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+                .padding(6)
+        }
     }
 }
