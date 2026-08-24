@@ -358,6 +358,11 @@ public struct ContentView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(Color(hex: 0xF5C542))
             }
+            if !row.note.isEmpty {
+                Image(systemName: "note.text")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+            }
             if let key = row.colorTag, let c = Theme.colorTag(named: key) {
                 Circle().fill(c).frame(width: 7, height: 7)
             }

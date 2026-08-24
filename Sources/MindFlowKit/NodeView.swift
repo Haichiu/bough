@@ -198,7 +198,7 @@ struct NodeView: View {
                 .overlay(Circle().stroke(Color(nsColor: .controlBackgroundColor), lineWidth: 1.5))
                 .offset(x: 10)
                 .onTapGesture { onToggleCollapse?() }
-                .help("展開子主題")
+                .help("收合中：\n" + node.children.prefix(6).map(\.text).joined(separator: "\n"))
         }
     }
 }
