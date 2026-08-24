@@ -409,6 +409,7 @@ public final class MindMapViewModel: ObservableObject {
             }
         }
         selection = id
+        notify("已重新掛接")
     }
 
     // MARK: - Manual position nudges

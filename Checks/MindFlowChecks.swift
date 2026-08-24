@@ -740,6 +740,32 @@ do {
     }
 }
 
+// MARK: - v6.9: cross-branch reparent
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let b1 = vm.addChild(to: nil)!
+        vm.rename(id: b1, to: "分支一")
+        let leaf = vm.addChild(to: b1)!
+        vm.rename(id: leaf, to: "遊子")
+        let grandchild = vm.addChild(to: leaf)!
+        vm.rename(id: grandchild, to: "隨行者")
+        let b2 = vm.addChild(to: nil)!
+        vm.rename(id: b2, to: "分支二")
+
+        vm.move(id: leaf, toParent: b2)
+        check(vm.document.root.parent(of: leaf)?.id == b2,
+              "reparent moves leaf under the target branch")
+        check(vm.document.root.find(leaf)!.children.map(\.text) == ["隨行者"],
+              "subtree travels with the moved leaf")
+        check(vm.document.root.find(b1)?.children.isEmpty == true,
+              "source branch shrinks")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
