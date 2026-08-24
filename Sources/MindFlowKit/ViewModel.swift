@@ -423,6 +423,7 @@ public final class MindMapViewModel: ObservableObject {
         notify("已重新掛接")
     }
 
+
     // MARK: - Manual position nudges
 
     /// Shifts a node's manual offset (used by ⌥-drag and ⌘-arrow keys).
