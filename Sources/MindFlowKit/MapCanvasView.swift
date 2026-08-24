@@ -210,6 +210,7 @@ struct MapCanvasView: View {
                 Button("從選取主題建立關聯線") { vm.addLink(from: selected, to: item.node.id) }
             }
             Button(item.node.marked ? "移除星星" : "加上星星") { vm.toggleMark(id: item.node.id) }
+            Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: item.node.id) }
             if item.node.id != vm.document.root.id {
                 Button("插入父主題") { vm.insertParent(id: item.node.id) }
             }

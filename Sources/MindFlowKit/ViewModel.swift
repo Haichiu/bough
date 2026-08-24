@@ -899,6 +899,16 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     /// Copies the whole map as Markdown straight to the clipboard.
+    /// Copies a single branch (node + descendants) as Markdown to clipboard.
+    public func copyBranchAsMarkdown(id: UUID) {
+        guard let node = document.root.find(id) else { return }
+        let branchDoc = MindDocument(title: node.text, root: node)
+        let md = MapExporter.markdown(branchDoc)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(md, forType: .string)
+        notify("已複製分支 Markdown ✓")
+    }
+
     public func copyAsMarkdown() {
         let md = MapExporter.markdown(document)
         NSPasteboard.general.clearContents()
