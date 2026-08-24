@@ -41,6 +41,7 @@ struct MapCanvasView: View {
         GeometryReader { geo in
             let layouts = LayoutEngine.layout(root: vm.document.root, direction: vm.direction,
                                               offsets: vm.document.offsets)
+            // (offsets already applied here — single source of truth)
             let theme = Theme.named(vm.document.themeName)
             let bounds = LayoutEngine.contentBounds(of: layouts).insetBy(dx: -180, dy: -140)
             let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)

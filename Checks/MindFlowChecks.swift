@@ -937,6 +937,52 @@ do {
     }
 }
 
+// MARK: - v8.8: links survive layout switch; duplicate mints unique IDs
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!
+        let b = vm.addChild(to: nil)!
+        let linkID = vm.addLink(from: a, to: b)!
+        vm.setDirection(.balanced)
+        check(vm.document.links.count == 1 && vm.document.links[0].id == linkID,
+              "links survive direction switch")
+        vm.duplicateActiveTab()
+        check(vm.sessions.count >= 2, "duplicate tab opens")
+    }
+}
+
+do {
+    var counter = 0
+    func buildU(_ depth: Int, _ counter: inout Int) -> MindNode {
+        var node = MindNode(text: "N\(counter)")
+        counter += 1
+        if depth > 0 {
+            let c1 = buildU(depth - 1, &counter)
+            let c2 = buildU(depth - 1, &counter)
+            node.children = [c1, c2]
+        }
+        return node
+    }
+    let orig = buildU(2, &counter)
+    var copy = orig
+    func reassign(_ n: inout MindNode) {
+        n.id = UUID()
+        for i in n.children.indices { reassign(&n.children[i]) }
+    }
+    reassign(&copy)
+    let collectIDs: (MindNode) -> Set<UUID> = { root in
+        var ids = Set<UUID>()
+        func w(_ n: MindNode) { ids.insert(n.id); n.children.forEach(w) }
+        w(root)
+        return ids
+    }
+    check(collectIDs(orig).isDisjoint(with: collectIDs(copy)), "reassign mints fully unique IDs")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
