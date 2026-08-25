@@ -121,6 +121,7 @@ struct MapCanvasView: View {
             .onTapGesture {
                 vm.stopEditing()
                 vm.selection = nil
+                vm.showSearch = false
             }
             .onTapGesture(count: 2) {
                 vm.addChild(to: vm.selection ?? vm.document.root.id)
