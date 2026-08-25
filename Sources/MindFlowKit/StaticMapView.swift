@@ -7,6 +7,7 @@ struct MapConnectionsView: View {
     let theme: Theme
     let origin: CGPoint
     var direction: MapDirection = .logicRight
+    var visibleIDs: Set<UUID> = []
     var focusIDs: Set<UUID> = []
 
     var body: some View {

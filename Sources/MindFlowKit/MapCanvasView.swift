@@ -58,7 +58,7 @@ struct MapCanvasView: View {
                     linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs)
                     dragIndicator(origin: origin)
                     reorderIndicator(origin: origin)
-                    ForEach(visibleItems(items: items, geoSize: geo.size, bounds: bounds)) { item in
+                    ForEach(items) { item in
                         nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                                  layouts: layouts, geoSize: geo.size, bounds: bounds,
                                  isSearchHit: vm.searchResults.contains(item.node.id),
