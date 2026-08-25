@@ -330,7 +330,11 @@ public final class MindMapViewModel: ObservableObject {
 
     public func toggleCollapse(id: UUID) {
         guard document.root.contains(id) else { return }
-        mutate { $0.root.update(id) { $0.collapsed.toggle() } }
+        mutate { doc in
+            doc.root.update(id) { node in node.collapsed.toggle() }
+            // Manual collapse invalidates preset level
+            activeCollapseLevel = nil
+        }
     }
 
     /// Moves a node (with its subtree) under another node.
