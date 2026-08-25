@@ -79,7 +79,11 @@ struct MapCanvasView: View {
                 centerContent(geo: geo, bounds: bounds)
             }
             .onChange(of: geo.size) { canvasSize = $0 }
-            .onChange(of: vm.selection) { id in revealNode(id, layouts: layouts, bounds: bounds, geo: geo.size) }
+            .onChange(of: vm.selection) { id in
+                guard vm.lastNavWasKeyboard else { return }
+                revealNode(id, layouts: layouts, bounds: bounds, geo: geo.size)
+                vm.lastNavWasKeyboard = false
+            }
             .onReceive(NotificationCenter.default.publisher(for: .mindFlowFit)) { _ in
                 fitToView(bounds: bounds, geo: geo.size)
             }
@@ -249,7 +253,7 @@ struct MapCanvasView: View {
     // MARK: - Gestures
 
     private var panGesture: some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 10)
             .onChanged { value in
                 pan = CGSize(width: lastPan.width + value.translation.width,
                              height: lastPan.height + value.translation.height)

@@ -515,6 +515,10 @@ public final class MindMapViewModel: ObservableObject {
         notify("已從剪貼簿加入 \(importedChildren.count) 個主題 ✓")
     }
 
+    /// True when the last selection change came from keyboard navigation
+    /// (arrow keys), meaning revealNode should scroll to keep it visible.
+    public var lastNavWasKeyboard = false
+
     /// Returns the chain of nodes from root to the given node (inclusive).
     public func breadcrumbPath(to id: UUID) -> [MindNode] {
         var chain: [MindNode] = []
@@ -855,7 +859,8 @@ public final class MindMapViewModel: ObservableObject {
 
     // MARK: - Search
 
-    func selectParent() {
+    public func selectParent() {
+        lastNavWasKeyboard = true
         if let id = selection, let parent = document.root.parent(of: id) {
             selection = parent.id
         } else {
@@ -863,7 +868,8 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
-    func selectChild() {
+    public func selectChild() {
+        lastNavWasKeyboard = true
         guard let id = selection, let node = document.root.find(id) else {
             selection = document.root.id
             return
@@ -875,7 +881,8 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
-    func selectSibling(offset: Int) {
+    public func selectSibling(offset: Int) {
+        lastNavWasKeyboard = true
         guard let id = selection,
               id != document.root.id,
               let parent = document.root.parent(of: id),
