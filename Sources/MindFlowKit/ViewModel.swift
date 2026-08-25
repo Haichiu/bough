@@ -1012,10 +1012,25 @@ public final class MindMapViewModel: ObservableObject {
 
 
     /// Opens the node's URL in the default browser.
+    /// Normalizes user-typed URLs by adding `https://` when no scheme is present,
+    /// so "example.com" opens like browsers would. Returns nil when unparseable.
+    public static func makeOpenableURL(_ raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let hasScheme = trimmed.range(of: "^[a-zA-Z][a-zA-Z0-9+.-]*:", options: .regularExpression) != nil
+        return URL(string: hasScheme ? trimmed : "https://" + trimmed)
+    }
+
     public func openURL(id: UUID) {
         guard let node = document.root.find(id),
-              let urlString = node.url,
-              let url = URL(string: urlString) else { return }
+              let urlString = node.url else {
+            notify("這個主題沒有網址")
+            return
+        }
+        guard let url = Self.makeOpenableURL(urlString) else {
+            notify("網址格式無效，無法開啟")
+            return
+        }
         NSWorkspace.shared.open(url)
     }
 

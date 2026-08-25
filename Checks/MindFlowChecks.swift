@@ -524,6 +524,13 @@ do {
         check(fdoc.root.text == "R" && fdoc.root.children[0].text == "C", "unknown fields are ignored")
         check(fdoc.root.id != fdoc.root.children[0].id, "missing ids are regenerated uniquely")
         check(fdoc.themeName == "mono" && fdoc.directionName == "balanced", "document-level fields survive unknown siblings")
+
+    // v20.5: URL normalization for openURL
+    check(MindMapViewModel.makeOpenableURL("example.com")?.absoluteString == "https://example.com", "scheme-less URLs get https://")
+    check(MindMapViewModel.makeOpenableURL("  https://a.tw/x  ")?.absoluteString == "https://a.tw/x", "whitespace is trimmed")
+    check(MindMapViewModel.makeOpenableURL("mailto:a@b.c")?.absoluteString == "mailto:a@b.c", "existing schemes are preserved")
+    check(MindMapViewModel.makeOpenableURL("   ") == nil, "blank URLs return nil")
+    check(MindMapViewModel.makeOpenableURL("https://中文字.tw") != nil, "unicode hosts still parse")
     } else {
         check(false, "future-proof document decodes")
     }
