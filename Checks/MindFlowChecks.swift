@@ -759,6 +759,38 @@ do {
     vmM.collapseAll()
     check(vmM.activeCollapseLevel == nil, "collapseAll clears the level indicator")
 
+    // v25.8: cross-feature regression suite (self-contained)
+    let pngData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    var regDoc = MindDocument(title: "REG", root: MindNode(text: "Root", children: [
+        MindNode(text: "L", image: "data:image/png;base64," + pngData),
+        MindNode(text: "R"),
+    ]))
+    regDoc.summaries = [MindSummary(parentID: regDoc.root.id,
+                                    startID: regDoc.root.children[0].id,
+                                    endID: regDoc.root.children[1].id,
+                                    text: "covers both")]
+    for dirName in ["logicRight", "balanced", "fishbone", "bracket"] {
+        let d = MapDirection(rawValue: dirName)!
+        let dl = LayoutEngine.layout(root: regDoc.root, direction: d)
+        check(dl[regDoc.root.children[0].id] != nil, "summary+image survives \(dirName) layout")
+    }
+    let regSvg = MapExporter.svg(regDoc)
+    check(regSvg.contains("covers both"), "regression svg has summary")
+    check(regSvg.contains("<image href=\"data:image/png;base64,"), "regression svg has image")
+    // Batch ops on a fresh VM
+    let vmR = MindMapViewModel()
+    vmR.document = MindDocument(title: "RR", root: MindNode(text: "RootR", children: [
+        MindNode(text: "X", children: [MindNode(text: "X1")]), MindNode(text: "Y"),
+    ]))
+    vmR.selection = nil
+    vmR.focusBranchID = vmR.document.root.id
+    vmR.searchQuery = "Root"
+    vmR.performSearch()
+    check(!vmR.searchResults.isEmpty, "search works while focused")
+    vmR.setSubtreeColorTag(id: vmR.document.root.children[0].id, tag: "green")
+    check(vmR.document.root.children[0].colorTag == "green" && !vmR.batchSelection.isEmpty == false, "subtree color works independently of batch")
+    vmR.focusBranchID = nil
+
     // v25.1: batch selection does not leak across tab switches
     let vmL = MindMapViewModel()
     vmL.document = MindDocument(title: "LA", root: MindNode(text: "RootA", children: [
