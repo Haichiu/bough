@@ -143,26 +143,61 @@ public struct MindLink: Codable, Equatable, Identifiable {
     }
 }
 
+/// A summary bracket spanning a consecutive range of siblings under one parent.
+/// The bracket + summary text are drawn outside the tree flow; the summary is
+/// a lightweight annotation, not a node (no children of its own).
+public struct MindSummary: Codable, Equatable, Identifiable {
+    public var id: UUID = UUID()
+    /// The parent whose children this summary spans.
+    public var parentID: UUID
+    /// First and last sibling (inclusive) covered by the bracket.
+    public var startID: UUID
+    public var endID: UUID
+    public var text: String = ""
+
+    public init(id: UUID = UUID(), parentID: UUID, startID: UUID, endID: UUID, text: String = "") {
+        self.id = id
+        self.parentID = parentID
+        self.startID = startID
+        self.endID = endID
+        self.text = text
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, parentID, startID, endID, text }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        parentID = try c.decode(UUID.self, forKey: .parentID)
+        startID = try c.decode(UUID.self, forKey: .startID)
+        endID = try c.decode(UUID.self, forKey: .endID)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+    }
+}
+
 public struct MindDocument: Codable, Equatable {
     public var title: String
     public var themeName: String
     public var directionName: String
     public var root: MindNode
     public var links: [MindLink]
+    public var summaries: [MindSummary]
     public var offsets: [String: CGPoint]
 
     private enum CodingKeys: String, CodingKey {
-        case title, themeName, directionName, root, links, offsets
+        case title, themeName, directionName, root, links, summaries, offsets
     }
 
     public init(title: String = "未命名心智圖", themeName: String = "ocean",
                 directionName: String = MapDirection.logicRight.rawValue, root: MindNode,
-                links: [MindLink] = [], offsets: [String: CGPoint] = [:]) {
+                links: [MindLink] = [], summaries: [MindSummary] = [],
+                offsets: [String: CGPoint] = [:]) {
         self.title = title
         self.themeName = themeName
         self.directionName = directionName
         self.root = root
         self.links = links
+        self.summaries = summaries
         self.offsets = offsets
     }
 
@@ -174,6 +209,7 @@ public struct MindDocument: Codable, Equatable {
             ?? MapDirection.logicRight.rawValue
         root = try container.decode(MindNode.self, forKey: .root)
         links = try container.decodeIfPresent([MindLink].self, forKey: .links) ?? []
+        summaries = try container.decodeIfPresent([MindSummary].self, forKey: .summaries) ?? []
         offsets = try container.decodeIfPresent([String: CGPoint].self, forKey: .offsets) ?? [:]
     }
 

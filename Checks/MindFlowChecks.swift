@@ -562,6 +562,34 @@ do {
         check(fdoc.root.id != fdoc.root.children[0].id, "missing ids are regenerated uniquely")
         check(fdoc.themeName == "mono" && fdoc.directionName == "balanced", "document-level fields survive unknown siblings")
 
+    // v21.4+: summary brackets — model & CRUD
+    let vmS = MindMapViewModel()
+    vmS.document = MindDocument(title: "SM", root: MindNode(text: "Root", children: [
+        MindNode(text: "S1"), MindNode(text: "S2"), MindNode(text: "S3"),
+    ]))
+    vmS.selection = nil
+    let pID = vmS.document.root.id
+    let s1 = vmS.document.root.children[0].id
+    let s2 = vmS.document.root.children[1].id
+    let s3 = vmS.document.root.children[2].id
+    if let sid = vmS.addSummary(parentID: pID, startID: s1, endID: s2) {
+        vmS.setSummaryText(id: sid, to: "重點兩項")
+        check(vmS.document.summaries.first?.text == "重點兩項", "summary text editable")
+        // encode/decode roundtrip preserves summaries
+        if let decoded = try? JSONDecoder().decode(MindDocument.self, from: try JSONEncoder().encode(vmS.document)) {
+            check(decoded.summaries.count == 1 && decoded.summaries[0].text == "重點兩項", "summaries survive file roundtrip")
+            check(decoded.summaries[0].startID == s1 && decoded.summaries[0].endID == s2, "summary range survives roundtrip")
+        } else { check(false, "summaries decode") }
+        // Deleting an endpoint removes the bracket
+        vmS.delete(id: s2)
+        check(vmS.document.summaries.isEmpty, "deleting a range endpoint prunes the summary")
+    } else { check(false, "valid summary range accepted") }
+    // Invalid ranges rejected
+    check(vmS.addSummary(parentID: pID, startID: s3, endID: s1) == nil, "reversed range rejected")
+    check(vmS.addSummary(parentID: UUID(), startID: s1, endID: s2) == nil, "wrong parent rejected")
+    check(vmS.addSummary(parentID: pID, startID: s1, endID: s1) == nil, "single-node range rejected")
+
+
     // v20.5: URL normalization for openURL
     check(MindMapViewModel.makeOpenableURL("example.com")?.absoluteString == "https://example.com", "scheme-less URLs get https://")
     check(MindMapViewModel.makeOpenableURL("  https://a.tw/x  ")?.absoluteString == "https://a.tw/x", "whitespace is trimmed")

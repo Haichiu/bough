@@ -320,6 +320,9 @@ public final class MindMapViewModel: ObservableObject {
         mutate { doc in
             _ = doc.root.remove(id)
             doc.links.removeAll { allRemoved.contains($0.from) || allRemoved.contains($0.to) }
+            // Summaries spanning the removed endpoints no longer make sense.
+            doc.summaries.removeAll { allRemoved.contains($0.startID) || allRemoved.contains($0.endID) || allRemoved.contains($0.parentID) }
+            pruneSummaries(doc: &doc)
         }
         if selection == id { selection = nil }
         stopEditing()
@@ -644,6 +647,8 @@ public final class MindMapViewModel: ObservableObject {
     // MARK: - Associative links
 
     @Published public var selectedLinkID: UUID?
+    /// Currently selected summary bracket (for inspector text editing).
+    @Published public var selectedSummaryID: UUID?
 
     /// Creates an associative link between two existing nodes.
     @discardableResult
@@ -954,6 +959,47 @@ public final class MindMapViewModel: ObservableObject {
         guard document.root.contains(id) else { return }
         mutate { $0.root.update(id) { node in node.colorTag = tag } }
         notify(tag == nil ? "已清除顏色標記" : "已加上顏色標記")
+    }
+
+    // MARK: 概要括線（summary brackets）
+
+    /// Adds a summary bracket spanning [startID … endID] among parentID's children.
+    /// Returns the new summary id, or nil when the range is not a valid sibling run.
+    @discardableResult
+    public func addSummary(parentID: UUID, startID: UUID, endID: UUID) -> UUID? {
+        guard let parent = document.root.find(parentID),
+              let startIndex = parent.children.firstIndex(where: { $0.id == startID }),
+              let endIndex = parent.children.firstIndex(where: { $0.id == endID }),
+              startIndex < endIndex else { return nil }
+        let summary = MindSummary(parentID: parentID, startID: startID, endID: endID)
+        mutate { $0.summaries.append(summary) }
+        notify("已建立概要括線")
+        return summary.id
+    }
+
+    public func setSummaryText(id: UUID, to text: String) {
+        guard document.summaries.first(where: { $0.id == id })?.text != text else { return }
+        mutate { doc in
+            if let i = doc.summaries.firstIndex(where: { $0.id == id }) {
+                doc.summaries[i].text = text
+            }
+        }
+    }
+
+    public func removeSummary(id: UUID) {
+        guard document.summaries.contains(where: { $0.id == id }) else { return }
+        mutate { $0.summaries.removeAll { $0.id == id } }
+        if selectedSummaryID == id { selectedSummaryID = nil }
+        notify("已刪除概要括線")
+    }
+
+    /// Drops summaries whose endpoints no longer sit under their parent (e.g. after deletions).
+    private func pruneSummaries(doc: inout MindDocument) {
+        doc.summaries.removeAll { s in
+            guard let parent = doc.root.find(s.parentID) else { return true }
+            return !parent.children.contains(where: { $0.id == s.startID })
+                || !parent.children.contains(where: { $0.id == s.endID })
+        }
     }
 
     /// Sets (or clears with an empty string) the node's web link.
