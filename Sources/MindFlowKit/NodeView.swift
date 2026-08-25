@@ -32,7 +32,20 @@ struct NodeView: View {
 
         ZStack {
             background(depth: depth, radius: radius)
-            content(depth: depth)
+            if let nsImage = ImageStore.shared.image(forDataURL: node.image) {
+                VStack(spacing: 3) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: layout.frame.width - 14)
+                        .frame(height: LayoutEngine.imageDisplayHeight - 6)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    content(depth: depth)
+                }
+                .padding(.horizontal, 5)
+            } else {
+                content(depth: depth)
+            }
         }
         .frame(width: layout.frame.width, height: layout.frame.height)
         .overlay(selectionRing(radius: radius))

@@ -44,19 +44,24 @@ public enum LayoutEngine {
         }
     }
 
-    public static func nodeSize(for text: String, depth: Int) -> CGSize {
+    /// Extra vertical space an attached image occupies below the label.
+    static let imageDisplayHeight: CGFloat = 90
+
+    public static func nodeSize(for text: String, depth: Int, hasImage: Bool = false) -> CGSize {
         let attrs: [NSAttributedString.Key: Any] = [.font: font(for: depth)]
         let measured = (text.isEmpty ? " " : text).size(withAttributes: attrs)
-        let padding: CGFloat = depth == 0 ? 44 : 30
-        let minHeight: CGFloat = depth == 0 ? 48 : (depth == 1 ? 36 : 30)
-        let minWidth: CGFloat = depth == 0 ? 120 : 56
+        var padding: CGFloat = depth == 0 ? 44 : 30
+        var minHeight: CGFloat = depth == 0 ? 48 : (depth == 1 ? 36 : 30)
+        if hasImage { minHeight += imageDisplayHeight }
+        let minWidth: CGFloat = depth == 0 ? 120 : (hasImage ? max(56, 132) : 56)
         // Wrap long text into up to three lines and grow the box vertically.
         let maxTextWidth: CGFloat = depth == 0 ? 280 : 250
         let lines = max(1, min(3, Int(ceil(measured.width / maxTextWidth))))
         let textBlockWidth = min(measured.width, maxTextWidth)
         let width = max(minWidth, min(ceil(textBlockWidth) + padding + 10, 340))
         let lineHeight = ceil(measured.height)
-        let height = min(max(minHeight, CGFloat(lines) * lineHeight + (depth == 0 ? 18 : 12)), 100)
+        var height = min(max(minHeight, CGFloat(lines) * lineHeight + (depth == 0 ? 18 : 12)), 100)
+        if hasImage { height += imageDisplayHeight }
         return CGSize(width: width, height: height)
     }
 
@@ -75,7 +80,7 @@ public enum LayoutEngine {
         var heights: [UUID: CGFloat] = [:]
         _ = subtreeHeight(root, depth: 0, heights: &heights)
         var result: [UUID: NodeLayout] = [:]
-        let rootSize = nodeSize(for: root.text, depth: 0)
+        let rootSize = nodeSize(for: root.text, depth: 0, hasImage: root.image != nil)
         let indexed = root.children.enumerated().map { (node: $0.element, index: $0.offset) }
 
         func span(of children: [MindNode]) -> CGFloat {
@@ -98,7 +103,7 @@ public enum LayoutEngine {
         case .fishbone:
             // Diagonal chains: every branch flattens onto one strict diagonal,
             // so positions are monotonically increasing and can never overlap.
-            let rootSizeFB = nodeSize(for: root.text, depth: 0)
+            let rootSizeFB = nodeSize(for: root.text, depth: 0, hasImage: root.image != nil)
             result[root.id] = NodeLayout(
                 id: root.id,
                 frame: CGRect(origin: CGPoint(x: 0, y: -rootSizeFB.height / 2), size: rootSizeFB),
@@ -116,7 +121,8 @@ public enum LayoutEngine {
                 }
                 collect(branch, depth: 1)
                 for (offset, entry) in chain.enumerated() {
-                    let size = nodeSize(for: entry.node.text, depth: min(entry.depth, 2))
+                    let size = nodeSize(for: entry.node.text, depth: min(entry.depth, 2),
+                                        hasImage: entry.node.image != nil)
                     let cx = cursorX + stepX * CGFloat(offset + 1)
                     let cy = sign * stepY * CGFloat(offset + 1)
                     result[entry.node.id] = NodeLayout(
@@ -162,7 +168,7 @@ public enum LayoutEngine {
     private static func placeSubtree(_ node: MindNode, depth: Int, colorIndex: Int, side: Side,
                                      innerX: CGFloat, yTop: CGFloat, heights: [UUID: CGFloat],
                                      into result: inout [UUID: NodeLayout]) {
-        let size = nodeSize(for: node.text, depth: depth)
+        let size = nodeSize(for: node.text, depth: depth, hasImage: node.image != nil)
         let y = yTop + ((heights[node.id] ?? size.height) - size.height) / 2
         let x = side == .right ? innerX : innerX - size.width
         result[node.id] = NodeLayout(id: node.id, frame: CGRect(origin: CGPoint(x: x, y: y), size: size),
@@ -182,7 +188,7 @@ public enum LayoutEngine {
     }
 
     private static func subtreeHeight(_ node: MindNode, depth: Int, heights: inout [UUID: CGFloat]) -> CGFloat {
-        let own = nodeSize(for: node.text, depth: depth).height
+        let own = nodeSize(for: node.text, depth: depth, hasImage: node.image != nil).height
         guard !node.collapsed, !node.children.isEmpty else {
             heights[node.id] = own
             return own

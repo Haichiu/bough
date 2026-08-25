@@ -25,6 +25,7 @@
 | `collapsed` | Bool | `false` | 是否收合子主題 |
 | `marked` | Bool | `false` | 星星標記 |
 | `url` | String? | `nil` | 關聯網址（選單可直接開啟，SVG 匯出變連結） |
+| `image` | String? | `nil` | 附圖的 data URL（base64 內嵌，維持單檔可攜） |
 | `colorTag` | String? | `nil` | 色標鍵：`red`／`orange`／`yellow`／`green`／`blue`／`purple` |
 | `children` | [Node] | `[]` | 子主題 |
 

@@ -667,6 +667,33 @@ do {
     vmU.performSearch()
     check(vmU.searchResults.contains(vmU.document.root.children[0].id), "regular node search still works")
 
+    // v23.0 phase 1: image field — layout sizing + persistence
+    let tinyPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    let withImg = MindNode(text: "有圖", image: "data:image/png;base64," + tinyPNG)
+    let noImg = MindNode(text: "無圖")
+    let sizeWith = LayoutEngine.nodeSize(for: withImg.text, depth: 1, hasImage: true)
+    let sizeWithout = LayoutEngine.nodeSize(for: noImg.text, depth: 1, hasImage: false)
+    check(sizeWith.height > sizeWithout.height, "image grows node height")
+    check(ImageStore.shared.image(forDataURL: withImg.image) != nil, "image store decodes data URL")
+    check(ImageStore.shared.image(forDataURL: nil) == nil, "nil image decodes to nil")
+    check(ImageStore.shared.image(forDataURL: "") == nil, "empty string decodes to nil")
+    // persistence roundtrip
+    let imgDoc = MindDocument(title: "I", root: MindNode(text: "R", children: [withImg, noImg]))
+    if let back = try? JSONDecoder().decode(MindDocument.self, from: try JSONEncoder().encode(imgDoc)) {
+        check(back.root.children[0].image == "data:image/png;base64," + tinyPNG, "image survives file roundtrip")
+        check(back.root.children[1].image == nil, "nodes without image stay nil")
+    } else { check(false, "image document decodes") }
+    // legacy JSON without image key decodes as nil (documented tolerance)
+    let legacyNode = """
+    {"id":"33333333-3333-3333-3333-333333333333","text":"old"}
+    """
+    if let ln = try? JSONDecoder().decode(MindNode.self, from: Data(legacyNode.utf8)) {
+        check(ln.image == nil && ln.text == "old", "legacy nodes decode without image")
+    } else { check(false, "legacy node json decodes") }
+    // layout produces frames including the image-bearing node without crashing
+    let imgLayouts = LayoutEngine.layout(root: imgDoc.root, direction: .logicRight)
+    check(imgLayouts[imgDoc.root.children[0].id] != nil, "layout handles image nodes")
+
 
     // v20.5: URL normalization for openURL
     check(MindMapViewModel.makeOpenableURL("example.com")?.absoluteString == "https://example.com", "scheme-less URLs get https://")

@@ -8,16 +8,18 @@ public struct MindNode: Codable, Identifiable, Equatable {
     public var collapsed: Bool = false
     public var marked: Bool = false
     public var url: String?
+    /// Optional attached picture stored as a data URL (single-file portability).
+    public var image: String?
     public var colorTag: String?
     public var children: [MindNode] = []
 
     private enum CodingKeys: String, CodingKey {
-        case id, text, note, collapsed, marked, colorTag, url, children
+        case id, text, note, collapsed, marked, colorTag, url, image, children
     }
 
     public init(id: UUID = UUID(), text: String = "", note: String = "",
                 collapsed: Bool = false, marked: Bool = false,
-                colorTag: String? = nil, url: String? = nil,
+                colorTag: String? = nil, url: String? = nil, image: String? = nil,
                 children: [MindNode] = []) {
         self.id = id
         self.text = text
@@ -26,6 +28,7 @@ public struct MindNode: Codable, Identifiable, Equatable {
         self.marked = marked
         self.colorTag = colorTag
         self.url = url
+        self.image = image
         self.children = children
     }
 
@@ -38,6 +41,7 @@ public struct MindNode: Codable, Identifiable, Equatable {
         collapsed = try container.decodeIfPresent(Bool.self, forKey: .collapsed) ?? false
         colorTag = try container.decodeIfPresent(String.self, forKey: .colorTag)
         url = try container.decodeIfPresent(String.self, forKey: .url)
+        image = try container.decodeIfPresent(String.self, forKey: .image)
         marked = try container.decodeIfPresent(Bool.self, forKey: .marked) ?? false
         children = try container.decodeIfPresent([MindNode].self, forKey: .children) ?? []
     }
