@@ -414,9 +414,19 @@ public struct ContentView: View {
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
                 .accessibilityLabel("概要文字輸入框")
-            Button("刪除這條概要") { vm.removeSummary(id: sumID) }
-                .buttonStyle(.borderless)
-                .font(.caption)
+            HStack(spacing: 8) {
+                Button("◀ 縮小範圍") { vm.shrinkSummary(id: sumID) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                Button("延伸範圍 ▶") { vm.extendSummary(id: sumID) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                Spacer()
+                Button("刪除這條概要") { vm.removeSummary(id: sumID) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         } else if let linkID = vm.selectedLinkID,
                   vm.document.links.contains(where: { $0.id == linkID }) {
             Text("關聯線").font(.subheadline).foregroundStyle(.secondary)

@@ -1126,6 +1126,44 @@ public final class MindMapViewModel: ObservableObject {
         notify("已刪除概要括線")
     }
 
+    /// Extends the bracket to include the next sibling after its current end.
+    public func extendSummary(id: UUID) {
+        guard let s = document.summaries.first(where: { $0.id == id }),
+              let parent = document.root.find(s.parentID),
+              let endIndex = parent.children.firstIndex(where: { $0.id == s.endID }),
+              endIndex + 1 < parent.children.count else {
+            notify("後面已經沒有主題可以納入了")
+            return
+        }
+        let newEnd = parent.children[endIndex + 1].id
+        mutate { doc in
+            if let i = doc.summaries.firstIndex(where: { $0.id == id }) {
+                doc.summaries[i].endID = newEnd
+            }
+        }
+        notify("已納入下一個主題")
+    }
+
+    /// Pulls the bracket back so it ends at the previous sibling.
+    /// Minimum coverage is two siblings; shrinking below that is rejected.
+    public func shrinkSummary(id: UUID) {
+        guard let s = document.summaries.first(where: { $0.id == id }),
+              let parent = document.root.find(s.parentID),
+              let startIndex = parent.children.firstIndex(where: { $0.id == s.startID }),
+              let endIndex = parent.children.firstIndex(where: { $0.id == s.endID }),
+              startIndex < endIndex else {
+            notify("概要至少要涵蓋兩個主題")
+            return
+        }
+        let newEnd = parent.children[endIndex - 1].id
+        mutate { doc in
+            if let i = doc.summaries.firstIndex(where: { $0.id == id }) {
+                doc.summaries[i].endID = newEnd
+            }
+        }
+        notify("已縮小概要範圍")
+    }
+
     /// Drops summaries whose endpoints no longer sit under their parent (e.g. after deletions).
     private func pruneSummaries(doc: inout MindDocument) {
         doc.summaries.removeAll { s in

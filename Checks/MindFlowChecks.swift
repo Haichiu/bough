@@ -773,6 +773,27 @@ do {
     let svgWithImg = MapExporter.svg(svgImgDoc)
     check(svgWithImg.contains("<image href=\"data:image/png;base64,"), "svg embeds attached image as data URL")
 
+    // v23.5: summary range extend/shrink
+    let vmE = MindMapViewModel()
+    vmE.document = MindDocument(title: "E", root: MindNode(text: "Root", children: [
+        MindNode(text: "P"), MindNode(text: "Q"), MindNode(text: "R"), MindNode(text: "S"),
+    ]))
+    vmE.selection = nil
+    let pID2 = vmE.document.root.id
+    let kids2 = vmE.document.root.children.map(\.id)
+    if let sumE = vmE.addSummary(parentID: pID2, startID: kids2[0], endID: kids2[1]) {
+        vmE.extendSummary(id: sumE)
+        var sNow = vmE.document.summaries.first(where: { $0.id == sumE })!
+        check(sNow.endID == kids2[2], "extend moves the end forward one sibling")
+        vmE.extendSummary(id: sumE)
+        sNow = vmE.document.summaries.first(where: { $0.id == sumE })!
+        check(sNow.endID == kids2[3], "extend reaches the last sibling")
+        vmE.shrinkSummary(id: sumE)
+        sNow = vmE.document.summaries.first(where: { $0.id == sumE })!
+        check(sNow.endID == kids2[2], "shrink pulls the end back")
+        check(sNow.startID == kids2[0], "extend/shrink never move the start anchor")}
+    else { check(false, "summary created for range test") }
+
     // v23.4: auto-downsampling for oversized images
     let bigImage = NSImage(size: NSSize(width: 3000, height: 3000))
     bigImage.lockFocus()
