@@ -507,6 +507,11 @@ struct MapCanvasView: View {
                 }
                 .help("連點兩下回到 100%")
             Button("+") { zoom(by: 1.15) }
+            if let level = vm.activeCollapseLevel {
+                Text("第 \(level) 層")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             Button("全圖") { NotificationCenter.default.post(name: .mindFlowFit, object: nil) }
                 .font(.caption)
                 .help("縮放至整張圖")

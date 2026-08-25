@@ -354,11 +354,15 @@ public final class MindMapViewModel: ObservableObject {
 
     public func expandAll() {
         mutate { doc in collapse(node: &doc.root, collapsed: false) }
+        activeCollapseLevel = nil
     }
+
+    @Published public var activeCollapseLevel: Int?
 
     /// Expands so exactly `levels` layers of topics are visible.
     public func expandToLevel(_ levels: Int) {
         guard levels >= 1 else { return }
+        activeCollapseLevel = levels
         mutate { doc in
             func resetDeep(_ node: inout MindNode) {
                 node.collapsed = !node.children.isEmpty
