@@ -738,6 +738,26 @@ do {
     vmB.deleteBatch()
     check(vmB.document.root.find(vmB.document.root.id) != nil, "root survives batch delete")
 
+    // v25.2: transient-state hygiene via public flows
+    let vmM = MindMapViewModel()
+    var docM = MindDocument(title: "M", root: MindNode(text: "Root", children: [
+        MindNode(text: "M1"), MindNode(text: "M2"),
+    ]))
+    let sumID = UUID()
+    docM.summaries = [MindSummary(id: sumID, parentID: docM.root.id,
+                                  startID: docM.root.children[0].id,
+                                  endID: docM.root.children[1].id, text: "概要")]
+    vmM.document = docM
+    vmM.selectedSummaryID = sumID
+    // A real tab switch (openInNewTab → stashActive + loadFromSession) must clear it.
+    vmM.openInNewTab(MindDocument(title: "M2", root: MindNode(text: "Other")))
+    check(vmM.selectedSummaryID == nil, "selected summary cleared on tab switch")
+    // collapseAll resets the level indicator
+    vmM.expandToLevel(2)
+    check(vmM.activeCollapseLevel == 2, "expandToLevel records the level")
+    vmM.collapseAll()
+    check(vmM.activeCollapseLevel == nil, "collapseAll clears the level indicator")
+
     // v25.1: batch selection does not leak across tab switches
     let vmL = MindMapViewModel()
     vmL.document = MindDocument(title: "LA", root: MindNode(text: "RootA", children: [

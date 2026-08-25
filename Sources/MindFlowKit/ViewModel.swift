@@ -81,6 +81,7 @@ public final class MindMapViewModel: ObservableObject {
         (undoStack, redoStack) = inactiveStacks[sessions[index].id] ?? ([], [])
         selection = inactiveSelections[sessions[index].id] ?? document.root.id
         selectedLinkID = nil
+        selectedSummaryID = nil
         // Focus belongs to a specific document — never leak across tabs.
         focusBranchID = nil
         // Search results belong to a specific document — never leak across tabs.
@@ -414,6 +415,8 @@ public final class MindMapViewModel: ObservableObject {
                 collapse(node: &doc.root.children[index], collapsed: true)
             }
         }
+        // A blanket collapse is not a specific "level" — clear the indicator.
+        activeCollapseLevel = nil
     }
 
     // MARK: - Presentation（簡報逐層揭開）
