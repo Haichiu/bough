@@ -1052,12 +1052,24 @@ public final class MindMapViewModel: ObservableObject {
         batchSelection.removeAll()
     }
 
-    /// Deletes every node in the batch selection (root protected).
+    /// Deletes every node in the batch selection as a single atomic operation.
+    /// Produces exactly one undo entry regardless of how many nodes are removed.
     public func deleteBatch() {
-        let ids = batchSelection.filter { $0 != document.root.id }
+        let ids = batchSelection.subtracting([document.root.id]).filter { document.root.contains($0) }
         guard !ids.isEmpty else { return }
-        for id in ids { delete(id: id) }
+        mutate { doc in
+            // Removing a parent absorbs its subtree; order is safe either way.
+            for id in ids {
+                let removed = doc.root.find(id)?.descendantIDs() ?? []
+                var allRemoved = removed
+                allRemoved.insert(id)
+                _ = doc.root.remove(id)
+                doc.links.removeAll { allRemoved.contains($0.from) || allRemoved.contains($0.to) }
+            }
+            pruneSummaries(doc: &doc)
+        }
         clearBatchSelection()
+        notify("已刪除 \(ids.count) 個主題（⌘Z 可復原）")
     }
 
     /// Applies one color tag to every node in the batch selection.
