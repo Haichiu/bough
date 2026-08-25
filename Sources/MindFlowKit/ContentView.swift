@@ -486,6 +486,32 @@ public struct ContentView: View {
         return focusSet.contains(row.id) ? 1 : 0.3
     }
 
+
+
+    /// Right-click actions for outline rows — keeps the outline a full editor,
+    /// not just a viewer (parity with the map canvas context menu).
+    @ViewBuilder
+    private func outlineRowMenu(_ row: OutlineRow) -> some View {
+        Button("加入子主題") { vm.addChild(to: row.id) }
+        if !row.isRoot {
+            Button("加入兄弟主題") { vm.addSibling(of: row.id) }
+        }
+        Button("複製整棵子樹") { vm.duplicate(id: row.id) }
+        Button(row.marked ? "移除星星" : "加上星星") { vm.toggleMark(id: row.id) }
+        Menu("色標") {
+            ForEach(Theme.colorTags, id: \.key) { tag in
+                Button(tag.name) { vm.setColorTag(id: row.id, tag: tag.key) }
+            }
+            Divider()
+            Button("清除色標") { vm.setColorTag(id: row.id, tag: nil) }
+        }
+        Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: row.id) }
+        Divider()
+        if row.hasChildren {
+            Button(row.collapsed ? "展開" : "收合") { vm.toggleCollapse(id: row.id) }
+        }
+        Button(!row.isRoot ? "刪除" : "刪除", role: .destructive) { vm.delete(id: row.id) }
+    }
     private func outlineRowView(_ row: OutlineRow, focusSet: Set<UUID>) -> some View {
         HStack(spacing: 5) {
             if row.marked {
@@ -556,6 +582,7 @@ public struct ContentView: View {
                 : Color.clear
         )
         .cornerRadius(5)
+        .contextMenu { outlineRowMenu(row) }
         .onTapGesture(count: 2) {
             vm.selection = row.id
             outlineDraft = row.text
