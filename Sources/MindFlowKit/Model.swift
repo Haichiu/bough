@@ -7,22 +7,25 @@ public struct MindNode: Codable, Identifiable, Equatable {
     public var note: String = ""
     public var collapsed: Bool = false
     public var marked: Bool = false
+    public var url: String?
     public var colorTag: String?
     public var children: [MindNode] = []
 
     private enum CodingKeys: String, CodingKey {
-        case id, text, note, collapsed, marked, colorTag, children
+        case id, text, note, collapsed, marked, colorTag, url, children
     }
 
     public init(id: UUID = UUID(), text: String = "", note: String = "",
                 collapsed: Bool = false, marked: Bool = false,
-                colorTag: String? = nil, children: [MindNode] = []) {
+                colorTag: String? = nil, url: String? = nil,
+                children: [MindNode] = []) {
         self.id = id
         self.text = text
         self.note = note
         self.collapsed = collapsed
         self.marked = marked
         self.colorTag = colorTag
+        self.url = url
         self.children = children
     }
 
@@ -34,6 +37,8 @@ public struct MindNode: Codable, Identifiable, Equatable {
         note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
         collapsed = try container.decodeIfPresent(Bool.self, forKey: .collapsed) ?? false
         colorTag = try container.decodeIfPresent(String.self, forKey: .colorTag)
+        url = try container.decodeIfPresent(String.self, forKey: .url)
+        url = try container.decodeIfPresent(String.self, forKey: .url)
         marked = try container.decodeIfPresent(Bool.self, forKey: .marked) ?? false
         children = try container.decodeIfPresent([MindNode].self, forKey: .children) ?? []
     }
