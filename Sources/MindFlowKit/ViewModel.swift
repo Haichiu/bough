@@ -402,6 +402,67 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Presentation（簡報逐層揭開）
+
+    @Published public var presentationActive = false
+    private var savedCollapseStates: [UUID: Bool]?
+    private var presentationDepth = 1
+
+    /// Enters presentation mode: shows only the first layer, ready to reveal more.
+    public func enterPresentation() {
+        guard !presentationActive else { return }
+        var states: [UUID: Bool] = [:]
+        func snap(_ node: MindNode) {
+            states[node.id] = node.collapsed
+            node.children.forEach(snap)
+        }
+        snap(document.root)
+        savedCollapseStates = states
+        presentationDepth = 1
+        presentationActive = true
+        expandToLevel(1)
+        notify("簡報模式：→ 或空白鍵揭開下一層，Esc 結束")
+    }
+
+    /// Reveals one more layer of topics.
+    public func stepPresentation() {
+        guard presentationActive else { return }
+        let maxDepth = document.stats().maxDepth
+        guard presentationDepth < maxDepth else {
+            notify("已經是最後一層了")
+            return
+        }
+        presentationDepth += 1
+        expandToLevel(presentationDepth)
+    }
+
+    /// Steps back one layer.
+    public func rewindPresentation() {
+        guard presentationActive, presentationDepth > 1 else { return }
+        presentationDepth -= 1
+        expandToLevel(presentationDepth)
+    }
+
+    /// Leaves presentation mode and restores every node's original collapse state.
+    public func exitPresentation() {
+        guard presentationActive else { return }
+        presentationActive = false
+        if let saved = savedCollapseStates {
+            mutate { doc in
+                func restore(_ node: inout MindNode) {
+                    node.collapsed = saved[node.id] ?? false
+                    for index in node.children.indices {
+                        restore(&node.children[index])
+                    }
+                }
+                restore(&doc.root)
+            }
+        }
+        activeCollapseLevel = nil
+        savedCollapseStates = nil
+        notify("已離開簡報模式")
+    }
+
     private func collapse(node: inout MindNode, collapsed: Bool) {
         node.collapsed = node.children.isEmpty ? false : collapsed
         for index in node.children.indices {

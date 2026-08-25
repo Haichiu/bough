@@ -122,6 +122,11 @@ struct MindFlowApp: App {
             CommandMenu("顯示") {
                 Button(vm.zenMode ? "離開專注模式" : "專注模式") { vm.toggleZen() }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
+                Divider()
+                Button(vm.presentationActive ? "結束簡報" : "簡報模式（逐層揭開）") {
+                    if vm.presentationActive { vm.exitPresentation() } else { vm.enterPresentation() }
+                }
+                .disabled(vm.zenMode)
             }
             CommandMenu("版面") {
                 Button("循環切換版面") { vm.cycleDirection() }

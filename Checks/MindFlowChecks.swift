@@ -290,6 +290,31 @@ do {
     }
     let svgLabeled = MapExporter.svg(labelDoc)
     check(svgLabeled.contains("導致"), "svg export includes link labels")
+
+    // v18.0: presentation mode
+    var presDoc = MindDocument(title: "P", root: MindNode(text: "Root"))
+    presDoc.root.children = [MindNode(text: "A"), MindNode(text: "B")]
+    presDoc.root.children[0].children = [MindNode(text: "A1"), MindNode(text: "A2")]
+    presDoc.root.children[0].children[0].children = [MindNode(text: "Deep")]
+    presDoc.root.children[0].collapsed = false
+    presDoc.root.children[1].collapsed = true // custom state to survive the roundtrip
+    let vm2 = MindMapViewModel()
+    vm2.document = presDoc
+    vm2.enterPresentation()
+    check(vm2.presentationActive, "presentation activates")
+    check(vm2.document.root.collapsed, "entering presentation collapses root")
+    vm2.stepPresentation()
+    check(!vm2.document.root.collapsed, "first step reveals root children")
+    check(vm2.document.root.children[0].collapsed, "level 2 stays hidden after first step")
+    vm2.stepPresentation()
+    vm2.stepPresentation()
+    vm2.stepPresentation() // beyond max depth — should be a safe no-op
+    check(vm2.document.root.children[0].children[0].children[0].text == "Deep", "deep node still intact after stepping past end")
+    // Custom collapse state (set before entering) survives exit restore
+    vm2.exitPresentation()
+    check(!vm2.presentationActive, "exit deactivates presentation")
+    check(vm2.document.root.children[0].collapsed == false, "exit restores original expanded branch")
+    check(vm2.document.root.children[1].collapsed == true, "exit restores custom collapsed flag")
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")
     check(back?.root.children[1].children.map(\.text) == ["C"], "opml import restores depth")

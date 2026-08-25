@@ -109,6 +109,18 @@ public final class KeyboardMonitor {
 
         guard flags.subtracting([.shift, .numericPad, .function]).isEmpty else { return event }
 
+        // Presentation mode swallows editing keys and steers the reveal instead.
+        if vm.presentationActive {
+            switch chars {
+            case "\u{F703}": vm.stepPresentation(); return nil          // right
+            case " ": vm.stepPresentation(); return nil                 // space
+            case "\u{F702}": vm.rewindPresentation(); return nil        // left
+            case "\u{1B}": vm.exitPresentation(); return nil            // esc
+            case "\u{F700}", "\u{F701}": return event                  // let up/down pass
+            default: return nil
+            }
+        }
+
         switch chars {
         case "\t":
             vm.addChild(to: vm.selection ?? vm.document.root.id)
