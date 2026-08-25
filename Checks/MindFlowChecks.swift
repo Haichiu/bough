@@ -589,6 +589,33 @@ do {
     check(vmS.addSummary(parentID: UUID(), startID: s1, endID: s2) == nil, "wrong parent rejected")
     check(vmS.addSummary(parentID: pID, startID: s1, endID: s1) == nil, "single-node range rejected")
 
+    // v21.5: summary bracket geometry + SVG rendering (fresh doc — vmS had endpoints deleted)
+    let geoDoc = MindDocument(title: "G", root: MindNode(text: "Root", children: [
+        MindNode(text: "G1"), MindNode(text: "G2"), MindNode(text: "G3"),
+    ]))
+    let geoLayouts = LayoutEngine.layout(root: geoDoc.root, direction: .logicRight)
+    let parentNode = geoDoc.root
+    let sum = MindSummary(parentID: parentNode.id,
+                          startID: geoDoc.root.children[0].id,
+                          endID: geoDoc.root.children[1].id, text: "兩個重點")
+    if let g = SummaryGeometry.bracket(for: sum, parentNode: parentNode, layouts: geoLayouts, origin: .zero) {
+        check(g.spineA.y == g.spineB.y || g.spineA.x == g.spineB.x, "bracket spine is straight")
+        check(g.tickA != g.tickB, "bracket ticks span the range")
+        // logicRight layout puts children to the right → vertical bracket, text to the right of spine
+        check(g.textAnchor.x > min(g.spineA.x, g.spineB.x), "label sits outside the spine")
+    } else {
+        check(false, "valid summary geometry computes")
+    }
+    check(SummaryGeometry.bracket(for: MindSummary(parentID: UUID(), startID: s1, endID: s2, text: ""),
+                                  parentNode: parentNode,
+                                  layouts: geoLayouts, origin: .zero) == nil, "geometry nil for missing parent")
+    var svgDoc = geoDoc
+    svgDoc.summaries = [MindSummary(parentID: geoDoc.root.id,
+                                    startID: geoDoc.root.children[0].id,
+                                    endID: geoDoc.root.children[1].id, text: "兩個重點")]
+    let svgSum = MapExporter.svg(svgDoc)
+    check(svgSum.contains("兩個重點"), "svg export draws summary label")
+
 
     // v20.5: URL normalization for openURL
     check(MindMapViewModel.makeOpenableURL("example.com")?.absoluteString == "https://example.com", "scheme-less URLs get https://")

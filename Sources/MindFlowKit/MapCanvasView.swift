@@ -190,7 +190,7 @@ struct MapCanvasView: View {
             if item.node.id != vm.document.root.id {
                 Button("加入兄弟主題") { vm.addSibling(of: item.node.id) }
             }
-            Button("複製整棵子樹") { vm.duplicate(id: item.node.id) }
+            Button("加入概要括線（含下一個兄弟）") { _ = vm.addSummaryWithNextSibling(of: item.node.id) }
             if vm.document.offsets[item.node.id.uuidString] != nil {
                 Button("重設此節點位置") { vm.clearOffset(id: item.node.id) }
             }
@@ -367,6 +367,7 @@ struct MapCanvasView: View {
             connectionsCanvas(items: items, layouts: layouts, theme: theme,
                               origin: origin, focusIDs: focusIDs)
             linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs)
+            summariesCanvas(layouts: layouts, origin: origin)
             dragIndicator(origin: origin)
             reorderIndicator(origin: origin)
             ForEach(items) { item in
@@ -383,6 +384,42 @@ struct MapCanvasView: View {
         .scaleEffect(scale)
         .offset(pan)
     }
+    private func summariesCanvas(layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
+        ForEach(vm.document.summaries) { summary in
+            summaryView(summary: summary, layouts: layouts, origin: origin)
+        }
+    }
+
+    @ViewBuilder
+    private func summaryView(summary: MindSummary, layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
+        if let parentNode = vm.document.root.find(summary.parentID),
+           let geo = SummaryGeometry.bracket(for: summary, parentNode: parentNode,
+                                             layouts: layouts, origin: origin) {
+            let isSelected = vm.selectedSummaryID == summary.id
+            Path { p in
+                p.move(to: geo.tickA)
+                p.addLine(to: geo.spineA)
+                p.addLine(to: geo.spineB)
+                p.addLine(to: geo.tickB)
+            }
+            .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.8),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .allowsHitTesting(false)
+            Text(summary.text.isEmpty ? "概要…" : summary.text)
+                .font(.caption.bold())
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(isSelected ? Color.accentColor : Color.clear))
+                .position(geo.textAnchor)
+                .fixedSize()
+                .onTapGesture {
+                    vm.selectedSummaryID = vm.selectedSummaryID == summary.id ? nil : summary.id
+                }
+                .accessibilityLabel("概要 \(summary.text.isEmpty ? "未命名" : summary.text)")
+        }
+    }
+
     private func textDropDelegate(layouts: [UUID: NodeLayout], origin: CGPoint) -> CanvasTextDropDelegate {
         CanvasTextDropDelegate(
             layouts: layouts,

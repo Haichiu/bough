@@ -128,6 +128,16 @@ public enum MapExporter {
         }
         connect(document.root)
 
+        // Summary brackets (same geometry as on-screen rendering).
+        for s in document.summaries {
+            guard let parentNode = document.root.find(s.parentID),
+                  let g = SummaryGeometry.bracket(for: s, parentNode: parentNode, layouts: layouts, origin: .zero)
+            else { continue }
+            parts.append("<path d=\"M \(g.tickA.x) \(g.tickA.y) L \(g.spineA.x) \(g.spineA.y) L \(g.spineB.x) \(g.spineB.y) L \(g.tickB.x) \(g.tickB.y)\" fill=\"none\" stroke=\"#888888\" stroke-width=\"1.5\"/>")
+            let label = s.text.isEmpty ? "概要" : s.text
+            parts.append("<text x=\"\(g.textAnchor.x)\" y=\"\(g.textAnchor.y)\" font-size=\"12\" font-weight=\"bold\" fill=\"#666666\" text-anchor=\"middle\">\(esc(label))</text>")
+        }
+
         // Nodes (visual language matches NodeView: root navy, level-1 filled,
         // deeper levels outlined; color-tag bar, star mark, note tooltip, link).
         for l in layouts.values.sorted(by: { $0.depth < $1.depth }) {

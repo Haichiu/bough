@@ -385,8 +385,20 @@ public struct ContentView: View {
     }
     @ViewBuilder
     private var noteInspector: some View {
-        if let linkID = vm.selectedLinkID,
-           vm.document.links.contains(where: { $0.id == linkID }) {
+        if let sumID = vm.selectedSummaryID,
+           vm.document.summaries.contains(where: { $0.id == sumID }) {
+            Text("概要括線").font(.subheadline).foregroundStyle(.secondary)
+            TextField("概要文字…", text: Binding(
+                get: { vm.document.summaries.first(where: { $0.id == sumID })?.text ?? "" },
+                set: { vm.setSummaryText(id: sumID, to: $0) }))
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .accessibilityLabel("概要文字輸入框")
+            Button("刪除這條概要") { vm.removeSummary(id: sumID) }
+                .buttonStyle(.borderless)
+                .font(.caption)
+        } else if let linkID = vm.selectedLinkID,
+                  vm.document.links.contains(where: { $0.id == linkID }) {
             Text("關聯線").font(.subheadline).foregroundStyle(.secondary)
             TextField("關聯線標籤…", text: Binding(
                 get: { vm.document.links.first(where: { $0.id == linkID })?.label ?? "" },

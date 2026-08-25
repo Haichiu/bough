@@ -977,6 +977,18 @@ public final class MindMapViewModel: ObservableObject {
         return summary.id
     }
 
+    /// Convenience: brackets this node together with its next sibling.
+    @discardableResult
+    public func addSummaryWithNextSibling(of id: UUID) -> UUID? {
+        guard let parent = document.root.parent(of: id),
+              let index = parent.children.firstIndex(where: { $0.id == id }),
+              index + 1 < parent.children.count else {
+            notify("這個主題沒有下一個兄弟")
+            return nil
+        }
+        return addSummary(parentID: parent.id, startID: id, endID: parent.children[index + 1].id)
+    }
+
     public func setSummaryText(id: UUID, to text: String) {
         guard document.summaries.first(where: { $0.id == id })?.text != text else { return }
         mutate { doc in
