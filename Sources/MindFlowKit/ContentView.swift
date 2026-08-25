@@ -733,6 +733,7 @@ public struct ContentView: View {
             Divider()
             TextField("取代為…", text: $replaceText)
                 .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
                 .frame(width: 120)
             Button("全部取代") { vm.replaceAll(vm.searchQuery, with: replaceText) }
                 .buttonStyle(.bordered)
