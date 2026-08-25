@@ -739,6 +739,14 @@ public final class MindMapViewModel: ObservableObject {
         notify("已收合其他分支")
     }
 
+    /// Cycles through layout directions (logic → balanced → fishbone → bracket → logic).
+    public func cycleDirection() {
+        let all: [MapDirection] = [.logicRight, .balanced, .fishbone, .bracket]
+        let current = MapDirection(rawValue: document.directionName) ?? .logicRight
+        let nextIndex = (all.firstIndex(of: current)! + 1) % all.count
+        setDirection(all[nextIndex])
+    }
+
     public func cycleTab(_ offset: Int) {
         guard sessions.count > 1 else { return }
         switchTab(to: (activeIndex + offset + sessions.count) % sessions.count)

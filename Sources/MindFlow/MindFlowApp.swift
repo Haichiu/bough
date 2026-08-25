@@ -122,6 +122,9 @@ struct MindFlowApp: App {
                     .keyboardShortcut("f", modifiers: [.command, .shift])
             }
             CommandMenu("版面") {
+                Button("循環切換版面") { vm.cycleDirection() }
+                    .keyboardShortcut("l", modifiers: [.command, .option])
+                Divider()
                 Button("邏輯圖（右展）") { vm.setDirection(.logicRight) }
                     .keyboardShortcut("1", modifiers: [.command, .option])
                 Button("平衡圖（左右）") { vm.setDirection(.balanced) }
