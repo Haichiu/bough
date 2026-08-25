@@ -52,7 +52,8 @@ struct MapCanvasView: View {
             let focusIDs = vm.focusSet()
 
             ZStack {
-                backgroundLayer
+                self.backgroundLayer(layouts: layouts, bounds: bounds,
+                                 geoSize: geo.size, origin: origin)
 
                 mapContent(items: items, layouts: layouts, theme: theme, bounds: bounds,
                            origin: origin, geoSize: geo.size, dropTarget: dropTarget, focusIDs: focusIDs)
@@ -75,6 +76,18 @@ struct MapCanvasView: View {
             }
             .overlay(alignment: .center) { emptyStateHint(items: items) }
             .overlay(alignment: .bottom) { statusToast }
+            .overlay {
+                if let rect = lassoRect {
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(0.08))
+                        .overlay(
+                            Rectangle().stroke(Color.accentColor,
+                                               style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])))
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                        .allowsHitTesting(false)
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .mindFlowPan)) { note in
                 let dx = note.userInfo?["dx"] as? Double ?? 0
                 let dy = note.userInfo?["dy"] as? Double ?? 0
@@ -99,10 +112,12 @@ struct MapCanvasView: View {
 
     // MARK: - Layers
 
-    private var backgroundLayer: some View {
+    private func backgroundLayer(layouts: [UUID: NodeLayout], bounds: CGRect,
+                                 geoSize: CGSize, origin: CGPoint) -> some View {
         Color.clear
             .contentShape(Rectangle())
-            .gesture(panGesture)
+            .gesture(panGesture(layouts: layouts, bounds: bounds,
+                                geoSize: geoSize, origin: origin))
             .simultaneousGesture(zoomGesture)
             .onTapGesture {
                 vm.stopEditing()
@@ -282,13 +297,64 @@ struct MapCanvasView: View {
 
     // MARK: - Gestures
 
-    private var panGesture: some Gesture {
+    /// Shift+drag on empty canvas draws a lasso rectangle that batch-selects
+    /// every intersecting node; plain drag keeps panning the canvas.
+    @State private var lassoMode: Bool?
+    @State private var lassoRect: CGRect?
+
+    private func panGesture(layouts: [UUID: NodeLayout], bounds: CGRect,
+                            geoSize: CGSize, origin: CGPoint) -> some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
+                if lassoMode == nil { lassoMode = isShiftHeld() }
+                if lassoMode == true {
+                    let start = value.startLocation
+                    let current = value.location
+                    lassoRect = CGRect(x: min(start.x, current.x), y: min(start.y, current.y),
+                                       width: abs(current.x - start.x),
+                                       height: abs(current.y - start.y))
+                    return
+                }
                 pan = CGSize(width: lastPan.width + value.translation.width,
                              height: lastPan.height + value.translation.height)
             }
-            .onEnded { _ in lastPan = pan }
+            .onEnded { value in
+                if lassoMode == true {
+                    let rect = CGRect(x: min(value.startLocation.x, value.location.x),
+                                      y: min(value.startLocation.y, value.location.y),
+                                      width: abs(value.location.x - value.startLocation.x),
+                                      height: abs(value.location.y - value.startLocation.y))
+                    completeLasso(geoRect: rect, layouts: layouts, bounds: bounds,
+                                  geoSize: geoSize, origin: origin)
+                } else {
+                    lastPan = pan
+                }
+                lassoMode = nil
+                lassoRect = nil
+            }
+    }
+
+    private func completeLasso(geoRect: CGRect, layouts: [UUID: NodeLayout],
+                               bounds: CGRect, geoSize: CGSize, origin: CGPoint) {
+        guard !geoRect.isNull, geoRect.width > 4, geoRect.height > 4 else { return }
+        let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
+        func toMap(_ screen: CGPoint) -> CGPoint {
+            let sx = screen.x - (geoSize.width - bounds.width) / 2 - pan.width
+            let sy = screen.y - (geoSize.height - bounds.height) / 2 - pan.height
+            let qx = center.x + (sx - center.x) / scale
+            let qy = center.y + (sy - center.y) / scale
+            return CGPoint(x: qx - origin.x, y: qy - origin.y)
+        }
+        let a = toMap(geoRect.origin)
+        let b = toMap(CGPoint(x: geoRect.maxX, y: geoRect.maxY))
+        let mapRect = CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
+                             width: abs(a.x - b.x), height: abs(a.y - b.y)).insetBy(dx: -8, dy: -8)
+        var hits: Set<UUID> = []
+        for (id, layout) in layouts where mapRect.intersects(layout.frame) {
+            hits.insert(id)
+        }
+        vm.batchSelection.formUnion(hits)
+        if !hits.isEmpty { vm.notify("已框選 \(hits.count) 個主題") }
     }
 
     private var zoomGesture: some Gesture {

@@ -901,7 +901,7 @@ public struct ContentView: View {
                 .font(.callout).foregroundStyle(.secondary)
             Text("小絕招：把網頁或筆記裡選取的文字直接拖進畫布，放開在哪個主題上就長成它的子樹；截圖後直接拖到主題上也能附圖（檢閱器可移除）。")
                 .font(.callout).foregroundStyle(.secondary)
-            Text("批次操作：按住 Shift 點選多個主題，再從右鍵選單一次上色／標星／刪除。Esc 清空批次。")
+            Text("批次操作：按住 Shift 點選多個主題（或在空白處 Shift＋拖曳畫框圈選），再從右鍵選單一次上色／標星／刪除。Esc 清空批次。")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
                 Spacer()
