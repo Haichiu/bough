@@ -148,6 +148,7 @@ public struct ContentView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("取消聚焦")
                 }
                 .padding(8)
                 .background(.ultraThinMaterial, in: Capsule())
@@ -820,6 +821,7 @@ public struct ContentView: View {
                 .frame(minWidth: 34)
             Button { vm.jumpToNextResult() } label: { Image(systemName: "chevron.down") }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("跳到下一個搜尋結果")
             Divider()
             TextField("取代為…", text: $replaceText)
                 .textFieldStyle(.roundedBorder)
@@ -830,6 +832,7 @@ public struct ContentView: View {
                 .disabled(replaceText.isEmpty)
             Button { vm.showSearch = false } label: { Image(systemName: "xmark") }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("關閉搜尋")
         }
         .padding(10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
