@@ -230,6 +230,8 @@ struct MapCanvasView: View {
                 Button("取消聚焦") { vm.focusBranchID = nil }
             }
             Divider()
+            Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: item.node.id) }
+            Divider()
             Button("刪除", role: .destructive) { vm.delete(id: item.node.id) }
         }
         .position(x: item.layout.center.x + origin.x, y: item.layout.center.y + origin.y)

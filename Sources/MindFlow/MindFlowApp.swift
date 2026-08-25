@@ -93,6 +93,8 @@ struct MindFlowApp: App {
                     Button("複製為 OPML") { vm.copyAsOPML() }
                     Button("PDF 文件…") { vm.exportRequest = .pdf }
                     Divider()
+                    Button("分支 PNG…") { vm.exportRequest = .pngBranch }
+                    Divider()
                     Button("貼上剪貼簿條列") { vm.pasteAsNodes() }
                         .keyboardShortcut("v", modifiers: [.command, .shift])
                 }

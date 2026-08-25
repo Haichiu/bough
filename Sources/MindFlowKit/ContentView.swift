@@ -567,6 +567,19 @@ public struct ContentView: View {
             if FileIO.saveData(png, suggestedName: exportBaseName + ".png") != nil {
                 vm.notify("已匯出 PNG ✓")
             }
+        case .pngBranch:
+            guard let selID = vm.selection,
+                  let node = vm.document.root.find(selID) else { return }
+            let branchDoc = MindDocument(title: node.text, root: node)
+            let renderer = ImageRenderer(content: StaticMapView(document: branchDoc))
+            renderer.scale = 2
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { return }
+            if FileIO.saveData(png, suggestedName: node.text + ".png") != nil {
+                vm.notify("已匯出分支 PNG ✓")
+            }
         case .pngTransparent:
             let renderer = ImageRenderer(content: StaticMapView(document: vm.document, transparentBackground: true))
             renderer.scale = 2
