@@ -94,6 +94,7 @@ struct MindFlowApp: App {
                     Button("複製為 OPML") { vm.copyAsOPML() }
                     Button("PDF 文件…") { vm.exportRequest = .pdf }
                     Button("SVG 向量圖…") { vm.exportRequest = .svg }
+                    Button("FreeMind (.mm)…") { vm.exportRequest = .freemind }
                     Divider()
                     Button("分支 PNG…") { vm.exportRequest = .pngBranch }
                     Divider()

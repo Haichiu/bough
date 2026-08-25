@@ -146,4 +146,31 @@ public enum MapExporter {
         </svg>
         """
     }
+
+    // MARK: - FreeMind (.mm)
+
+    /// Exports as a FreeMind `.mm` map so XMind / FreeMind users can open our maps.
+    public static func freemind(_ document: MindDocument) -> String {
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;")
+             .replacingOccurrences(of: "<", with: "&lt;")
+             .replacingOccurrences(of: ">", with: "&gt;")
+             .replacingOccurrences(of: "\"", with: "&quot;")
+        }
+        func nodeXML(_ node: MindNode, depth: Int) -> String {
+            let indent = String(repeating: "  ", count: depth)
+            let folded = node.collapsed && !node.children.isEmpty ? " FOLDED=\"true\"" : ""
+            if node.children.isEmpty {
+                return "\(indent)<node TEXT=\"\(esc(node.text))\"\(folded)/>"
+            }
+            let inner = node.children.map { nodeXML($0, depth: depth + 1) }.joined(separator: "\n")
+            return "\(indent)<node TEXT=\"\(esc(node.text))\"\(folded)>\n\(inner)\n\(indent)</node>"
+        }
+        return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <map version="1.0.1">
+        \(nodeXML(document.root, depth: 1))
+        </map>
+        """
+    }
 }

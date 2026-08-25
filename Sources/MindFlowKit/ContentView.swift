@@ -635,6 +635,10 @@ public struct ContentView: View {
             if FileIO.saveText(MapExporter.svg(vm.document), suggestedName: exportBaseName + ".svg") != nil {
                 vm.notify("已匯出 SVG ✓")
             }
+        case .freemind:
+            if FileIO.saveText(MapExporter.freemind(vm.document), suggestedName: exportBaseName + ".mm") != nil {
+                vm.notify("已匯出 FreeMind ✓")
+            }
         }
     }
 

@@ -297,6 +297,7 @@ do {
     presDoc.root.children[0].children = [MindNode(text: "A1"), MindNode(text: "A2")]
     presDoc.root.children[0].children[0].children = [MindNode(text: "Deep")]
     presDoc.root.children[0].collapsed = false
+    presDoc.root.children[1].children = [MindNode(text: "B1")] // make the fold meaningful
     presDoc.root.children[1].collapsed = true // custom state to survive the roundtrip
     let vm2 = MindMapViewModel()
     vm2.document = presDoc
@@ -315,6 +316,27 @@ do {
     check(!vm2.presentationActive, "exit deactivates presentation")
     check(vm2.document.root.children[0].collapsed == false, "exit restores original expanded branch")
     check(vm2.document.root.children[1].collapsed == true, "exit restores custom collapsed flag")
+
+    // v18.1: FreeMind export + round-trip
+    let mmOut = MapExporter.freemind(presDoc)
+    check(mmOut.contains("<map version=\"1.0.1\">"), "freemind export has map header")
+    check(mmOut.contains("<node TEXT=\"Root\""), "freemind export writes root TEXT")
+    check(mmOut.contains("FOLDED=\"true\""), "freemind export preserves collapsed flag")
+    if let reimported = MapImporter.freemind(mmOut) {
+        check(reimported.root.text == presDoc.root.text, "freemind roundtrip keeps root")
+        check(reimported.root.children.count == presDoc.root.children.count, "freemind roundtrip keeps children")
+        check(reimported.root.children[1].collapsed == true, "freemind roundtrip keeps collapse states")
+        check(reimported.root.children[0].children[0].text == "A1", "freemind roundtrip keeps grandchildren")
+    } else {
+        check(false, "freemind roundtrip parses")
+    }
+    let tricky = MindNode(text: "a<b>&c\"d", children: [MindNode(text: "x&y")])
+    let mmTricky = MapExporter.freemind(MindDocument(title: "T", root: tricky))
+    if let back = MapImporter.freemind(mmTricky) {
+        check(back.root.text == "a<b>&c\"d" && back.root.children[0].text == "x&y", "freemind escapes special chars both ways")
+    } else {
+        check(false, "tricky freemind roundtrip parses")
+    }
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")
     check(back?.root.children[1].children.map(\.text) == ["C"], "opml import restores depth")
