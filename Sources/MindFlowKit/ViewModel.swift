@@ -883,6 +883,14 @@ public final class MindMapViewModel: ObservableObject {
                 }
             }
             walkAndReplace(&doc.root)
+            // Link labels participate in search, so they get replaced too.
+            for i in doc.links.indices
+            where doc.links[i].label.localizedCaseInsensitiveContains(find) {
+                doc.links[i].label = doc.links[i].label.replacingOccurrences(
+                    of: find,
+                    with: replaceText,
+                    options: .caseInsensitive)
+            }
         }
         notify("已取代所有匹配項目 ✓")
     }

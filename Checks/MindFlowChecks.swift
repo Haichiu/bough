@@ -474,6 +474,22 @@ do {
     let collapsedRows = OutlineFlattener.flatten(numDoc.root)
     check(!collapsedRows.contains { $0.number == "1.1" }, "collapsed branch hides its numbers")
     check(collapsedRows.count == 3, "collapsed flatten keeps root + two branches")
+
+    // v19.5: replaceAll covers link labels
+    let vm7 = MindMapViewModel()
+    vm7.document = MindDocument(title: "R", root: MindNode(text: "Root", children: [
+        MindNode(text: "A"), MindNode(text: "B"),
+    ]))
+    vm7.selection = nil
+    vm7.document.links = [MindLink(from: vm7.document.root.children[0].id,
+                                  to: vm7.document.root.children[1].id,
+                                  label: "導致結果")]
+    vm7.replaceAll("導致", with: "造成")
+    check(vm7.document.links[0].label == "造成結果", "replaceAll rewrites link labels")
+    check(vm7.document.root.children[0].text == "A" && vm7.document.links[0].label.contains("造成"), "node text untouched when only label matches")
+    // Case-insensitive replacement still works on node text (regression guard)
+    vm7.replaceAll("a", with: "X")
+    check(vm7.document.root.children[0].text == "X", "case-insensitive node replacement still works")
     } else {
         check(false, "foreign freemind parses")
     }
