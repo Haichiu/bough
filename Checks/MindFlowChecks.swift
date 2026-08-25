@@ -389,8 +389,39 @@ do {
     check(svgRich.contains("<a href=\"https://example.com\">"), "svg wraps linked node in anchor")
     // Red color tag is defined as Color(hex: 0xE05252) in Theme.colorTags.
     check(svgRich.lowercased().contains("#e05252"), "svg renders color-tag bar")
-    // depth>=2 nodes are outlined (white fill + colored stroke)
     check(svgRich.contains("fill=\"#ffffff\" stroke=\"#"), "svg deep nodes are white with colored outline")
+
+    // v19.1: FreeMind notes + colors survive the round-trip
+    var mmDoc = MindDocument(title: "MM", root: MindNode(text: "Root", children: [
+        MindNode(text: "Tagged", note: "重要備註", colorTag: "blue", children: [MindNode(text: "Kid")]),
+        MindNode(text: "Plain"),
+    ]))
+    let mmOut = MapExporter.freemind(mmDoc)
+    check(mmOut.contains("richcontent TYPE=\"NOTE\"") && mmOut.contains("重要備註"), "freemind export carries notes")
+    check(mmOut.uppercased().contains("COLOR=\"#4A90D9\""), "freemind export carries color")
+    if let back = MapImporter.freemind(mmOut) {
+        check(back.root.children[0].note == "重要備註", "freemind roundtrip restores notes")
+        check(back.root.children[0].colorTag == "blue", "freemind roundtrip restores color tags")
+    } else {
+        check(false, "notes/colors roundtrip parses")
+    }
+    // Import a foreign FreeMind file that uses COLOR without our exact tag hex
+    let foreign = """
+    <map version="1.0.1">
+      <node TEXT="R">
+        <node TEXT="C" COLOR="#ff8800">
+          <richcontent TYPE="NOTE"><html><body><p>外部筆記</p></body></html></richcontent>
+        </node>
+      </node>
+    </map>
+    """
+    if let f = MapImporter.freemind(foreign) {
+        check(f.root.children[0].note == "外部筆記", "freemind import reads foreign richcontent notes")
+        // Unknown color maps to no tag (graceful), known hex maps to its tag
+        check(f.root.children[0].colorTag == nil, "unknown freemind colors map to no tag")
+    } else {
+        check(false, "foreign freemind parses")
+    }
     }
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")

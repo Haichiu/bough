@@ -176,12 +176,22 @@ public enum MapExporter {
         }
         func nodeXML(_ node: MindNode, depth: Int) -> String {
             let indent = String(repeating: "  ", count: depth)
+            var attrs = ""
             let folded = node.collapsed && !node.children.isEmpty ? " FOLDED=\"true\"" : ""
+            if let key = node.colorTag, let color = Theme.colorTag(named: key) {
+                let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
+                attrs += String(format: " COLOR=\"#%02x%02x%02x\"", Int(round(ns.redComponent * 255)), Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
+            }
+            attrs += folded
+            let noteBlock = node.note.isEmpty ? "" : "\n\(indent)  <richcontent TYPE=\"NOTE\"><html><body><p>\(esc(node.note))</p></body></html></richcontent>"
             if node.children.isEmpty {
-                return "\(indent)<node TEXT=\"\(esc(node.text))\"\(folded)/>"
+                if noteBlock.isEmpty {
+                    return "\(indent)<node TEXT=\"\(esc(node.text))\"\(attrs)/>"
+                }
+                return "\(indent)<node TEXT=\"\(esc(node.text))\"\(attrs)>\(noteBlock)\n\(indent)</node>"
             }
             let inner = node.children.map { nodeXML($0, depth: depth + 1) }.joined(separator: "\n")
-            return "\(indent)<node TEXT=\"\(esc(node.text))\"\(folded)>\n\(inner)\n\(indent)</node>"
+            return "\(indent)<node TEXT=\"\(esc(node.text))\"\(attrs)>\(noteBlock)\n\(inner)\n\(indent)</node>"
         }
         return """
         <?xml version="1.0" encoding="UTF-8"?>

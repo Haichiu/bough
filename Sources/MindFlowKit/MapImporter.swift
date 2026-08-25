@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Imports indented Markdown outlines (bullets, headings) and OPML files as mind maps.
@@ -25,22 +26,24 @@ public enum MapImporter {
 private final class FreeMindParserDelegate: NSObject, XMLParserDelegate {
     private final class Node {
         var text = ""
+        var note = ""
         var collapsed = false
+        var colorTag: String? = nil
         var children: [Node] = []
     }
 
     private var stack: [Node] = []
     private var rootNode: Node?
     private(set) var title: String?
-    private var inMapName = false
-    private var nameBuffer = ""
+    private var noteBuffer: String? = nil
 
     var root: MindNode? {
         rootNode.map(convert)
     }
 
     private func convert(_ node: Node) -> MindNode {
-        MindNode(text: node.text, collapsed: node.collapsed, children: node.children.map(convert))
+        MindNode(text: node.text, note: node.note, collapsed: node.collapsed,
+                 colorTag: node.colorTag, children: node.children.map(convert))
     }
 
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
@@ -54,12 +57,26 @@ private final class FreeMindParserDelegate: NSObject, XMLParserDelegate {
             }
             node.text = attr("text")
             node.collapsed = attr("folded").lowercased() == "true"
+            // FreeMind colors nodes with a hex COLOR attribute; map to our nearest tag.
+            let colorHex = attr("color").trimmingCharacters(in: CharacterSet(charactersIn: "#")).lowercased()
+            if !colorHex.isEmpty {
+                node.colorTag = Theme.colorTags.first(where: { tag in
+                    let ns = NSColor(tag.color).usingColorSpace(.sRGB) ?? NSColor.black
+                    let candidate = String(format: "%02x%02x%02x", Int(round(ns.redComponent * 255)), Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
+                    return candidate == colorHex
+                })?.key
+            }
             if let parent = stack.last {
                 parent.children.append(node)
             } else {
                 rootNode = node
             }
             stack.append(node)
+        case "richcontent":
+            let type = attributeDict.first(where: { $0.key.caseInsensitiveCompare("type") == .orderedSame })?.value ?? ""
+            if type.uppercased() == "NOTE" && noteBuffer == nil {
+                noteBuffer = ""
+            }
         case "map":
             if let name = attributeDict["name"], !name.isEmpty { title = name }
         default:
@@ -67,9 +84,24 @@ private final class FreeMindParserDelegate: NSObject, XMLParserDelegate {
         }
     }
 
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if noteBuffer != nil { noteBuffer? += string }
+    }
+
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName qName: String?) {
-        if name.lowercased() == "node" && !stack.isEmpty {
-            stack.removeLast()
+        let lower = name.lowercased()
+        switch lower {
+        case "richcontent":
+            // FreeMind wraps notes in <richcontent TYPE="NOTE">…<p>text</p>…</richcontent>
+            if let buffered = noteBuffer?.trimmingCharacters(in: .whitespacesAndNewlines), !buffered.isEmpty,
+               let current = stack.last {
+                current.note = current.note.isEmpty ? buffered : current.note + "\n" + buffered
+            }
+            noteBuffer = nil
+        case "node":
+            if !stack.isEmpty { stack.removeLast() }
+        default:
+            break
         }
     }
 }
