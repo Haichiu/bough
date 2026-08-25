@@ -708,6 +708,11 @@ public final class MindMapViewModel: ObservableObject {
             node.children.forEach(walk)
         }
         walk(document.root)
+        // A matching link label pulls both endpoint nodes into the results.
+        for link in document.links where link.label.localizedCaseInsensitiveContains(query) {
+            if !ids.contains(link.from) { ids.append(link.from) }
+            if !ids.contains(link.to) { ids.append(link.to) }
+        }
         searchResults = ids
         searchIndex = 0
         if let first = ids.first {

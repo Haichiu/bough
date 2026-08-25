@@ -376,7 +376,7 @@ public struct ContentView: View {
                     }
                 }
             let s = vm.document.stats()
-            Text("\(s.nodeCount) 個主題 · 最深 \(s.maxDepth) 層 · ★ \(s.markedCount) · 備註 \(s.noteCount)")
+            Text("\(s.nodeCount) 個主題 · 最深 \(s.maxDepth) 層 · ★ \(s.markedCount) · 備註 \(s.noteCount) · 連結 \(s.linkCount)")
                 .font(.caption).foregroundStyle(.secondary)
         } else {
             Text("尚未選取主題")

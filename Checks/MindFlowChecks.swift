@@ -375,6 +375,25 @@ do {
     check(vm4.lastSavedAt != nil, "autosave stamps the time")
     check(vm4.dirty == false, "autosave clears the dirty flag")
 
+    // v19.2: search covers link labels
+    let vm5 = MindMapViewModel()
+    vm5.document = MindDocument(title: "S", root: MindNode(text: "Root", children: [
+        MindNode(text: "起點"), MindNode(text: "終點"),
+    ]))
+    vm5.selection = nil
+    vm5.document.links = [MindLink(from: vm5.document.root.children[0].id,
+                                  to: vm5.document.root.children[1].id,
+                                  label: "導致")]
+    vm5.searchQuery = "導致"
+    vm5.performSearch()
+    check(vm5.searchResults.count == 2, "search finds both endpoints of a labeled link")
+    let fromNode = vm5.document.root.find(vm5.document.links[0].from)
+    check(fromNode?.text == "起點" && vm5.searchResults.contains(vm5.document.links[0].to), "link-label search hits real nodes")
+    // Unrelated queries stay unaffected
+    vm5.searchQuery = "不存在的字"
+    vm5.performSearch()
+    check(vm5.searchResults.isEmpty, "non-matching query returns nothing")
+
     // v19.0: SVG export visual parity with NodeView
     var rich = MindDocument(title: "R", root: MindNode(text: "Root", children: [
         MindNode(text: "L1", note: "有備註", marked: true, colorTag: "red", url: "https://example.com",
