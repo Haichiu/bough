@@ -160,6 +160,18 @@ do {
     check(opml.contains("&lt;A&gt;"), "opml escapes XML entities")
     check(opml.contains("<outline text=\"B\""), "opml nests children")
     check(opml.contains("_note=\"n\""), "opml carries notes")
+
+    // v17.0: SVG export
+    let svg = MapExporter.svg(doc)
+    check(svg.hasPrefix("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"), "svg starts with xml declaration")
+    check(svg.contains("<svg xmlns=\"http://www.w3.org/2000/svg\""), "svg declares namespace")
+    check(svg.contains("viewBox="), "svg carries viewBox bounds")
+    check(svg.contains("&lt;A&gt;"), "svg escapes xml entities in text")
+    check(svg.contains(">B</text>"), "svg renders child node text")
+    check(svg.contains("<path d=\"M "), "svg draws connection paths")
+    check(svg.contains("text-anchor=\"middle\""), "svg centers node labels")
+    let svgT = MapExporter.svg(doc, transparent: true)
+    check(!svgT.contains("fill=\"#ffffff\"><rect") && !svgT.contains("<rect width=\"100%\""), "svg transparent skips background rect")
 }
 
 // MARK: - v1.3: markdown import round-trip

@@ -620,6 +620,10 @@ public struct ContentView: View {
             if FileIO.saveData(mutableData as Data, suggestedName: exportBaseName + ".pdf") != nil {
                 vm.notify("已匯出 PDF ✓")
             }
+        case .svg:
+            if FileIO.saveText(MapExporter.svg(vm.document), suggestedName: exportBaseName + ".svg") != nil {
+                vm.notify("已匯出 SVG ✓")
+            }
         }
     }
 

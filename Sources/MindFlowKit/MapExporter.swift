@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Text-based export formats for mind maps.
 public enum MapExporter {
@@ -61,6 +62,80 @@ public enum MapExporter {
         \(outline(document.root, depth: 2))
           </body>
         </opml>
+        """
+    }
+
+    // MARK: - SVG (向量圖)
+
+    /// Render the whole map as an SVG document. Vector output scales
+    /// losslessly for print, slides, and web embedding.
+    public static func svg(_ document: MindDocument, transparent: Bool = false) -> String {
+        let direction = MapDirection(rawValue: document.directionName) ?? .logicRight
+        let theme = Theme.named(document.themeName)
+        let layouts = LayoutEngine.layout(root: document.root, direction: direction)
+
+        var bounds = CGRect.null
+        for l in layouts.values { bounds = bounds.union(l.frame) }
+        let pad: CGFloat = 40
+        bounds = bounds.insetBy(dx: -pad, dy: -pad)
+        let width = max(bounds.width, 1), height = max(bounds.height, 1)
+
+        func hex(_ color: Color) -> String {
+            let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
+            return String(format: "#%02x%02x%02x", Int(round(ns.redComponent * 255)), Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
+        }
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;")
+             .replacingOccurrences(of: "<", with: "&lt;")
+             .replacingOccurrences(of: ">", with: "&gt;")
+             .replacingOccurrences(of: "\"", with: "&quot;")
+        }
+
+        var parts: [String] = []
+        if !transparent {
+            parts.append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>")
+        }
+        parts.append("<title>\(esc(document.title))</title>")
+
+        // Connections (same shapes as on-screen rendering).
+        func connect(_ node: MindNode) {
+            guard !node.collapsed else { return }
+            guard let pl = layouts[node.id] else { return }
+            for child in node.children {
+                guard let cl = layouts[child.id] else { continue }
+                let toLeft = cl.side == .left
+                let from = CGPoint(x: toLeft ? pl.frame.minX : pl.frame.maxX, y: pl.frame.midY)
+                let to = CGPoint(x: toLeft ? cl.frame.maxX : cl.frame.minX, y: cl.frame.midY)
+                let color = hex(theme.color(forIndex: cl.colorIndex))
+                let w: CGFloat = cl.depth == 1 ? 3.5 : 2.5
+                if direction == .bracket {
+                    let midX = from.x + (to.x - from.x) / 2
+                    parts.append("<path d=\"M \(from.x) \(from.y) L \(midX) \(from.y) L \(midX) \(to.y) L \(to.x) \(to.y)\" fill=\"none\" stroke=\"\(color)\" stroke-width=\"\(w)\"/>")
+                } else {
+                    let midX = (from.x + to.x) / 2
+                    parts.append("<path d=\"M \(from.x) \(from.y) C \(midX) \(from.y) \(midX) \(to.y) \(to.x) \(to.y)\" fill=\"none\" stroke=\"\(color)\" stroke-width=\"\(w)\"/>")
+                }
+                connect(child)
+            }
+        }
+        connect(document.root)
+
+        // Nodes.
+        for l in layouts.values.sorted(by: { $0.depth < $1.depth }) {
+            guard let node = document.root.find(l.id) else { continue }
+            let f = l.frame
+            let color = hex(theme.color(forIndex: l.colorIndex))
+            parts.append("<rect x=\"\(f.minX)\" y=\"\(f.minY)\" width=\"\(f.width)\" height=\"\(f.height)\" rx=\"9\" fill=\"\(color)\" stroke=\"\(color)\" stroke-width=\"1.5\"/>")
+            let fontSize: CGFloat = l.depth == 0 ? 17 : (l.depth == 1 ? 14 : 12)
+            let textColor = l.depth == 0 ? "#ffffff" : "#1a1a1a"
+            parts.append("<text x=\"\(f.midX)\" y=\"\(f.midY + fontSize * 0.35)\" font-family=\"-apple-system, PingFang TC, sans-serif\" font-size=\"\(fontSize)\" fill=\"\(textColor)\" text-anchor=\"middle\">\(esc(node.text))</text>")
+        }
+
+        return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="\(bounds.minX) \(bounds.minY) \(width) \(height)" width="\(width)" height="\(height)">
+        \(parts.joined(separator: "\n"))
+        </svg>
         """
     }
 }
