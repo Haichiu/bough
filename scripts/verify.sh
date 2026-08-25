@@ -2,6 +2,8 @@
 # One-shot quality gate: full logic checks + optimized release build.
 set -e
 cd "$(dirname "$0")/.."
+echo "==> UI coverage check…"
+bash "$(dirname "$0")/check-ui-coverage.sh"
 echo "==> Running MindFlowChecks…"
 swift run MindFlowChecks
 echo "==> Release build…"

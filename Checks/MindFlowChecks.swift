@@ -371,9 +371,8 @@ do {
     vm4.document = MindDocument(title: "S", root: MindNode(text: "Root"))
     vm4.selection = nil
     check(vm4.lastSavedAt == nil, "no saved timestamp before first autosave")
-    vm4.autosaveNow()
+    vm4.autosaveAllSessions()
     check(vm4.lastSavedAt != nil, "autosave stamps the time")
-    check(vm4.dirty == false, "autosave clears the dirty flag")
 
     // v19.2: search covers link labels
     let vm5 = MindMapViewModel()

@@ -1157,13 +1157,6 @@ public final class MindMapViewModel: ObservableObject {
         notify("已匯入 Markdown ✓")
     }
 
-    /// Writes the current document to the autosave location immediately.
-    public func autosaveNow() {
-        FileIO.autosave(document)
-        lastSavedAt = Date()
-        dirty = false
-    }
-
     public func open() {
         guard let (doc, url) = FileIO.openPanel() else { return }
         openInNewTab(doc, filePath: url)

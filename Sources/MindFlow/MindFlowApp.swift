@@ -72,7 +72,6 @@ struct MindFlowApp: App {
                     .keyboardShortcut("n")
                 Button("新增視窗") { openWindow(id: "main") }
                     .keyboardShortcut("n", modifiers: [.command, .option])
-                    .keyboardShortcut("n")
                 Button("開啟…") { vm.open() }
                     .keyboardShortcut("o")
                 Button("匯入 Markdown…") { vm.importMarkdown() }
