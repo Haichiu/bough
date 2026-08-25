@@ -561,6 +561,9 @@ public struct ContentView: View {
             Button("整棵子樹加星星") { vm.setSubtreeMark(id: row.id, to: true) }
             Button("移除整棵子樹的星星") { vm.setSubtreeMark(id: row.id, to: false) }
         }
+        if !row.isRoot {
+            Button("加入概要括線（含下一個兄弟）") { _ = vm.addSummaryWithNextSibling(of: row.id) }
+        }
         Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: row.id) }
         Divider()
         if row.hasChildren {

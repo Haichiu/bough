@@ -206,7 +206,9 @@ struct MapCanvasView: View {
             if item.node.id != vm.document.root.id {
                 Button("加入兄弟主題") { vm.addSibling(of: item.node.id) }
             }
-            Button("加入概要括線（含下一個兄弟）") { _ = vm.addSummaryWithNextSibling(of: item.node.id) }
+            if item.node.id != vm.document.root.id {
+                Button("加入概要括線（含下一個兄弟）") { _ = vm.addSummaryWithNextSibling(of: item.node.id) }
+            }
             if vm.document.offsets[item.node.id.uuidString] != nil {
                 Button("重設此節點位置") { vm.clearOffset(id: item.node.id) }
             }
