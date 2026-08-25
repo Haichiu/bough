@@ -22,6 +22,8 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var editingID: UUID?
     @Published public var filePath: URL?
     @Published public var dirty = false
+    /// When the last automatic save finished; shown in the title bar for reassurance.
+    @Published public var lastSavedAt: Date?
     @Published public var exportRequest: ExportFormat?
     @Published public var recentlyAddedID: UUID?
     @Published public var statusMessage: String?
@@ -160,6 +162,7 @@ public final class MindMapViewModel: ObservableObject {
             snapshot[activeIndex].filePath = filePath
         }
         FileIO.autosaveTabs(snapshot.map { ($0.id, $0.document) })
+        lastSavedAt = Date()
     }
 
     public init() {
@@ -1128,6 +1131,7 @@ public final class MindMapViewModel: ObservableObject {
     /// Writes the current document to the autosave location immediately.
     public func autosaveNow() {
         FileIO.autosave(document)
+        lastSavedAt = Date()
         dirty = false
     }
 

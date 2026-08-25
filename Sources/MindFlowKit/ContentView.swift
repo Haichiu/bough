@@ -129,7 +129,7 @@ public struct ContentView: View {
             }
         }
         .navigationTitle(vm.document.root.text.isEmpty ? vm.document.title : vm.document.root.text)
-        .navigationSubtitle("v14.0 · \(vm.dirty ? "未儲存" : (vm.filePath?.lastPathComponent ?? "自動儲存中"))")
+        .navigationSubtitle(saveSubtitle)
         .overlay(alignment: .bottom) { breadcrumbBar }
         .overlay(alignment: .topLeading) {
             if let fid = vm.focusBranchID, let fnode = vm.document.root.find(fid) {
@@ -541,6 +541,19 @@ public struct ContentView: View {
         operation.showsPrintPanel = true
         operation.run()
         vm.notify("已送出列印 ✓")
+    }
+
+    /// Title-bar status: version, save state, and when auto-save last ran.
+    private var saveSubtitle: String {
+        if vm.dirty {
+            return "v\(AppInfo.version) · 未儲存"
+        }
+        if let saved = vm.lastSavedAt {
+            let f = DateFormatter()
+            f.dateFormat = "HH:mm"
+            return "v\(AppInfo.version) · 已自動保存 \(f.string(from: saved))"
+        }
+        return "v\(AppInfo.version) · \(vm.filePath?.lastPathComponent ?? "自動儲存中")"
     }
 
     private func scheduleAutosave() {

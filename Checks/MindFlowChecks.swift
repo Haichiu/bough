@@ -364,6 +364,16 @@ do {
     vm3.selection = vm3.document.root.children[0].id
     vm3.insertTextAsNodes("丁", sourceLabel: "拖入的文字")
     check(vm3.document.root.children.first?.children.first?.text == "丁", "drop nests under selection")
+
+    // v18.8: save status timestamp + app version helper
+    check(!AppInfo.version.isEmpty, "AppInfo version resolves")
+    let vm4 = MindMapViewModel()
+    vm4.document = MindDocument(title: "S", root: MindNode(text: "Root"))
+    vm4.selection = nil
+    check(vm4.lastSavedAt == nil, "no saved timestamp before first autosave")
+    vm4.autosaveNow()
+    check(vm4.lastSavedAt != nil, "autosave stamps the time")
+    check(vm4.dirty == false, "autosave clears the dirty flag")
     }
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")
