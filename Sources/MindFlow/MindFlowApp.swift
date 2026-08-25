@@ -97,6 +97,7 @@ struct MindFlowApp: App {
                     Button("FreeMind (.mm)…") { vm.exportRequest = .freemind }
                     Divider()
                     Button("分支 PNG…") { vm.exportRequest = .pngBranch }
+                    Button("分支 SVG…") { vm.exportRequest = .svgBranch }
                     Divider()
                     Button("貼上剪貼簿條列") { vm.pasteAsNodes() }
                         .keyboardShortcut("v", modifiers: [.command, .shift])

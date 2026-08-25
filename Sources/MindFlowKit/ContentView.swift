@@ -639,6 +639,13 @@ public struct ContentView: View {
             if FileIO.saveText(MapExporter.freemind(vm.document), suggestedName: exportBaseName + ".mm") != nil {
                 vm.notify("已匯出 FreeMind ✓")
             }
+        case .svgBranch:
+            guard let selID = vm.selection,
+                  let node = vm.document.root.find(selID) else { return }
+            let branchDoc = MindDocument(title: node.text, root: node)
+            if FileIO.saveText(MapExporter.svg(branchDoc), suggestedName: node.text + ".svg") != nil {
+                vm.notify("已匯出分支 SVG ✓")
+            }
         }
     }
 

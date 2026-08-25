@@ -337,6 +337,12 @@ do {
     } else {
         check(false, "tricky freemind roundtrip parses")
     }
+
+    // v18.4: branch SVG export (same sub-document trick as branch PNG)
+    let branchRoot = presDoc.root.children[0]
+    let branchSvg = MapExporter.svg(MindDocument(title: branchRoot.text, root: branchRoot))
+    check(branchSvg.contains(">A</text>") || branchSvg.contains(">A1</text>"), "branch svg renders branch nodes")
+    check(!branchSvg.contains(">B<"), "branch svg excludes sibling subtree")
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")
     check(back?.root.children[1].children.map(\.text) == ["C"], "opml import restores depth")

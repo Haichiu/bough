@@ -38,7 +38,7 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     public enum ExportFormat: String, Equatable {
-        case markdown, opml, png, pdf, svg, freemind, pngTransparent, pngBranch, pngLarge
+        case markdown, opml, png, pdf, svg, freemind, pngBranch, svgBranch, pngTransparent, pngLarge
     }
 
     private var undoStack: [MindDocument] = []
