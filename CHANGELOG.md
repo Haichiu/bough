@@ -1,5 +1,14 @@
 # MindFlow 更新日誌
 
+## v21.6
+- 概要括線補完：PNG/PDF 匯出（StaticMapView）也渲染括線與概要文字，三個渲染面一致
+
+## v21.5
+- 概要括線第二階段：共用 SummaryGeometry 幾何模組；畫布膠囊標籤＋點選、檢閱器編輯、右鍵「加入概要括線」、SVG 匯出
+
+## v21.4
+- 概要括線第一階段：MindSummary 資料模型（容錯解碼）、CRUD API、刪除端點自動修剪括線
+
 ## v21.3
 - 打包稽核：Document Types 加入 LSItemContentTypes（引用 com.agenthub.mindmap UTI）；CHANGELOG 同步
 

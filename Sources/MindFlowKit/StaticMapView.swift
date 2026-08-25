@@ -115,6 +115,7 @@ struct StaticMapView: View {
         return ZStack {
             MapConnectionsView(items: items, layouts: layouts, theme: theme,
                                origin: origin, direction: direction)
+            summaryBrackets(layouts: layouts, origin: origin)
             ForEach(items) { item in
                 NodeView(node: item.node,
                          layout: item.layout,
@@ -132,5 +133,29 @@ struct StaticMapView: View {
         }
         .frame(width: bounds.width, height: bounds.height)
         .background(transparentBackground ? Color.clear : Color(nsColor: .textBackgroundColor))
+    }
+
+    /// Summary brackets share the same geometry as canvas + SVG rendering.
+    @ViewBuilder
+    private func summaryBrackets(layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
+        ForEach(document.summaries) { summary in
+            if let parentNode = document.root.find(summary.parentID),
+               let geo = SummaryGeometry.bracket(for: summary, parentNode: parentNode,
+                                                 layouts: layouts, origin: origin) {
+                Path { p in
+                    p.move(to: geo.tickA)
+                    p.addLine(to: geo.spineA)
+                    p.addLine(to: geo.spineB)
+                    p.addLine(to: geo.tickB)
+                }
+                .stroke(Color.secondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                if !summary.text.isEmpty {
+                    Text(summary.text)
+                        .font(.caption.bold())
+                        .foregroundStyle(Color.secondary)
+                        .position(geo.textAnchor)
+                }
+            }
+        }
     }
 }

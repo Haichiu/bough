@@ -17,6 +17,7 @@ UI_FILES=(
 )
 
 ALLOWED=(
+  addSummary           # 經由 addSummaryWithNextSibling（右鍵選單）間接觸達
   newDocument          # 測試夾具；App 流程走範本選擇器
   openInNewTab         # 內部串接：開檔/範本/URL 都經它
   expandTo            # performSearch 內部跳轉用
