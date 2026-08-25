@@ -533,7 +533,9 @@ public struct ContentView: View {
         if row.hasChildren {
             Button(row.collapsed ? "展開" : "收合") { vm.toggleCollapse(id: row.id) }
         }
-        Button(!row.isRoot ? "刪除" : "刪除", role: .destructive) { vm.delete(id: row.id) }
+        if !row.isRoot {
+            Button("刪除", role: .destructive) { vm.delete(id: row.id) }
+        }
     }
     private func outlineRowView(_ row: OutlineRow, focusSet: Set<UUID>) -> some View {
         HStack(spacing: 5) {

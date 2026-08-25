@@ -235,7 +235,9 @@ struct MapCanvasView: View {
                 Button("取消聚焦") { vm.focusBranchID = nil }
             }
             Divider()
-            Button("刪除", role: .destructive) { vm.delete(id: item.node.id) }
+            if item.node.id != vm.document.root.id {
+                Button("刪除", role: .destructive) { vm.delete(id: item.node.id) }
+            }
         }
         .position(x: item.layout.center.x + origin.x, y: item.layout.center.y + origin.y)
         .onTapGesture(count: 2) {
