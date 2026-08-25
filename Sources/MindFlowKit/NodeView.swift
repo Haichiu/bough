@@ -5,6 +5,7 @@ struct NodeView: View {
     let layout: NodeLayout
     let branchColor: Color
     let isSelected: Bool
+    var isBatchMember: Bool = false
     let isEditing: Bool
     let isDropTarget: Bool
     var onToggleCollapse: (() -> Void)? = nil
@@ -161,6 +162,11 @@ struct NodeView: View {
         if isSearchHit && !isSelected && !isDropTarget {
             RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
                 .stroke(Color(hex: 0xF5C542), lineWidth: 2)
+                .padding(-4)
+        }
+        if isBatchMember {
+            RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
+                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
                 .padding(-4)
         }
         if isSelected || isDropTarget || isHovered {

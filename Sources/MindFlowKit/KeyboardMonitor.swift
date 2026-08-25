@@ -162,6 +162,7 @@ public final class KeyboardMonitor {
                 return nil // exiting focus mode should not also clear selection
             }
             vm.focusBranchID = nil
+            vm.clearBatchSelection()
             vm.stopEditing()
             vm.selection = nil
             if vm.showSearch {

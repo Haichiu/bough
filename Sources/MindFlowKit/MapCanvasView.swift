@@ -160,6 +160,7 @@ struct MapCanvasView: View {
                  layout: item.layout,
                  branchColor: theme.color(forIndex: item.layout.colorIndex),
                  isSelected: vm.selection == item.node.id,
+                 isBatchMember: vm.batchSelection.contains(item.node.id),
                  isEditing: vm.editingID == item.node.id,
                  isDropTarget: dropTarget == item.node.id,
                  onToggleCollapse: onToggleCollapse,
@@ -235,6 +236,24 @@ struct MapCanvasView: View {
                 Button("取消聚焦") { vm.focusBranchID = nil }
             }
             Divider()
+            if !vm.batchSelection.isEmpty {
+                Menu("批次（\(vm.batchSelection.count) 個）") {
+                    Menu("全部加上色標") {
+                        ForEach(Theme.colorTags, id: \.key) { tag in
+                            Button(tag.name) { vm.setColorTagForBatch(tag: tag.key) }
+                        }
+                        Divider()
+                        Button("清除色標") { vm.setColorTagForBatch(tag: nil) }
+                    }
+                    Button("整批加星星") { vm.setMarkForBatch(to: true) }
+                    Button("移除整批的星星") { vm.setMarkForBatch(to: false) }
+                    Divider()
+                    Button("清空批次選取") { vm.clearBatchSelection() }
+                    Divider()
+                    Button("刪除整批", role: .destructive) { vm.deleteBatch() }
+                }
+                Divider()
+            }
             if item.node.id != vm.document.root.id {
                 Button("刪除", role: .destructive) { vm.delete(id: item.node.id) }
             }
@@ -245,6 +264,10 @@ struct MapCanvasView: View {
             vm.editingID = item.node.id
         }
         .onTapGesture {
+            if isShiftHeld() {
+                vm.toggleBatchMember(item.node.id)
+                return
+            }
             if vm.editingID != nil { vm.stopEditing() }
             if vm.selection == item.node.id {
                 // Second click on the selected node starts editing — no double-click needed.
@@ -394,6 +417,11 @@ struct MapCanvasView: View {
         .scaleEffect(scale)
         .offset(pan)
     }
+    /// Shift modifier at click time — enables shift-click batch selection.
+    private func isShiftHeld() -> Bool {
+        NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+    }
+
     private func summariesCanvas(layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
         ForEach(vm.document.summaries) { summary in
             summaryView(summary: summary, layouts: layouts, origin: origin)
