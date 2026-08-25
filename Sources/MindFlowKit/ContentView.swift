@@ -354,6 +354,7 @@ public struct ContentView: View {
                 get: { vm.document.links.first(where: { $0.id == linkID })?.label ?? "" },
                 set: { vm.setLinkLabel(id: linkID, to: $0) }))
                 .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
                 .accessibilityLabel("關聯線標籤輸入框")
             Button("刪除這條關聯線") { vm.removeLink(id: linkID) }
                 .buttonStyle(.borderless)
@@ -362,6 +363,7 @@ public struct ContentView: View {
             Text(node.id == vm.document.root.id ? "中心主題" : "主題")
                 .font(.subheadline).foregroundStyle(.secondary)
             TextEditor(text: $noteDraft)
+                .autocorrectionDisabled()
                 .accessibilityLabel("備註內容")
                 .onChange(of: noteDraft) { draft in
                     guard draft != (vm.document.root.find(id)?.note ?? "") else { return }
@@ -475,6 +477,7 @@ public struct ContentView: View {
             if outlineEditingID == row.id {
                 TextField("主題", text: $outlineDraft)
                     .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
                     .font(.body)
                     .onSubmit {
                         vm.rename(id: row.id, to: outlineDraft)
@@ -676,6 +679,7 @@ public struct ContentView: View {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("搜尋主題…", text: $vm.searchQuery)
                 .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
                 .frame(width: 220)
                 .focused($searchFocused)
                 .onSubmit { vm.jumpToNextResult() }

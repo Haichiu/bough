@@ -122,6 +122,7 @@ struct NodeView: View {
                 }
                 TextField("", text: $editText)
                 .textFieldStyle(.plain)
+                .autocorrectionDisabled()
                 .font(Font(LayoutEngine.font(for: depth)))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 10)
