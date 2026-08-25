@@ -374,6 +374,23 @@ do {
     vm4.autosaveNow()
     check(vm4.lastSavedAt != nil, "autosave stamps the time")
     check(vm4.dirty == false, "autosave clears the dirty flag")
+
+    // v19.0: SVG export visual parity with NodeView
+    var rich = MindDocument(title: "R", root: MindNode(text: "Root", children: [
+        MindNode(text: "L1", note: "有備註", marked: true, colorTag: "red", url: "https://example.com",
+                 children: [MindNode(text: "L2")]),
+    ]))
+    let svgRich = MapExporter.svg(rich)
+    check(svgRich.contains("fill=\"#2e3b4f\""), "svg root uses navy fill")
+    check(svgRich.contains("stroke=\"none\"") || svgRich.contains("stroke=\"#2e3b4f\""), "root rect has stroke attr")
+    check(svgRich.contains(">★</text>"), "svg draws star for marked nodes")
+    check(svgRich.contains("#f5c542"), "svg star is gold")
+    check(svgRich.contains("備註：有備註"), "svg embeds note as tooltip title")
+    check(svgRich.contains("<a href=\"https://example.com\">"), "svg wraps linked node in anchor")
+    // Red color tag is defined as Color(hex: 0xE05252) in Theme.colorTags.
+    check(svgRich.lowercased().contains("#e05252"), "svg renders color-tag bar")
+    // depth>=2 nodes are outlined (white fill + colored stroke)
+    check(svgRich.contains("fill=\"#ffffff\" stroke=\"#"), "svg deep nodes are white with colored outline")
     }
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")

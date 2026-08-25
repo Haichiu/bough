@@ -128,14 +128,31 @@ public enum MapExporter {
         }
         connect(document.root)
 
-        // Nodes.
+        // Nodes (visual language matches NodeView: root navy, level-1 filled,
+        // deeper levels outlined; color-tag bar, star mark, note tooltip, link).
         for l in layouts.values.sorted(by: { $0.depth < $1.depth }) {
             guard let node = document.root.find(l.id) else { continue }
             let f = l.frame
             let color = hex(theme.color(forIndex: l.colorIndex))
-            parts.append("<rect x=\"\(f.minX)\" y=\"\(f.minY)\" width=\"\(f.width)\" height=\"\(f.height)\" rx=\"9\" fill=\"\(color)\" stroke=\"\(color)\" stroke-width=\"1.5\"/>")
+            let fill = l.depth >= 2 ? "#ffffff" : (l.depth == 0 ? "#2e3b4f" : color)
+            let stroke = l.depth >= 2 ? color : "none"
+            var rect = "<rect x=\"\(f.minX)\" y=\"\(f.minY)\" width=\"\(f.width)\" height=\"\(f.height)\" rx=\"9\" fill=\"\(fill)\" stroke=\"\(stroke)\" stroke-width=\"1.5\"/>"
+            if !node.note.isEmpty {
+                rect += "<title>備註：\(esc(node.note))</title>"
+            }
+            if let url = node.url, !url.isEmpty {
+                parts.append("<a href=\"\(esc(url))\">\(rect)</a>")
+            } else {
+                parts.append(rect)
+            }
+            if let key = node.colorTag, let tag = Theme.colorTag(named: key) {
+                parts.append("<rect x=\"\(f.minX + 3)\" y=\"\(f.minY + 7)\" width=\"4\" height=\"\(max(f.height - 14, 0))\" rx=\"1.5\" fill=\"\(hex(tag))\"/>")
+            }
+            if node.marked {
+                parts.append("<text x=\"\(f.minX + 6)\" y=\"\(f.minY + 14)\" font-size=\"10\" fill=\"#f5c542\">★</text>")
+            }
             let fontSize: CGFloat = l.depth == 0 ? 17 : (l.depth == 1 ? 14 : 12)
-            let textColor = l.depth == 0 ? "#ffffff" : "#1a1a1a"
+            let textColor = l.depth <= 1 ? "#ffffff" : "#1a1a1a"
             parts.append("<text x=\"\(f.midX)\" y=\"\(f.midY + fontSize * 0.35)\" font-family=\"-apple-system, PingFang TC, sans-serif\" font-size=\"\(fontSize)\" fill=\"\(textColor)\" text-anchor=\"middle\">\(esc(node.text))</text>")
         }
 
