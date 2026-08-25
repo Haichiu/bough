@@ -730,12 +730,10 @@ public struct ContentView: View {
                     ("⌘⇧C", "複製為 Markdown 到剪貼簿"),
                     ("⌘⌥D", "建立目前分頁副本"),
                     ("⌘⇧V", "貼上剪貼簿條列建節點"),
-                    ("⌘方向鍵", "微調節點位置"),
-                    ("⌥拖曳", "自由放置節點"),
-                    ("⌃Tab", "切換分頁"),
-                    ("⌘⇧T", "重新開啟關閉的分頁"),
                     ("⌘⇧F", "專注模式"),
-                    ("⌘⌥1-4", "切換版面"),
+                    ("⌘⌥1-4 / ⌘⌥L", "切換版面（指定／循環）"),
+                    ("⌘P", "列印"),
+                    ("⌘,", "偏好設定")
                 ], id: \.0) { pair in
                     GridRow {
                         Text(pair.0).font(.body.bold()).frame(width: 110, alignment: .trailing)
@@ -744,6 +742,8 @@ public struct ContentView: View {
                 }
             }
             Text("小技巧：所有變更都會自動保存；每個分頁都是獨立的一份圖。")
+                .font(.callout).foregroundStyle(.secondary)
+            Text("更多功能：顯示選單的「簡報模式」可逐層揭開地圖上台報告；點關聯線中間的圓點可在檢閱器加標籤；檔案選單支援 Markdown、OPML、FreeMind、PNG、PDF、SVG 進出。")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
                 Spacer()
