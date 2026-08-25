@@ -11,6 +11,7 @@ struct NodeView: View {
     var isFresh: Bool = false
     var isDragging: Bool = false
     var dragOffset: CGSize? = nil
+    var hasURL: Bool = false
     var isSearchHit: Bool = false
     var colorTag: String? = nil
     var dimmed: Bool = false
@@ -44,6 +45,7 @@ struct NodeView: View {
         .overlay(alignment: .leading) { markedBadge }
         .overlay(alignment: .leading) { colorBar }
         .overlay(alignment: .topLeading) { noteBadge }
+        .overlay(alignment: .topTrailing) { urlBadge }
         .accessibilityLabel(node.displayText + (node.note.isEmpty ? "" : "，有備註"))
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .help(node.note.isEmpty ? "" : "備註：\(node.note)")
@@ -189,6 +191,16 @@ struct NodeView: View {
 
     private var hiddenCount: Int {
         node.descendantIDs().count
+    }
+
+    @ViewBuilder
+    private var urlBadge: some View {
+        if hasURL {
+            Image(systemName: "link.circle.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(Color(hex: 0x4A90D9))
+                .offset(x: -6, y: -6)
+        }
     }
 
     @ViewBuilder
