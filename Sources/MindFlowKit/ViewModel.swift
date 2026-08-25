@@ -79,6 +79,7 @@ public final class MindMapViewModel: ObservableObject {
         searchResults = []
         searchIndex = 0
         showSearch = false
+        zenMode = false
         stopEditing()
     }
 
