@@ -201,10 +201,20 @@ struct MapCanvasView: View {
                 Button("從選取主題建立關聯線") { vm.addLink(from: selected, to: item.node.id) }
             }
             Button(item.node.marked ? "移除星星" : "加上星星") { vm.toggleMark(id: item.node.id) }
+            Menu("色標") {
+                ForEach(Theme.colorTags, id: \.key) { tag in
+                    Button(tag.name) { vm.setColorTag(id: item.node.id, tag: tag.key) }
+                }
+                Divider()
+                Button("清除色標") { vm.setColorTag(id: item.node.id, tag: nil) }
+            }
+            if let url = item.node.url, !url.isEmpty {
+                Button("在瀏覽器開啟連結") { vm.openURL(id: item.node.id) }
+            }
             Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: item.node.id) }
             if item.node.id != vm.document.root.id {
                 Button("插入父主題") { vm.insertParent(id: item.node.id) }
-            Button("收合同類兄弟") { vm.collapseOtherSiblings(id: item.node.id) }
+                Button("收合同類兄弟") { vm.collapseOtherSiblings(id: item.node.id) }
             }
             Divider()
             if !item.node.children.isEmpty {
@@ -216,8 +226,6 @@ struct MapCanvasView: View {
             } else {
                 Button("取消聚焦") { vm.focusBranchID = nil }
             }
-            Divider()
-            Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: item.node.id) }
             Divider()
             Button("刪除", role: .destructive) { vm.delete(id: item.node.id) }
         }

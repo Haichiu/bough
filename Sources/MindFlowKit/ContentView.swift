@@ -345,6 +345,44 @@ public struct ContentView: View {
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
+    /// Web-link field + open button for the selected node.
+    private func nodeLinkSection(id: UUID) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "link").font(.caption).foregroundStyle(.secondary)
+            TextField("網址（可選）", text: Binding(
+                get: { vm.document.root.find(id)?.url ?? "" },
+                set: { vm.setNodeURL(id: id, to: $0) }))
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .accessibilityLabel("節點網址輸入框")
+            if let url = vm.document.root.find(id)?.url, !url.isEmpty {
+                Button { vm.openURL(id: id) } label: { Image(systemName: "arrow.up.forward.app") }
+                    .buttonStyle(.borderless)
+                    .help("在預設瀏覽器開啟")
+            }
+        }
+    }
+
+    /// Six-color tag picker for the selected node.
+    private func nodeColorTagSection(id: UUID) -> some View {
+        HStack(spacing: 6) {
+            Text("色標").font(.caption).foregroundStyle(.secondary)
+            ForEach(Theme.colorTags, id: \.key) { tag in
+                Circle()
+                    .fill(tag.color)
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().stroke(
+                        vm.document.root.find(id)?.colorTag == tag.key ? Color.primary : Color.clear,
+                        lineWidth: 2))
+                    .onTapGesture { vm.setColorTag(id: id, tag: tag.key) }
+                    .help(tag.name)
+                    .accessibilityLabel("色標 \(tag.name)")
+            }
+            Button("清除") { vm.setColorTag(id: id, tag: nil) }
+                .buttonStyle(.borderless)
+                .font(.caption)
+        }
+    }
     @ViewBuilder
     private var noteInspector: some View {
         if let linkID = vm.selectedLinkID,
@@ -377,6 +415,9 @@ public struct ContentView: View {
                         Text("備註…").foregroundStyle(.secondary).padding(6).allowsHitTesting(false)
                     }
                 }
+            Divider()
+            nodeLinkSection(id: id)
+            nodeColorTagSection(id: id)
             let s = vm.document.stats()
             Text("\(s.nodeCount) 個主題 · 最深 \(s.maxDepth) 層 · ★ \(s.markedCount) · 備註 \(s.noteCount) · 連結 \(s.linkCount)")
                 .font(.caption).foregroundStyle(.secondary)

@@ -935,6 +935,15 @@ public final class MindMapViewModel: ObservableObject {
         notify(tag == nil ? "已清除顏色標記" : "已加上顏色標記")
     }
 
+    /// Sets (or clears with an empty string) the node's web link.
+    public func setNodeURL(id: UUID, to urlString: String) {
+        guard document.root.contains(id) else { return }
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        mutate { $0.root.update(id) { node in
+            node.url = trimmed.isEmpty ? nil : trimmed
+        } }
+    }
+
     /// Wraps the node in a brand-new parent at the same position.
     @discardableResult
     public func insertParent(id: UUID) -> UUID? {
