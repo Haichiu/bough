@@ -1098,6 +1098,31 @@ public final class MindMapViewModel: ObservableObject {
         return summary.id
     }
 
+    /// Creates a summary spanning ALL currently batch-selected siblings.
+    /// All members must share the same parent; returns nil otherwise.
+    @discardableResult
+    public func addSummaryForBatch() -> UUID? {
+        var parentRef: MindNode?
+        for id in batchSelection {
+            guard let p = document.root.parent(of: id) else { return nil }
+            if let existing = parentRef {
+                guard existing.id == p.id else {
+                    notify("批次中的主題必須在同一層")
+                    return nil
+                }
+            } else {
+                parentRef = p
+            }
+        }
+        guard let parent = parentRef, batchSelection.count >= 2 else { return nil }
+        let sorted = batchSelection.sorted { a, b in
+            let ia = parent.children.firstIndex(where: { $0.id == a }) ?? .max
+            let ib = parent.children.firstIndex(where: { $0.id == b }) ?? .max
+            return ia < ib
+        }
+        return addSummary(parentID: parent.id, startID: sorted.first!, endID: sorted.last!)
+    }
+
     /// Convenience: brackets this node together with its next sibling.
     @discardableResult
     public func addSummaryWithNextSibling(of id: UUID) -> UUID? {
