@@ -125,6 +125,9 @@ struct MindFlowApp: App {
                 Button(vm.zenMode ? "離開專注模式" : "專注模式") { vm.toggleZen() }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
                 Divider()
+                Button(vm.showOutlineNumbers ? "隱藏大綱編號" : "大綱顯示編號") {
+                    vm.showOutlineNumbers.toggle()
+                }
                 Button(vm.presentationActive ? "結束簡報" : "簡報模式（逐層揭開）") {
                     if vm.presentationActive { vm.exitPresentation() } else { vm.enterPresentation() }
                 }

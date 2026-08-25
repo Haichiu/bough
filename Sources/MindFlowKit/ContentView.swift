@@ -487,6 +487,13 @@ public struct ContentView: View {
                     }
                     .onExitCommand { outlineEditingID = nil }
             } else {
+                if vm.showOutlineNumbers, let n = row.number {
+                    Text(n)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 24, alignment: .trailing)
+                        .help("大綱編號 \(n)")
+                }
                 Text(row.text.isEmpty ? "（空白）" : row.text)
                     .font(row.isRoot ? .body.bold() : .body)
                     .foregroundStyle(row.text.isEmpty ? Color.secondary : Color.primary)

@@ -456,6 +456,24 @@ do {
     vm6.undo()
     check(vm6.document.root.children[1].children.isEmpty, "undo after presentation skips presentation steps")
     check(vm6.document.root.text == "Root" && vm6.document.root.children.count == 2, "undo lands on pre-presentation document")
+
+    // v19.4: outline numbering
+    var numDoc = MindDocument(title: "N", root: MindNode(text: "Root", children: [
+        MindNode(text: "A", children: [MindNode(text: "A1"), MindNode(text: "A2", children: [MindNode(text: "A2a")])]),
+        MindNode(text: "B"),
+    ]))
+    let numbered = OutlineFlattener.flatten(numDoc.root)
+    let byID = Dictionary(uniqueKeysWithValues: numbered.map { ($0.id, $0) })
+    check(numbered[0].number == nil, "outline root has no number")
+    check(byID[numDoc.root.children[0].id]?.number == "1", "first branch is 1")
+    check(byID[numDoc.root.children[1].id]?.number == "2", "second branch is 2")
+    check(byID[numDoc.root.children[0].children[0].id]?.number == "1.1", "grandchild numbering nests (1.1)")
+    check(byID[numDoc.root.children[0].children[1].id]?.number == "1.2", "sibling numbering increments (1.2)")
+    // Collapsed branches skip their descendants entirely
+    numDoc.root.children[0].collapsed = true
+    let collapsedRows = OutlineFlattener.flatten(numDoc.root)
+    check(!collapsedRows.contains { $0.number == "1.1" }, "collapsed branch hides its numbers")
+    check(collapsedRows.count == 3, "collapsed flatten keeps root + two branches")
     } else {
         check(false, "foreign freemind parses")
     }

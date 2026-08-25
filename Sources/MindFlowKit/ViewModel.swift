@@ -413,6 +413,14 @@ public final class MindMapViewModel: ObservableObject {
     /// Undo entries made before entering presentation; steps inside are non-undoable.
     private var undoBaselineCount: Int?
 
+    /// Shows hierarchical numbers ("2.1") in the outline view. Persisted.
+    @Published public var showOutlineNumbers: Bool = UserDefaults.standard.bool(forKey: "showOutlineNumbers") {
+        didSet {
+            guard oldValue != showOutlineNumbers else { return }
+            UserDefaults.standard.set(showOutlineNumbers, forKey: "showOutlineNumbers")
+        }
+    }
+
     /// Enters presentation mode: shows only the first layer, ready to reveal more.
     public func enterPresentation() {
         guard !presentationActive else { return }

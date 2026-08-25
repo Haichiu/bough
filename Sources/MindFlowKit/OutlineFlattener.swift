@@ -10,6 +10,8 @@ public struct OutlineRow: Equatable, Identifiable {
     public let hasChildren: Bool
     public let collapsed: Bool
     public let colorTag: String?
+    /// Hierarchical outline number like "2.1" (nil for the root topic).
+    public let number: String?
 }
 
 /// Flattens the node tree into ordered rows for the outline view,
@@ -17,7 +19,8 @@ public struct OutlineRow: Equatable, Identifiable {
 public enum OutlineFlattener {
     public static func flatten(_ root: MindNode) -> [OutlineRow] {
         var rows: [OutlineRow] = []
-        func walk(_ node: MindNode, depth: Int, isRoot: Bool) {
+        func walk(_ node: MindNode, depth: Int, isRoot: Bool, path: [Int]) {
+            let number: String? = isRoot ? nil : path.map(String.init).joined(separator: ".")
             rows.append(OutlineRow(id: node.id,
                                    text: node.text,
                                    marked: node.marked,
@@ -26,13 +29,14 @@ public enum OutlineFlattener {
                                    isRoot: isRoot,
                                    hasChildren: !node.children.isEmpty,
                                    collapsed: node.collapsed,
-                                   colorTag: node.colorTag))
+                                   colorTag: node.colorTag,
+                                   number: number))
             guard !node.collapsed else { return }
-            for child in node.children {
-                walk(child, depth: depth + 1, isRoot: false)
+            for (index, child) in node.children.enumerated() {
+                walk(child, depth: depth + 1, isRoot: false, path: path + [index + 1])
             }
         }
-        walk(root, depth: 0, isRoot: true)
+        walk(root, depth: 0, isRoot: true, path: [])
         return rows
     }
 }
