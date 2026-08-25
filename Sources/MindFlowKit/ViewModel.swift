@@ -596,10 +596,36 @@ public final class MindMapViewModel: ObservableObject {
     public func pasteAsNodes() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            // No text — but an image on the clipboard attaches to the selected node.
+            if let img = NSPasteboard.general.data(forType: .tiff) {
+                attachClipboardImage(img)
+                return
+            }
             notify("剪貼簿是空的")
             return
         }
         insertTextAsNodes(text, sourceLabel: "剪貼簿")
+    }
+
+    /// Encodes clipboard TIFF data as a PNG data URL (with a size guard).
+    private func attachClipboardImage(_ tiffData: Data) {
+        guard idForImageAttachment != nil else { return }
+        guard let rep = NSBitmapImageRep(data: tiffData),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            notify("無法讀取剪貼簿圖片")
+            return
+        }
+        guard png.count <= 2_800_000 else {
+            notify("這張圖太大了（上限約 2 MB），請先縮小再試")
+            return
+        }
+        let dataURL = "data:image/png;base64," + png.base64EncodedString()
+        setNodeImage(id: idForImageAttachment!, to: dataURL)
+    }
+
+    /// Target node for clipboard image attachment: current selection or root.
+    private var idForImageAttachment: UUID? {
+        selection ?? document.root.id
     }
 
     /// Parses plain text / Markdown outline and appends it as nodes under
@@ -1058,6 +1084,21 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
+    /// Attaches (or clears) a node picture given as a data URL.
+    /// Guards against oversized payloads so .mindmap files stay shareable.
+    public func setNodeImage(id: UUID, to dataURL: String?) {
+        guard document.root.contains(id) else { return }
+        if let payload = dataURL, payload.count > 2_800_000 {
+            notify("這張圖太大了（上限約 2 MB），請先縮小再試")
+            return
+        }
+        mutate { $0.root.update(id) { node in
+            node.image = (dataURL?.isEmpty == false) ? dataURL : nil
+        } }
+        if dataURL?.isEmpty == false {
+            notify("已附上圖片 ✓")
+        }
+    }
     /// Sets (or clears with an empty string) the node's web link.
     public func setNodeURL(id: UUID, to urlString: String) {
         guard document.root.contains(id) else { return }

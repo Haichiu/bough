@@ -649,6 +649,8 @@ do {
     let mdNoSum = MapExporter.markdown(MindDocument(title: "N", root: MindNode(text: "R", children: [MindNode(text: "x")])))
     check(!mdNoSum.contains("↳ 概要"), "documents without summaries stay clean")
 
+
+
     // v22.1: search covers summary text
     let vmU = MindMapViewModel()
     vmU.document = MindDocument(title: "Q", root: MindNode(text: "Root", children: [
@@ -693,6 +695,21 @@ do {
     // layout produces frames including the image-bearing node without crashing
     let imgLayouts = LayoutEngine.layout(root: imgDoc.root, direction: .logicRight)
     check(imgLayouts[imgDoc.root.children[0].id] != nil, "layout handles image nodes")
+    // v23.1: guards + SVG embedding on a fresh VM
+    let vmI = MindMapViewModel()
+    vmI.document = MindDocument(title: "IG", root: MindNode(text: "Root", children: [MindNode(text: "N")]))
+    vmI.selection = nil
+    let hugePayload = "data:image/png;base64," + String(repeating: "A", count: 2_900_000)
+    vmI.setNodeImage(id: vmI.document.root.children[0].id, to: hugePayload)
+    check(vmI.document.root.children[0].image == nil, "oversized image rejected")
+    vmI.setNodeImage(id: vmI.document.root.children[0].id, to: tinyPNG)
+    check(vmI.document.root.children[0].image == tinyPNG, "small image accepted")
+    vmI.setNodeImage(id: vmI.document.root.children[0].id, to: "")
+    check(vmI.document.root.children[0].image == nil, "empty string clears the image")
+    let svgImgDoc = MindDocument(title: "SI", root: MindNode(text: "R", children: [MindNode(text: "有圖", image: "data:image/png;base64," + tinyPNG)]))
+    let svgWithImg = MapExporter.svg(svgImgDoc)
+    check(svgWithImg.contains("<image href=\"data:image/png;base64,"), "svg embeds attached image as data URL")
+    check(vmI.document.root.children[0].image == nil, "empty string clears the image")
 
 
     // v20.5: URL normalization for openURL

@@ -436,7 +436,11 @@ struct MapCanvasView: View {
             origin: origin,
             setActive: { textDropActive = $0 },
             hitTest: { point, draggedID in self.hitTest(point: point, draggedID: draggedID, layouts: layouts) },
-            insert: { text, parentID in vm.insertTextAsNodes(text, sourceLabel: "拖入的文字", parentID: parentID) }
+            insert: { text, parentID in vm.insertTextAsNodes(text, sourceLabel: "拖入的文字", parentID: parentID) },
+            attach: { dataURL, targetID in
+                let target = targetID ?? vm.selection ?? vm.document.root.id
+                vm.setNodeImage(id: target, to: dataURL)
+            }
         )
     }
 /// Drop delegate for plain-text drops on the map canvas. Uses DropInfo so the
@@ -448,6 +452,7 @@ struct CanvasTextDropDelegate: DropDelegate {
     let setActive: (Bool) -> Void
     let hitTest: (CGPoint, UUID) -> UUID?
     let insert: (String, UUID?) -> Void
+    let attach: (String, UUID?) -> Void
 
     func dropEntered(info: DropInfo) { setActive(true) }
     func dropExited(info: DropInfo) { setActive(false) }
@@ -455,17 +460,35 @@ struct CanvasTextDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         setActive(false)
-        guard let provider = info.itemProviders(for: [UTType.text]).first else { return false }
-        // Map-canvas coordinates: positions are offset by `origin` inside the framed layer.
         let mapPoint = CGPoint(x: info.location.x - origin.x, y: info.location.y - origin.y)
         let hoveredID = hitTest(mapPoint, UUID())
-        _ = provider.loadObject(ofClass: NSString.self) { text, _ in
-            guard let text = text as? String else { return }
-            DispatchQueue.main.async {
-                insert(text, hoveredID)
+
+        // Image files/payloads attach to the hovered node.
+        if let imageProvider = info.itemProviders(for: [UTType.image]).first {
+            _ = imageProvider.loadObject(ofClass: NSImage.self) { obj, _ in
+                guard let image = obj as? NSImage,
+                      let tiff = image.tiffRepresentation,
+                      let rep = NSBitmapImageRep(data: tiff),
+                      let png = rep.representation(using: .png, properties: [:]) else { return }
+                let dataURL = "data:image/png;base64," + png.base64EncodedString()
+                DispatchQueue.main.async {
+                    attach(dataURL, hoveredID)
+                }
             }
+            return true
         }
-        return true
+
+        // Otherwise treat the payload as text and grow a subtree.
+        if let provider = info.itemProviders(for: [UTType.text]).first {
+            _ = provider.loadObject(ofClass: NSString.self) { text, _ in
+                guard let text = text as? String else { return }
+                DispatchQueue.main.async {
+                    attach(text, hoveredID)
+                }
+            }
+            return true
+        }
+        return false
     }
 }
     private func hitTest(point: CGPoint, draggedID: UUID, layouts: [UUID: NodeLayout]) -> UUID? {

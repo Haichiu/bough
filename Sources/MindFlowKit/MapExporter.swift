@@ -167,6 +167,11 @@ public enum MapExporter {
             if let key = node.colorTag, let tag = Theme.colorTag(named: key) {
                 parts.append("<rect x=\"\(f.minX + 3)\" y=\"\(f.minY + 7)\" width=\"4\" height=\"\(max(f.height - 14, 0))\" rx=\"1.5\" fill=\"\(hex(tag))\"/>")
             }
+            if let imageDataURL = node.image, !imageDataURL.isEmpty {
+                // Embed the attached picture in the upper part of the node frame.
+                let imgH = LayoutEngine.imageDisplayHeight
+                parts.append("<image href=\"\(esc(imageDataURL))\" x=\"\(f.minX + 7)\" y=\"\(f.minY + 6)\" width=\"\(max(f.width - 14, 1))\" height=\"\(max(imgH - 10, 1))\" preserveAspectRatio=\"xMidYMid meet\"/>")
+            }
             if node.marked {
                 parts.append("<text x=\"\(f.minX + 6)\" y=\"\(f.minY + 14)\" font-size=\"10\" fill=\"#f5c542\">★</text>")
             }
