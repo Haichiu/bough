@@ -1070,6 +1070,20 @@ public final class MindMapViewModel: ObservableObject {
         notify("已匯入 OPML ✓")
     }
 
+    public func importFreeMind() {
+        guard let (text, url) = FileIO.readText() else { return }
+        guard var imported = MapImporter.freemind(text) else {
+            notify("讀不出這個檔案，請確認是 FreeMind (.mm) 格式")
+            return
+        }
+        imported.title = url.deletingPathExtension().lastPathComponent
+        mutate { $0 = imported }
+        filePath = nil
+        selection = imported.root.id
+        dirty = true
+        notify("已匯入 FreeMind ✓")
+    }
+
     public func setTheme(_ id: String) {
         mutate { $0.themeName = id }
     }

@@ -11,6 +11,67 @@ public enum MapImporter {
         guard parser.parse(), let root = delegate.root else { return nil }
         return MindDocument(title: delegate.title ?? root.text, root: root)
     }
+
+    /// Imports FreeMind / XMind `.mm` files so users can migrate their maps.
+    public static func freemind(_ xml: String) -> MindDocument? {
+        let parser = XMLParser(data: Data(xml.utf8))
+        let delegate = FreeMindParserDelegate()
+        parser.delegate = delegate
+        guard parser.parse(), let root = delegate.root else { return nil }
+        return MindDocument(title: delegate.title ?? root.text, root: root)
+    }
+}
+
+private final class FreeMindParserDelegate: NSObject, XMLParserDelegate {
+    private final class Node {
+        var text = ""
+        var collapsed = false
+        var children: [Node] = []
+    }
+
+    private var stack: [Node] = []
+    private var rootNode: Node?
+    private(set) var title: String?
+    private var inMapName = false
+    private var nameBuffer = ""
+
+    var root: MindNode? {
+        rootNode.map(convert)
+    }
+
+    private func convert(_ node: Node) -> MindNode {
+        MindNode(text: node.text, collapsed: node.collapsed, children: node.children.map(convert))
+    }
+
+    func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
+                qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+        switch name.lowercased() {
+        case "node":
+            let node = Node()
+            // FreeMind stores the label in the TEXT attribute; some exporters use TEXT="" with richcontent.
+            func attr(_ key: String) -> String {
+                attributeDict.first(where: { $0.key.caseInsensitiveCompare(key) == .orderedSame })?.value ?? ""
+            }
+            node.text = attr("text")
+            node.collapsed = attr("folded").lowercased() == "true"
+            if let parent = stack.last {
+                parent.children.append(node)
+            } else {
+                rootNode = node
+            }
+            stack.append(node)
+        case "map":
+            if let name = attributeDict["name"], !name.isEmpty { title = name }
+        default:
+            break
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName qName: String?) {
+        if name.lowercased() == "node" && !stack.isEmpty {
+            stack.removeLast()
+        }
+    }
 }
 
 private final class OPMLParserDelegate: NSObject, XMLParserDelegate {

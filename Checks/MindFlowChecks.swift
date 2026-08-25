@@ -234,6 +234,30 @@ do {
     let opml = MapExporter.opml(doc)
     let back = MapImporter.opml(opml)
     check(back?.root.text == "R", "opml import restores root")
+
+    // v17.1: FreeMind (.mm) import
+    let mm = """
+    <map version="1.0.1">
+      <node TEXT="Root Topic">
+        <node TEXT="Child A" FOLDED="true">
+          <node TEXT="Grandchild 1"/>
+          <node TEXT="Grandchild &lt;2&gt;"/>
+        </node>
+        <node TEXT="Child B"/>
+      </node>
+    </map>
+    """
+    if let fmDoc = MapImporter.freemind(mm) {
+        check(fmDoc.root.text == "Root Topic", "freemind import reads TEXT attribute")
+        check(fmDoc.root.children.count == 2, "freemind nests children")
+        check(fmDoc.root.children[0].collapsed, "freemind maps FOLDED to collapsed")
+        check(fmDoc.root.children[0].children.count == 2, "freemind reads grandchildren")
+        check(fmDoc.root.children[0].children[1].text == "Grandchild <2>", "freemind unescapes xml entities")
+        check(fmDoc.root.children[1].text == "Child B" && !fmDoc.root.children[1].collapsed, "freemind defaults unfolded")
+    } else {
+        check(false, "freemind parses sample map")
+    }
+    check(MapImporter.freemind("not xml at all") == nil || MapImporter.freemind("<map></map>") != nil, "freemind handles junk input gracefully")
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")
     check(back?.root.children[1].children.map(\.text) == ["C"], "opml import restores depth")

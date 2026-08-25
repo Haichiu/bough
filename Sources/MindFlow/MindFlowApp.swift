@@ -78,6 +78,7 @@ struct MindFlowApp: App {
                 Button("匯入 Markdown…") { vm.importMarkdown() }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                 Button("匯入 OPML…") { vm.importOPML() }
+                Button("匯入 FreeMind…") { vm.importFreeMind() }
                 Button("儲存…") { vm.save() }
                     .keyboardShortcut("s")
                 Divider()
