@@ -54,41 +54,11 @@ struct MapCanvasView: View {
             ZStack {
                 backgroundLayer
 
-                ZStack {
-                    connectionsCanvas(items: items, layouts: layouts, theme: theme,
-                                      origin: origin, focusIDs: focusIDs)
-                    linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs)
-                    dragIndicator(origin: origin)
-                    reorderIndicator(origin: origin)
-                    ForEach(items) { item in
-                        nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
-                                 layouts: layouts, geoSize: geo.size, bounds: bounds,
-                                 isSearchHit: vm.searchResults.contains(item.node.id),
-                                 dimmed: !focusIDs.isEmpty && !focusIDs.contains(item.node.id),
-                                 colorTag: item.node.colorTag,
-                                 onToggleCollapse: item.node.collapsed ? { vm.toggleCollapse(id: item.node.id) } : nil)
-                    }
-                }
-                .frame(width: bounds.width, height: bounds.height)
-                .scaleEffect(scale)
-                .offset(pan)
+                mapContent(items: items, layouts: layouts, theme: theme, bounds: bounds,
+                           origin: origin, geoSize: geo.size, dropTarget: dropTarget, focusIDs: focusIDs)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
             .overlay(alignment: .bottomTrailing) { zoomControls }
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.accentColor.opacity(textDropActive ? 0.6 : 0), lineWidth: 3)
-            )
-            .onDrop(of: [UTType.text], isTargeted: $textDropActive) { providers in
-                guard let provider = providers.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else { return false }
-                _ = provider.loadObject(ofClass: NSString.self) { text, _ in
-                    guard let text = text as? String else { return }
-                    DispatchQueue.main.async {
-                        vm.insertTextAsNodes(text, sourceLabel: "拖入的文字")
-                    }
-                }
-                return true
-            }
+            .overlay { dropHighlightBorder }
             .animation(reduceMotion ? nil : .spring(response: 0.3), value: vm.statusMessage)
             .onAppear {
                 canvasSize = geo.size
@@ -374,6 +344,75 @@ struct MapCanvasView: View {
         return items
     }
 
+    /// Glows around the canvas while text is being dragged over it.
+    private var dropHighlightBorder: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .stroke(Color.accentColor.opacity(textDropActive ? 0.6 : 0), lineWidth: 3)
+    }
+
+    /// The scaled, pannable map layer. Kept as its own view-building method
+    /// so `body` stays within the type-checker complexity budget.
+    private func mapContent(items: [NodeItem], layouts: [UUID: NodeLayout], theme: Theme,
+                            bounds: CGRect, origin: CGPoint, geoSize: CGSize, dropTarget: UUID?,
+                            focusIDs: Set<UUID>) -> some View {
+        ZStack {
+            connectionsCanvas(items: items, layouts: layouts, theme: theme,
+                              origin: origin, focusIDs: focusIDs)
+            linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs)
+            dragIndicator(origin: origin)
+            reorderIndicator(origin: origin)
+            ForEach(items) { item in
+                nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
+                         layouts: layouts, geoSize: geoSize, bounds: bounds,
+                         isSearchHit: vm.searchResults.contains(item.node.id),
+                         dimmed: !focusIDs.isEmpty && !focusIDs.contains(item.node.id),
+                         colorTag: item.node.colorTag,
+                         onToggleCollapse: item.node.collapsed ? { vm.toggleCollapse(id: item.node.id) } : nil)
+            }
+        }
+        .frame(width: bounds.width, height: bounds.height)
+        .onDrop(of: [UTType.text], delegate: textDropDelegate(layouts: layouts, origin: origin))
+        .scaleEffect(scale)
+        .offset(pan)
+    }
+    private func textDropDelegate(layouts: [UUID: NodeLayout], origin: CGPoint) -> CanvasTextDropDelegate {
+        CanvasTextDropDelegate(
+            layouts: layouts,
+            origin: origin,
+            setActive: { textDropActive = $0 },
+            hitTest: { point, draggedID in self.hitTest(point: point, draggedID: draggedID, layouts: layouts) },
+            insert: { text, parentID in vm.insertTextAsNodes(text, sourceLabel: "拖入的文字", parentID: parentID) }
+        )
+    }
+/// Drop delegate for plain-text drops on the map canvas. Uses DropInfo so the
+/// landing position can be hit-tested against node layouts (the closure-based
+/// onDrop overload does not expose a location on this SDK).
+struct CanvasTextDropDelegate: DropDelegate {
+    let layouts: [UUID: NodeLayout]
+    let origin: CGPoint
+    let setActive: (Bool) -> Void
+    let hitTest: (CGPoint, UUID) -> UUID?
+    let insert: (String, UUID?) -> Void
+
+    func dropEntered(info: DropInfo) { setActive(true) }
+    func dropExited(info: DropInfo) { setActive(false) }
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .copy) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        setActive(false)
+        guard let provider = info.itemProviders(for: [UTType.text]).first else { return false }
+        // Map-canvas coordinates: positions are offset by `origin` inside the framed layer.
+        let mapPoint = CGPoint(x: info.location.x - origin.x, y: info.location.y - origin.y)
+        let hoveredID = hitTest(mapPoint, UUID())
+        _ = provider.loadObject(ofClass: NSString.self) { text, _ in
+            guard let text = text as? String else { return }
+            DispatchQueue.main.async {
+                insert(text, hoveredID)
+            }
+        }
+        return true
+    }
+}
     private func hitTest(point: CGPoint, draggedID: UUID, layouts: [UUID: NodeLayout]) -> UUID? {
         let excluded = vm.document.root.find(draggedID)?.descendantIDs() ?? []
         var best: (UUID, Int)?

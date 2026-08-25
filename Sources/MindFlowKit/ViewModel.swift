@@ -573,8 +573,9 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     /// Parses plain text / Markdown outline and appends it as nodes under
-    /// the current selection (or root). Used by ⌘⇧V paste and canvas drop.
-    public func insertTextAsNodes(_ rawText: String, sourceLabel: String) {
+    /// `parentID` (falling back to the current selection, then root).
+    /// Used by ⌘⇧V paste and canvas drop.
+    public func insertTextAsNodes(_ rawText: String, sourceLabel: String, parentID: UUID? = nil) {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
             notify("沒有可加入的文字")
@@ -584,8 +585,8 @@ public final class MindMapViewModel: ObservableObject {
             notify("無法解析\(sourceLabel)內容")
             return
         }
-        // Attach imported tree under the selected node (or root).
-        let parentID = selection ?? document.root.id
+        // Attach imported tree under the given node (or selection/root).
+        let parentID = parentID ?? selection ?? document.root.id
         let importedChildren = imported.root.children
         mutate { doc in
             doc.root.update(parentID) { node in
