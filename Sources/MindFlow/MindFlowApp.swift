@@ -145,6 +145,11 @@ struct MindFlowApp: App {
                 }
                 .keyboardShortcut("l", modifiers: [.command])
                 Divider()
+                Button("收合同類兄弟") {
+                    if let selection = vm.selection { vm.collapseOtherSiblings(id: selection) }
+                }
+                .keyboardShortcut("c", modifiers: [.option, .command])
+                Divider()
                 Button("加入子主題") { vm.addChild(to: vm.selection ?? vm.document.root.id) }
                     .keyboardShortcut(KeyEquivalent.tab, modifiers: [])
                 Button("加入兄弟主題") {
