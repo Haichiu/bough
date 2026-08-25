@@ -563,10 +563,7 @@ struct CanvasTextDropDelegate: DropDelegate {
         if let imageProvider = info.itemProviders(for: [UTType.image]).first {
             _ = imageProvider.loadObject(ofClass: NSImage.self) { obj, _ in
                 guard let image = obj as? NSImage,
-                      let tiff = image.tiffRepresentation,
-                      let rep = NSBitmapImageRep(data: tiff),
-                      let png = rep.representation(using: .png, properties: [:]) else { return }
-                let dataURL = "data:image/png;base64," + png.base64EncodedString()
+                      let dataURL = ImageStore.pngDataURL(from: image, maxBytes: 2_800_000) else { return }
                 DispatchQueue.main.async {
                     attach(dataURL, hoveredID)
                 }

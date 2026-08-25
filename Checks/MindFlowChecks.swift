@@ -1,5 +1,6 @@
-import Foundation
+import AppKit
 import CoreGraphics
+import Foundation
 import MindFlowKit
 
 setvbuf(stdout, nil, _IONBF, 0)
@@ -771,6 +772,22 @@ do {
     let svgImgDoc = MindDocument(title: "SI", root: MindNode(text: "R", children: [MindNode(text: "有圖", image: "data:image/png;base64," + tinyPNG)]))
     let svgWithImg = MapExporter.svg(svgImgDoc)
     check(svgWithImg.contains("<image href=\"data:image/png;base64,"), "svg embeds attached image as data URL")
+
+    // v23.4: auto-downsampling for oversized images
+    let bigImage = NSImage(size: NSSize(width: 3000, height: 3000))
+    bigImage.lockFocus()
+    NSColor.red.setFill()
+    NSRect(origin: .zero, size: bigImage.size).fill()
+    bigImage.unlockFocus()
+    if let url = ImageStore.pngDataURL(from: bigImage, maxBytes: 100_000) {
+        check(url.hasPrefix("data:image/png;base64,"), "oversized image downsamples into a data URL")
+        let b64 = url.dropFirst("data:image/png;base64,".count)
+        check(Data(base64Encoded: String(b64))?.count ?? Int.max <= 100_000, "downsampled payload fits the limit")
+    } else {
+        check(false, "downsampling produced a result")
+    }
+    // Impossible limit returns nil gracefully
+    check(ImageStore.pngDataURL(from: bigImage, maxBytes: 5) == nil, "impossible limit degrades to nil")
     check(vmI.document.root.children[0].image == nil, "empty string clears the image")
 
 

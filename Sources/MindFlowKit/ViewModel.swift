@@ -611,20 +611,15 @@ public final class MindMapViewModel: ObservableObject {
         insertTextAsNodes(text, sourceLabel: "剪貼簿")
     }
 
-    /// Encodes clipboard TIFF data as a PNG data URL (with a size guard).
+    /// Encodes clipboard TIFF data as a PNG data URL, auto-downscaling oversized images.
     private func attachClipboardImage(_ tiffData: Data) {
-        guard idForImageAttachment != nil else { return }
-        guard let rep = NSBitmapImageRep(data: tiffData),
-              let png = rep.representation(using: .png, properties: [:]) else {
-            notify("無法讀取剪貼簿圖片")
-            return
-        }
-        guard png.count <= 2_800_000 else {
+        guard let target = idForImageAttachment else { return }
+        guard let image = NSImage(data: tiffData),
+              let dataURL = ImageStore.pngDataURL(from: image, maxBytes: 2_800_000) else {
             notify("這張圖太大了（上限約 2 MB），請先縮小再試")
             return
         }
-        let dataURL = "data:image/png;base64," + png.base64EncodedString()
-        setNodeImage(id: idForImageAttachment!, to: dataURL)
+        setNodeImage(id: target, to: dataURL)
     }
 
     /// Target node for clipboard image attachment: current selection or root.
