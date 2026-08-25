@@ -10,6 +10,7 @@ public struct OutlineRow: Equatable, Identifiable {
     public let hasChildren: Bool
     public let collapsed: Bool
     public let colorTag: String?
+    public let hasImage: Bool
     /// Hierarchical outline number like "2.1" (nil for the root topic).
     public let number: String?
 }
@@ -30,6 +31,7 @@ public enum OutlineFlattener {
                                    hasChildren: !node.children.isEmpty,
                                    collapsed: node.collapsed,
                                    colorTag: node.colorTag,
+                                   hasImage: node.image != nil,
                                    number: number))
             guard !node.collapsed else { return }
             for (index, child) in node.children.enumerated() {

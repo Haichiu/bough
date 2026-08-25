@@ -571,6 +571,12 @@ public struct ContentView: View {
                     .font(.system(size: 8))
                     .foregroundStyle(.secondary)
             }
+            if row.hasImage {
+                Image(systemName: "photo.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+                    .help("此主題附有圖片")
+            }
             if let key = row.colorTag, let c = Theme.colorTag(named: key) {
                 Circle().fill(c).frame(width: 7, height: 7)
             }
