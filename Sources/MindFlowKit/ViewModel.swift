@@ -421,6 +421,7 @@ public final class MindMapViewModel: ObservableObject {
         presentationDepth = 1
         presentationActive = true
         expandToLevel(1)
+        NotificationCenter.default.post(name: .mindFlowFit, object: nil)
         notify("簡報模式：→ 或空白鍵揭開下一層，Esc 結束")
     }
 
@@ -434,6 +435,7 @@ public final class MindMapViewModel: ObservableObject {
         }
         presentationDepth += 1
         expandToLevel(presentationDepth)
+        NotificationCenter.default.post(name: .mindFlowFit, object: nil)
     }
 
     /// Steps back one layer.
@@ -441,6 +443,7 @@ public final class MindMapViewModel: ObservableObject {
         guard presentationActive, presentationDepth > 1 else { return }
         presentationDepth -= 1
         expandToLevel(presentationDepth)
+        NotificationCenter.default.post(name: .mindFlowFit, object: nil)
     }
 
     /// Leaves presentation mode and restores every node's original collapse state.
@@ -460,6 +463,7 @@ public final class MindMapViewModel: ObservableObject {
         }
         activeCollapseLevel = nil
         savedCollapseStates = nil
+        NotificationCenter.default.post(name: .mindFlowFit, object: nil)
         notify("已離開簡報模式")
     }
 
