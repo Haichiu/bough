@@ -394,7 +394,7 @@ do {
     check(vm5.searchResults.isEmpty, "non-matching query returns nothing")
 
     // v19.0: SVG export visual parity with NodeView
-    var rich = MindDocument(title: "R", root: MindNode(text: "Root", children: [
+    let rich = MindDocument(title: "R", root: MindNode(text: "Root", children: [
         MindNode(text: "L1", note: "有備註", marked: true, colorTag: "red", url: "https://example.com",
                  children: [MindNode(text: "L2")]),
     ]))
@@ -410,7 +410,7 @@ do {
     check(svgRich.contains("fill=\"#ffffff\" stroke=\"#"), "svg deep nodes are white with colored outline")
 
     // v19.1: FreeMind notes + colors survive the round-trip
-    var mmDoc = MindDocument(title: "MM", root: MindNode(text: "Root", children: [
+    let mmDoc = MindDocument(title: "MM", root: MindNode(text: "Root", children: [
         MindNode(text: "Tagged", note: "重要備註", colorTag: "blue", children: [MindNode(text: "Kid")]),
         MindNode(text: "Plain"),
     ]))
@@ -446,7 +446,6 @@ do {
     ]))
     vm6.selection = nil
     vm6.addChild(to: vm6.document.root.children[1].id) // one real undo entry
-    let baselineUndo = 1
     vm6.enterPresentation()
     vm6.stepPresentation()
     vm6.stepPresentation()
@@ -1018,7 +1017,6 @@ do {
     try await MainActor.run {
         let vm = MindMapViewModel()
         vm.autosaveAllSessions()
-        let startCount = vm.sessions.count
         vm.applyTemplate("空白")
         let a = vm.addChild(to: nil)!
         vm.rename(id: a, to: "獵物關鍵字")
@@ -1637,7 +1635,7 @@ do {
 
         let parent = vm.addChild(to: nil)!
         vm.rename(id: parent, to: "branch")
-        let child = vm.addChild(to: parent)!
+        _ = vm.addChild(to: parent)
         check(vm.document.root.find(parent)?.children.count == 1, "child created")
 
         vm.setTheme("candy")
@@ -1668,7 +1666,7 @@ do {
 
         // Build a moderately complex tree (30 nodes across 4 levels)
         var level1IDs: [UUID] = []
-        for i in 0..<6 {
+        for _ in 0..<6 {
             let l1 = vm.addChild(to: nil)!
             level1IDs.append(l1)
             for j in 0..<3 {

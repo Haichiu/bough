@@ -177,7 +177,7 @@ extension MapImporter {
     }
 
     public static func markdown(_ text: String) -> MindDocument? {
-        var rootNode = TempNode(text: "中心主題")
+        let rootNode = TempNode(text: "中心主題")
         // Path of (node, indent) from root to current position.
         var stack: [(node: TempNode, indent: Int)] = [(rootNode, -1)]
         var last: TempNode?
