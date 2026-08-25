@@ -269,6 +269,8 @@ struct MapCanvasView: View {
                 }
                 Divider()
             }
+            Button("為批次建立概要括線") { _ = vm.addSummaryForBatch() }
+            Divider()
             if item.node.id != vm.document.root.id {
                 Button("刪除", role: .destructive) { vm.delete(id: item.node.id) }
             }
