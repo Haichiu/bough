@@ -56,6 +56,12 @@ public final class MindMapViewModel: ObservableObject {
     private var inactiveStacks: [UUID: ([MindDocument], [MindDocument])] = [:]
     private var inactiveSelections: [UUID: UUID?] = [:]
 
+    /// Presentation applies to exactly one document; leave it quietly before any
+    /// wholesale document switch so collapse-state restoration lands correctly.
+    private func wrapUpPresentationIfActive() {
+        if presentationActive { exitPresentation() }
+    }
+
     private func stashActive() {
         guard sessions.indices.contains(activeIndex) else { return }
         sessions[activeIndex].document = document
@@ -66,6 +72,7 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     private func loadFromSession(_ index: Int) {
+        wrapUpPresentationIfActive()
         guard sessions.indices.contains(index) else { return }
         activeIndex = index
         document = sessions[index].document
@@ -1173,6 +1180,7 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     public func importMarkdown() {
+        wrapUpPresentationIfActive()
         guard let (text, url) = FileIO.readText() else { return }
         guard var imported = MapImporter.markdown(text) else {
             notify("讀不出這個檔案，請確認是 Markdown 大綱")
@@ -1194,6 +1202,7 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     public func importOPML() {
+        wrapUpPresentationIfActive()
         guard let (text, url) = FileIO.readText() else { return }
         guard var imported = MapImporter.opml(text) else {
             notify("讀不出這個檔案，請確認是 OPML 格式")
@@ -1208,6 +1217,7 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     public func importFreeMind() {
+        wrapUpPresentationIfActive()
         guard let (text, url) = FileIO.readText() else { return }
         guard var imported = MapImporter.freemind(text) else {
             notify("讀不出這個檔案，請確認是 FreeMind (.mm) 格式")

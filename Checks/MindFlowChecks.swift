@@ -509,6 +509,24 @@ do {
     vm8.replaceAll("不存在的字串xyz", with: "whatever")
     check(vm8.document.stats().nodeCount == beforeCount, "zero-match replaceAll is a safe no-op")
 
+    // v21.1: switching tabs during presentation auto-wraps up cleanly
+    let vm9 = MindMapViewModel()
+    var docA = MindDocument(title: "A", root: MindNode(text: "RootA", children: [
+        MindNode(text: "A1", children: [MindNode(text: "A1a")]),
+    ]))
+    docA.root.children[0].collapsed = true
+    vm9.document = docA
+    vm9.selection = nil
+    let docB = MindDocument(title: "B", root: MindNode(text: "RootB", children: [MindNode(text: "B1")]))
+    vm9.enterPresentation()
+    check(vm9.presentationActive, "presentation on doc A")
+    vm9.openInNewTab(docB)
+    check(!vm9.presentationActive, "opening a tab wraps up presentation")
+    check(vm9.document.root.text == "RootB", "tab switch landed on doc B")
+    // Doc A's session must hold the RESTORED collapse state, not the expanded presentation view.
+    let sessionA = vm9.sessions[0]
+    check(sessionA.document.root.children[0].collapsed == true, "doc A keeps its original collapse state in the tab")
+
     // v19.9: format-contract tests — the examples & rules published in docs/FORMAT.md must hold
     let formatExample = """
     {
