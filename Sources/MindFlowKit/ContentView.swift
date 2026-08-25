@@ -765,6 +765,8 @@ public struct ContentView: View {
                 .font(.callout).foregroundStyle(.secondary)
             Text("更多功能：顯示選單的「簡報模式」可逐層揭開地圖上台報告；點關聯線中間的圓點可在檢閱器加標籤；檔案選單支援 Markdown、OPML、FreeMind、PNG、PDF、SVG 進出。")
                 .font(.callout).foregroundStyle(.secondary)
+            Text("小絕招：把網頁或筆記裡選取的文字直接拖進畫布，放開在哪個主題上就長成它的子樹。")
+                .font(.callout).foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 Button("好，開始用！") { vm.showHelp = false }
@@ -774,7 +776,7 @@ public struct ContentView: View {
         .padding(24)
         .frame(width: 420)
         .overlay(alignment: .bottomTrailing) {
-            Text("v14.1")
+            Text("v\(AppInfo.version)")
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
                 .padding(6)
