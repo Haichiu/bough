@@ -706,6 +706,37 @@ do {
     check(vmI.document.root.children[0].image == tinyPNG, "small image accepted")
     vmI.setNodeImage(id: vmI.document.root.children[0].id, to: "")
     check(vmI.document.root.children[0].image == nil, "empty string clears the image")
+
+    // v24.0 phase 1: batch selection VM layer
+    let vmB = MindMapViewModel()
+    vmB.document = MindDocument(title: "B", root: MindNode(text: "Root", children: [
+        MindNode(text: "X"), MindNode(text: "Y"), MindNode(text: "Z"),
+    ]))
+    vmB.selection = nil
+    let x = vmB.document.root.children[0].id
+    let y = vmB.document.root.children[1].id
+    let z = vmB.document.root.children[2].id
+    vmB.toggleBatchMember(x)
+    vmB.toggleBatchMember(y)
+    check(vmB.batchSelection == [x, y], "batch selection gathers members")
+    vmB.toggleBatchMember(y)
+    check(!vmB.batchSelection.contains(y), "toggling removes a member")
+    vmB.toggleBatchMember(y)
+    vmB.setColorTagForBatch(tag: "blue")
+    check(vmB.document.root.find(x)?.colorTag == "blue", "batch color reaches first member")
+    check(vmB.document.root.find(y)?.colorTag == "blue", "batch color reaches re-added member")
+    check(vmB.document.root.find(z)?.colorTag == nil, "non-member untouched")
+    check(vmB.batchSelection.isEmpty, "batch op clears selection")
+    vmB.toggleBatchMember(x)
+    vmB.setMarkForBatch(to: true)
+    check(vmB.document.root.find(x)?.marked == true, "batch star applies")
+    vmB.toggleBatchMember(z)
+    vmB.deleteBatch()
+    check(vmB.document.root.find(z) == nil, "batch delete removes members")
+    check(vmB.document.root.find(x) != nil, "batch delete keeps non-members")
+    vmB.toggleBatchMember(vmB.document.root.id)
+    vmB.deleteBatch()
+    check(vmB.document.root.find(vmB.document.root.id) != nil, "root survives batch delete")
     let svgImgDoc = MindDocument(title: "SI", root: MindNode(text: "R", children: [MindNode(text: "有圖", image: "data:image/png;base64," + tinyPNG)]))
     let svgWithImg = MapExporter.svg(svgImgDoc)
     check(svgWithImg.contains("<image href=\"data:image/png;base64,"), "svg embeds attached image as data URL")

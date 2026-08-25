@@ -1033,6 +1033,58 @@ public final class MindMapViewModel: ObservableObject {
 
     // MARK: 概要括線（summary brackets）
 
+    // MARK: 批次選取（multi-select lite）
+
+    /// Nodes gathered via shift-click; separate from the primary selection so
+    /// every existing single-node flow stays untouched.
+    @Published public var batchSelection: Set<UUID> = []
+
+    /// True when id participates in any active summary bracket range.
+    public func toggleBatchMember(_ id: UUID) {
+        guard document.root.contains(id) else { return }
+        if batchSelection.contains(id) {
+            batchSelection.remove(id)
+        } else {
+            batchSelection.insert(id)
+        }
+    }
+
+    public func clearBatchSelection() {
+        batchSelection.removeAll()
+    }
+
+    /// Deletes every node in the batch selection (root protected).
+    public func deleteBatch() {
+        let ids = batchSelection.filter { $0 != document.root.id }
+        guard !ids.isEmpty else { return }
+        for id in ids { delete(id: id) }
+        clearBatchSelection()
+    }
+
+    /// Applies one color tag to every node in the batch selection.
+    public func setColorTagForBatch(tag: String?) {
+        guard !batchSelection.isEmpty else { return }
+        mutate { doc in
+            for id in batchSelection {
+                doc.root.update(id) { node in node.colorTag = tag }
+            }
+        }
+        clearBatchSelection()
+        notify(tag == nil ? "已清除批次色標 ✓" : "已為批次加上顏色標記 ✓")
+    }
+
+    /// Sets the same star state on every node in the batch selection.
+    public func setMarkForBatch(to marked: Bool) {
+        guard !batchSelection.isEmpty else { return }
+        mutate { doc in
+            for id in batchSelection {
+                doc.root.update(id) { node in node.marked = marked }
+            }
+        }
+        clearBatchSelection()
+        notify(marked ? "已為批次加上星星 ✓" : "已移除批次的星星 ✓")
+    }
+
     /// Adds a summary bracket spanning [startID … endID] among parentID's children.
     /// Returns the new summary id, or nil when the range is not a valid sibling run.
     @discardableResult
