@@ -258,6 +258,38 @@ do {
         check(false, "freemind parses sample map")
     }
     check(MapImporter.freemind("not xml at all") == nil || MapImporter.freemind("<map></map>") != nil, "freemind handles junk input gracefully")
+
+    // v17.2: link labels
+    let fromID = UUID(), toID = UUID()
+    let labeledLink = MindLink(from: fromID, to: toID, label: "導致")
+    var labelDoc = MindDocument(title: "T", root: MindNode(text: "R"))
+    labelDoc.root.children = [MindNode(text: "A"), MindNode(text: "B")]
+    labelDoc.links = [MindLink(from: labelDoc.root.id, to: labelDoc.root.children[0].id),
+                      labeledLink]
+    let encodedLabel = try JSONEncoder().encode(labelDoc)
+    // Give the labeled link real endpoints so SVG can lay it out.
+    labelDoc.links[1] = MindLink(from: labelDoc.root.id, to: labelDoc.root.children[1].id, label: "導致")
+    if let decoded2 = try? JSONDecoder().decode(MindDocument.self, from: try JSONEncoder().encode(labelDoc)) {
+        check(decoded2.links.first(where: { $0.label == "導致" }) != nil, "labeled link with real endpoints encodes")
+    }
+    if let decoded = try? JSONDecoder().decode(MindDocument.self, from: encodedLabel) {
+        check(decoded.links.count == 2, "link labels survive encode roundtrip")
+        check(decoded.links.first(where: { $0.label == "導致" })?.label == "導致", "link label text preserved")
+        check(decoded.links[0].label.isEmpty, "unlabeled links stay empty")
+    } else {
+        check(false, "labeled links decode")
+    }
+    // Backward compat: old JSON without label field decodes with empty label
+    let legacyJSON = """
+    [{"id":"11111111-1111-1111-1111-111111111111","from":"\(fromID.uuidString)","to":"\(toID.uuidString)"}]
+    """
+    if let legacyLinks = try? JSONDecoder().decode([MindLink].self, from: Data(legacyJSON.utf8)) {
+        check(legacyLinks[0].label.isEmpty, "legacy links without label decode as empty")
+    } else {
+        check(false, "legacy link json decodes")
+    }
+    let svgLabeled = MapExporter.svg(labelDoc)
+    check(svgLabeled.contains("導致"), "svg export includes link labels")
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")
     check(back?.root.children[1].children.map(\.text) == ["C"], "opml import restores depth")

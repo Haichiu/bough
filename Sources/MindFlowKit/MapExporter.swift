@@ -91,6 +91,9 @@ public enum MapExporter {
              .replacingOccurrences(of: "\"", with: "&quot;")
         }
 
+        func childLinkLabel(_ child: MindNode) -> String {
+            document.links.first(where: { $0.to == child.id || $0.from == child.id })?.label ?? ""
+        }
         var parts: [String] = []
         if !transparent {
             parts.append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>")
@@ -114,6 +117,11 @@ public enum MapExporter {
                 } else {
                     let midX = (from.x + to.x) / 2
                     parts.append("<path d=\"M \(from.x) \(from.y) C \(midX) \(from.y) \(midX) \(to.y) \(to.x) \(to.y)\" fill=\"none\" stroke=\"\(color)\" stroke-width=\"\(w)\"/>")
+                }
+                if !childLinkLabel(child).isEmpty {
+                    let lx = 0.25 * from.x + 0.5 * ((from.x + to.x) / 2) + 0.25 * to.x
+                    let ly = 0.25 * from.y + 0.5 * ((from.y + to.y) / 2) + 0.25 * to.y - 14
+                    parts.append("<text x=\"\(lx)\" y=\"\(ly)\" font-size=\"11\" fill=\"#666666\" text-anchor=\"middle\">\(esc(childLinkLabel(child)))</text>")
                 }
                 connect(child)
             }

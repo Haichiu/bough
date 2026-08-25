@@ -123,11 +123,24 @@ public struct MindLink: Codable, Equatable, Identifiable {
     public var id: UUID = UUID()
     public var from: UUID
     public var to: UUID
+    /// Optional text shown on the associative line (e.g. 「導致」「參考」).
+    public var label: String = ""
 
-    public init(id: UUID = UUID(), from: UUID, to: UUID) {
+    public init(id: UUID = UUID(), from: UUID, to: UUID, label: String = "") {
         self.id = id
         self.from = from
         self.to = to
+        self.label = label
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, from, to, label }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        from = try c.decode(UUID.self, forKey: .from)
+        to = try c.decode(UUID.self, forKey: .to)
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
     }
 }
 

@@ -403,34 +403,54 @@ struct MapCanvasView: View {
         ForEach(vm.document.links) { link in
             if let fromLayout = layouts[link.from], let toLayout = layouts[link.to],
                focusIDs.isEmpty || (focusIDs.contains(link.from) && focusIDs.contains(link.to)) {
-                let p0 = CGPoint(x: fromLayout.center.x + origin.x, y: fromLayout.center.y + origin.y)
-                let p1 = CGPoint(x: toLayout.center.x + origin.x, y: toLayout.center.y + origin.y)
-                let mid = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
-                let dx = p1.x - p0.x
-                let dy = p1.y - p0.y
-                let length = max(sqrt(dx * dx + dy * dy), 1)
-                let control = CGPoint(x: mid.x - dy / length * length * 0.18,
-                                      y: mid.y + dx / length * length * 0.18)
-                let curveMid = CGPoint(x: 0.25 * p0.x + 0.5 * control.x + 0.25 * p1.x,
-                                       y: 0.25 * p0.y + 0.5 * control.y + 0.25 * p1.y)
-                let isSelected = vm.selectedLinkID == link.id
-                Path { path in
-                    path.move(to: p0)
-                    path.addQuadCurve(to: p1, control: control)
+                self.linkCanvas(link: link, fromLayout: fromLayout, toLayout: toLayout, origin: origin)
+            }
+        }
+    }
+
+    /// One associative line: dashed curve, tap-to-select handle, optional label.
+    private func linkCanvas(link: MindLink, fromLayout: NodeLayout, toLayout: NodeLayout,
+                            origin: CGPoint) -> some View {
+        let p0 = CGPoint(x: fromLayout.center.x + origin.x, y: fromLayout.center.y + origin.y)
+        let p1 = CGPoint(x: toLayout.center.x + origin.x, y: toLayout.center.y + origin.y)
+        let mid = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
+        let dx = p1.x - p0.x
+        let dy = p1.y - p0.y
+        let length = max(sqrt(dx * dx + dy * dy), 1)
+        let control = CGPoint(x: mid.x - dy / length * length * 0.18,
+                              y: mid.y + dx / length * length * 0.18)
+        let curveMid = CGPoint(x: 0.25 * p0.x + 0.5 * control.x + 0.25 * p1.x,
+                               y: 0.25 * p0.y + 0.5 * control.y + 0.25 * p1.y)
+        let isSelected = vm.selectedLinkID == link.id
+        return Group {
+            Path { path in
+                path.move(to: p0)
+                path.addQuadCurve(to: p1, control: control)
+            }
+            .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.65),
+                    style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1.5, dash: [6, 4]))
+            .allowsHitTesting(false)
+            Circle()
+                .fill(isSelected ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+                .overlay(Circle().stroke(isSelected ? Color.accentColor : Color.secondary, lineWidth: 1.5))
+                .frame(width: 13, height: 13)
+                .position(curveMid)
+                .contentShape(Circle())
+                .onTapGesture {
+                    vm.selectedLinkID = vm.selectedLinkID == link.id ? nil : link.id
                 }
-                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.65),
-                        style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1.5, dash: [6, 4]))
-                .allowsHitTesting(false)
-                Circle()
-                    .fill(isSelected ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
-                    .overlay(Circle().stroke(isSelected ? Color.accentColor : Color.secondary, lineWidth: 1.5))
-                    .frame(width: 13, height: 13)
-                    .position(curveMid)
-                    .contentShape(Circle())
-                    .onTapGesture {
-                        vm.selectedLinkID = vm.selectedLinkID == link.id ? nil : link.id
-                    }
-                    .help("選取此關聯線，按 Delete 刪除")
+                .help("選取此關聯線，按 Delete 刪除")
+            if !link.label.isEmpty {
+                Text(link.label)
+                    .font(.caption)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Color.secondary.opacity(0.35)))
+                    .position(x: curveMid.x, y: curveMid.y - 18)
+                    .fixedSize()
+                    .accessibilityLabel("關聯線標籤 \(link.label)")
+                    .allowsHitTesting(false)
             }
         }
     }

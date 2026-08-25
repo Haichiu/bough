@@ -566,6 +566,15 @@ public final class MindMapViewModel: ObservableObject {
         notify("已刪除關聯線")
     }
 
+    public func setLinkLabel(id: UUID, to label: String) {
+        guard document.links.first(where: { $0.id == id })?.label != label else { return }
+        mutate { doc in
+            if let i = doc.links.firstIndex(where: { $0.id == id }) {
+                doc.links[i].label = label
+            }
+        }
+    }
+
     /// Moves a node among its siblings to the given index (pre-adjusted for the removed item).
     public func moveSibling(id: UUID, toIndex rawIndex: Int) {
         guard id != document.root.id,

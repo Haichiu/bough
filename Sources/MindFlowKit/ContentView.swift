@@ -347,7 +347,18 @@ public struct ContentView: View {
 
     @ViewBuilder
     private var noteInspector: some View {
-        if let id = vm.selection, let node = vm.document.root.find(id) {
+        if let linkID = vm.selectedLinkID,
+           vm.document.links.contains(where: { $0.id == linkID }) {
+            Text("關聯線").font(.subheadline).foregroundStyle(.secondary)
+            TextField("關聯線標籤…", text: Binding(
+                get: { vm.document.links.first(where: { $0.id == linkID })?.label ?? "" },
+                set: { vm.setLinkLabel(id: linkID, to: $0) }))
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("關聯線標籤輸入框")
+            Button("刪除這條關聯線") { vm.removeLink(id: linkID) }
+                .buttonStyle(.borderless)
+                .font(.caption)
+        } else if let id = vm.selection, let node = vm.document.root.find(id) {
             Text(node.id == vm.document.root.id ? "中心主題" : "主題")
                 .font(.subheadline).foregroundStyle(.secondary)
             TextEditor(text: $noteDraft)
