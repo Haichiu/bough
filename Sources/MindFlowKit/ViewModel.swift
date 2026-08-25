@@ -569,24 +569,31 @@ public final class MindMapViewModel: ObservableObject {
             notify("剪貼簿是空的")
             return
         }
-        guard let imported = MapImporter.markdown(text) else {
-            notify("無法解析剪貼簿內容")
+        insertTextAsNodes(text, sourceLabel: "剪貼簿")
+    }
+
+    /// Parses plain text / Markdown outline and appends it as nodes under
+    /// the current selection (or root). Used by ⌘⇧V paste and canvas drop.
+    public func insertTextAsNodes(_ rawText: String, sourceLabel: String) {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            notify("沒有可加入的文字")
+            return
+        }
+        guard let imported = MapImporter.markdown(text), !imported.root.children.isEmpty else {
+            notify("無法解析\(sourceLabel)內容")
             return
         }
         // Attach imported tree under the selected node (or root).
         let parentID = selection ?? document.root.id
         let importedChildren = imported.root.children
-        guard !importedChildren.isEmpty else {
-            notify("剪貼簿裡沒有可用的條列")
-            return
-        }
         mutate { doc in
             doc.root.update(parentID) { node in
                 node.children.append(contentsOf: importedChildren)
             }
         }
         dirty = true
-        notify("已從剪貼簿加入 \(importedChildren.count) 個主題 ✓")
+        notify("已從\(sourceLabel)加入 \(importedChildren.count) 個主題 ✓")
     }
 
     /// True when the last selection change came from keyboard navigation

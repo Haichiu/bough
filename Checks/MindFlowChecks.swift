@@ -2,6 +2,8 @@ import Foundation
 import CoreGraphics
 import MindFlowKit
 
+setvbuf(stdout, nil, _IONBF, 0)
+
 var failures = 0
 
 func check(_ condition: Bool, _ label: String, line: Int = #line) {
@@ -343,6 +345,26 @@ do {
     let branchSvg = MapExporter.svg(MindDocument(title: branchRoot.text, root: branchRoot))
     check(branchSvg.contains(">A</text>") || branchSvg.contains(">A1</text>"), "branch svg renders branch nodes")
     check(!branchSvg.contains(">B<"), "branch svg excludes sibling subtree")
+
+    // v18.6: insertTextAsNodes (shared by paste + canvas drop)
+    do {
+    let vm3 = MindMapViewModel()
+    vm3.document = MindDocument(title: "D", root: MindNode(text: "Root"))
+    vm3.selection = nil // direct document swap leaves a stale selection behind
+    vm3.insertTextAsNodes("- 甲\n- 乙\n  - 丙", sourceLabel: "拖入的文字")
+    check(vm3.document.root.children.count == 2, "drop creates top-level nodes")
+    if vm3.document.root.children.count >= 2 {
+        check(vm3.document.root.children[1].children.first?.text == "丙", "drop keeps indentation structure")
+    } else {
+        check(false, "drop keeps indentation structure (missing nodes)")
+    }
+    check(vm3.dirty, "drop marks document dirty")
+    vm3.insertTextAsNodes("   \n\t\n", sourceLabel: "拖入的文字")
+    check(vm3.document.root.children.count == 2, "whitespace-only drop is a safe no-op")
+    vm3.selection = vm3.document.root.children[0].id
+    vm3.insertTextAsNodes("丁", sourceLabel: "拖入的文字")
+    check(vm3.document.root.children.first?.children.first?.text == "丁", "drop nests under selection")
+    }
     check(back?.root.children.map(\.text) == ["A", "B"], "opml import restores children")
     check(back?.root.children[0].note == "n1", "opml import restores notes")
     check(back?.root.children[1].children.map(\.text) == ["C"], "opml import restores depth")

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ReparentDrag: Equatable {
     let id: UUID
@@ -33,6 +34,7 @@ struct MapCanvasView: View {
     @State private var reorderHint: ReorderHint?
     @State private var canvasSize: CGSize = .zero
     @State private var freeMoveID: UUID?
+    @State private var textDropActive = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let zoomRange: ClosedRange<CGFloat> = 0.25...3
@@ -73,6 +75,20 @@ struct MapCanvasView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .overlay(alignment: .bottomTrailing) { zoomControls }
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.accentColor.opacity(textDropActive ? 0.6 : 0), lineWidth: 3)
+            )
+            .onDrop(of: [UTType.text], isTargeted: $textDropActive) { providers in
+                guard let provider = providers.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else { return false }
+                _ = provider.loadObject(ofClass: NSString.self) { text, _ in
+                    guard let text = text as? String else { return }
+                    DispatchQueue.main.async {
+                        vm.insertTextAsNodes(text, sourceLabel: "拖入的文字")
+                    }
+                }
+                return true
+            }
             .animation(reduceMotion ? nil : .spring(response: 0.3), value: vm.statusMessage)
             .onAppear {
                 canvasSize = geo.size
