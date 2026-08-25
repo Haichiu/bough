@@ -737,6 +737,17 @@ do {
     vmB.toggleBatchMember(vmB.document.root.id)
     vmB.deleteBatch()
     check(vmB.document.root.find(vmB.document.root.id) != nil, "root survives batch delete")
+
+    // v25.1: batch selection does not leak across tab switches
+    let vmL = MindMapViewModel()
+    vmL.document = MindDocument(title: "LA", root: MindNode(text: "RootA", children: [
+        MindNode(text: "A1"), MindNode(text: "A2"),
+    ]))
+    vmL.selection = nil
+    let nodeA1 = vmL.document.root.children[0].id
+    vmL.toggleBatchMember(nodeA1)
+    vmL.openInNewTab(MindDocument(title: "LB", root: MindNode(text: "RootB")))
+    check(vmL.batchSelection.isEmpty, "switching tabs clears stale batch selection")
     let svgImgDoc = MindDocument(title: "SI", root: MindNode(text: "R", children: [MindNode(text: "有圖", image: "data:image/png;base64," + tinyPNG)]))
     let svgWithImg = MapExporter.svg(svgImgDoc)
     check(svgWithImg.contains("<image href=\"data:image/png;base64,"), "svg embeds attached image as data URL")

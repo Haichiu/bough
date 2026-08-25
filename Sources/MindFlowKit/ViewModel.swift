@@ -86,6 +86,7 @@ public final class MindMapViewModel: ObservableObject {
         // Search results belong to a specific document — never leak across tabs.
         searchQuery = ""
         searchResults = []
+        batchSelection.removeAll()
         searchIndex = 0
         showSearch = false
         zenMode = false

@@ -280,7 +280,9 @@ struct MapCanvasView: View {
         }
         .onTapGesture {
             if isShiftHeld() {
-                vm.toggleBatchMember(item.node.id)
+                if !vm.presentationActive {
+                    vm.toggleBatchMember(item.node.id)
+                }
                 return
             }
             if vm.editingID != nil { vm.stopEditing() }
