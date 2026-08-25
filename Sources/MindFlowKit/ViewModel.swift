@@ -961,6 +961,40 @@ public final class MindMapViewModel: ObservableObject {
         notify(tag == nil ? "已清除顏色標記" : "已加上顏色標記")
     }
 
+    /// Applies (or clears with nil) one color tag across an entire subtree.
+    public func setSubtreeColorTag(id: UUID, tag: String?) {
+        guard document.root.contains(id) else { return }
+        var count = 0
+        mutate { doc in
+            doc.root.update(id) { root in
+                func walk(_ node: inout MindNode) {
+                    node.colorTag = tag
+                    count += 1
+                    for i in node.children.indices { walk(&node.children[i]) }
+                }
+                walk(&root)
+            }
+        }
+        notify(tag == nil ? "已清除 \(count) 個主題的顏色標記" : "已為 \(count) 個主題加上顏色標記")
+    }
+
+    /// Stars (or unstars) an entire subtree.
+    public func setSubtreeMark(id: UUID, to marked: Bool) {
+        guard document.root.contains(id) else { return }
+        var count = 0
+        mutate { doc in
+            doc.root.update(id) { root in
+                func walk(_ node: inout MindNode) {
+                    node.marked = marked
+                    count += 1
+                    for i in node.children.indices { walk(&node.children[i]) }
+                }
+                walk(&root)
+            }
+        }
+        notify(marked ? "已為 \(count) 個主題加上星星" : "已移除 \(count) 個主題的星星")
+    }
+
     // MARK: 概要括線（summary brackets）
 
     /// Adds a summary bracket spanning [startID … endID] among parentID's children.

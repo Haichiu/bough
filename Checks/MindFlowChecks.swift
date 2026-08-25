@@ -509,6 +509,25 @@ do {
     vm8.replaceAll("不存在的字串xyz", with: "whatever")
     check(vm8.document.stats().nodeCount == beforeCount, "zero-match replaceAll is a safe no-op")
 
+    // v21.7: subtree batch operations
+    let vmT = MindMapViewModel()
+    vmT.document = MindDocument(title: "ST", root: MindNode(text: "Root", children: [
+        MindNode(text: "A", children: [MindNode(text: "A1", children: [MindNode(text: "A1a")])]),
+        MindNode(text: "B"),
+    ]))
+    vmT.selection = nil
+    let branchA = vmT.document.root.children[0].id
+    vmT.setSubtreeColorTag(id: branchA, tag: "green")
+    check(vmT.document.root.children[0].colorTag == "green" && vmT.document.root.children[0].children[0].colorTag == "green", "subtree color reaches grandchildren")
+    check(vmT.document.root.colorTag == nil, "subtree color stays inside the branch")
+    vmT.setSubtreeMark(id: branchA, to: true)
+    check(vmT.document.root.children[0].marked && vmT.document.root.children[0].children[0].marked, "subtree star marks all levels")
+    check(vmT.document.root.children[1].marked == false, "sibling branch unaffected")
+    vmT.setSubtreeColorTag(id: branchA, tag: nil)
+    check(vmT.document.root.children[0].colorTag == nil, "clearing subtree colors works")
+    // stats reflect the batch
+    check(vmT.document.stats().markedCount == 3, "stats count the starred branch")
+
     // v21.1: switching tabs during presentation auto-wraps up cleanly
     let vm9 = MindMapViewModel()
     var docA = MindDocument(title: "A", root: MindNode(text: "RootA", children: [

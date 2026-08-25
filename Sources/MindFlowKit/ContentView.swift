@@ -517,6 +517,17 @@ public struct ContentView: View {
             Divider()
             Button("清除色標") { vm.setColorTag(id: row.id, tag: nil) }
         }
+        Menu("子樹批次") {
+            Menu("全部加上色標") {
+                ForEach(Theme.colorTags, id: \.key) { tag in
+                    Button(tag.name) { vm.setSubtreeColorTag(id: row.id, tag: tag.key) }
+                }
+                Divider()
+                Button("清除色標") { vm.setSubtreeColorTag(id: row.id, tag: nil) }
+            }
+            Button("整棵子樹加星星") { vm.setSubtreeMark(id: row.id, to: true) }
+            Button("移除整棵子樹的星星") { vm.setSubtreeMark(id: row.id, to: false) }
+        }
         Button("複製此分支 Markdown") { vm.copyBranchAsMarkdown(id: row.id) }
         Divider()
         if row.hasChildren {
