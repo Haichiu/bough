@@ -490,6 +490,44 @@ do {
     // Case-insensitive replacement still works on node text (regression guard)
     vm7.replaceAll("a", with: "X")
     check(vm7.document.root.children[0].text == "X", "case-insensitive node replacement still works")
+
+    // v19.9: format-contract tests — the examples & rules published in docs/FORMAT.md must hold
+    let formatExample = """
+    {
+      "title": "我的圖",
+      "themeName": "ocean",
+      "directionName": "logicRight",
+      "root": {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "text": "中心主題",
+        "children": [
+          { "id": "22222222-2222-2222-2222-222222222222", "text": "第一個想法" }
+        ]
+      }
+    }
+    """
+    if let doc = try? JSONDecoder().decode(MindDocument.self, from: Data(formatExample.utf8)) {
+        check(doc.title == "我的圖" && doc.root.text == "中心主題", "FORMAT.md minimal example decodes")
+        check(doc.root.children[0].text == "第一個想法", "FORMAT.md nested node decodes")
+        check(doc.links.isEmpty && doc.offsets.isEmpty, "FORMAT.md optional sections default empty")
+    } else {
+        check(false, "FORMAT.md minimal example parses")
+    }
+
+    // Tolerant-decoding rules as documented: unknown fields ignored, missing id regenerated
+    let futureProof = """
+    { "title": "T", "themeName": "mono", "directionName": "balanced",
+      "root": { "text": "R", "someFutureField": 42,
+                "children": [{ "text": "C", "anotherUnknown": true }] },
+      "unknownTopLevel": [] }
+    """
+    if let fdoc = try? JSONDecoder().decode(MindDocument.self, from: Data(futureProof.utf8)) {
+        check(fdoc.root.text == "R" && fdoc.root.children[0].text == "C", "unknown fields are ignored")
+        check(fdoc.root.id != fdoc.root.children[0].id, "missing ids are regenerated uniquely")
+        check(fdoc.themeName == "mono" && fdoc.directionName == "balanced", "document-level fields survive unknown siblings")
+    } else {
+        check(false, "future-proof document decodes")
+    }
     } else {
         check(false, "foreign freemind parses")
     }
