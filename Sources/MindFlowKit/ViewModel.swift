@@ -859,11 +859,24 @@ public final class MindMapViewModel: ObservableObject {
         switchTab(to: (activeIndex + offset + sessions.count) % sessions.count)
     }
 
-    /// Replaces all occurrences of find text in node texts across the map.
+    /// Counts non-overlapping case-insensitive matches (same semantics as the replacement).
+    nonisolated private static func countMatches(_ source: String, of find: String) -> Int {
+        guard !find.isEmpty else { return 0 }
+        var count = 0
+        var searchRange = source.startIndex..<source.endIndex
+        while let found = source.range(of: find, options: .caseInsensitive, range: searchRange) {
+            count += 1
+            searchRange = found.upperBound..<source.endIndex
+        }
+        return count
+    }
+
     public func replaceAll(_ find: String, with replaceText: String) {
         guard !find.isEmpty else { return }
+        var totalReplaced = 0
         mutate { doc in
             func walkAndReplace(_ node: inout MindNode) {
+                totalReplaced += Self.countMatches(node.text, of: find)
                 if node.text.localizedCaseInsensitiveContains(find) {
                     node.text = node.text.replacingOccurrences(
                         of: find,
@@ -872,6 +885,7 @@ public final class MindMapViewModel: ObservableObject {
                     )
                 }
                 if !node.note.isEmpty {
+                    totalReplaced += Self.countMatches(node.note, of: find)
                     node.note = node.note.replacingOccurrences(
                         of: find,
                         with: replaceText,
@@ -884,15 +898,15 @@ public final class MindMapViewModel: ObservableObject {
             }
             walkAndReplace(&doc.root)
             // Link labels participate in search, so they get replaced too.
-            for i in doc.links.indices
-            where doc.links[i].label.localizedCaseInsensitiveContains(find) {
+            for i in doc.links.indices where doc.links[i].label.localizedCaseInsensitiveContains(find) {
+                totalReplaced += Self.countMatches(doc.links[i].label, of: find)
                 doc.links[i].label = doc.links[i].label.replacingOccurrences(
                     of: find,
                     with: replaceText,
                     options: .caseInsensitive)
             }
         }
-        notify("已取代所有匹配項目 ✓")
+        notify(totalReplaced == 0 ? "沒有找到符合的項目" : "已取代 \(totalReplaced) 處 ✓")
     }
 
     public func jumpToNextResult() {

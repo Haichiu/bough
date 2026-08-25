@@ -490,6 +490,25 @@ do {
     vm7.replaceAll("a", with: "X")
     check(vm7.document.root.children[0].text == "X", "case-insensitive node replacement still works")
 
+    // v20.9: replaceAll counts replacements
+    let vm8 = MindMapViewModel()
+    vm8.document = MindDocument(title: "C", root: MindNode(text: "Root", children: [
+        MindNode(text: "蘋果 apple 蘋果", note: "apple pie"),
+        MindNode(text: "banana"),
+    ]))
+    vm8.selection = nil
+    vm8.document.links = [MindLink(from: vm8.document.root.id,
+                                  to: vm8.document.root.children[0].id,
+                                  label: "apple link")]
+    vm8.replaceAll("apple", with: "蜜蘋果")
+    // text(1) + note(1) + label(1) = 3 occurrences
+    check(vm8.document.root.children[0].note == "蜜蘋果 pie", "replaceAll count matches actual edits")
+    check(vm8.document.links[0].label == "蜜蘋果 link", "label replaced once")
+    // Zero-match case stays graceful
+    let beforeCount = vm8.document.stats().nodeCount
+    vm8.replaceAll("不存在的字串xyz", with: "whatever")
+    check(vm8.document.stats().nodeCount == beforeCount, "zero-match replaceAll is a safe no-op")
+
     // v19.9: format-contract tests — the examples & rules published in docs/FORMAT.md must hold
     let formatExample = """
     {
