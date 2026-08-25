@@ -742,6 +742,16 @@ public final class MindMapViewModel: ObservableObject {
             if !ids.contains(link.from) { ids.append(link.from) }
             if !ids.contains(link.to) { ids.append(link.to) }
         }
+        // Summary text matches bring the whole covered sibling run into focus.
+        for s in document.summaries where s.text.localizedCaseInsensitiveContains(query) {
+            if let parentNode = document.root.find(s.parentID),
+               let startIndex = parentNode.children.firstIndex(where: { $0.id == s.startID }),
+               let endIndex = parentNode.children.firstIndex(where: { $0.id == s.endID }) {
+                for child in parentNode.children[startIndex...endIndex] where !ids.contains(child.id) {
+                    ids.append(child.id)
+                }
+            }
+        }
         searchResults = ids
         searchIndex = 0
         if let first = ids.first {

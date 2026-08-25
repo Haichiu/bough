@@ -650,6 +650,24 @@ do {
     let mdNoSum = MapExporter.markdown(MindDocument(title: "N", root: MindNode(text: "R", children: [MindNode(text: "x")])))
     check(!mdNoSum.contains("↳ 概要"), "documents without summaries stay clean")
 
+    // v22.1: search covers summary text
+    let vmU = MindMapViewModel()
+    vmU.document = MindDocument(title: "Q", root: MindNode(text: "Root", children: [
+        MindNode(text: "甲"), MindNode(text: "乙"), MindNode(text: "丙"),
+    ]))
+    vmU.selection = nil
+    vmU.document.summaries = [MindSummary(parentID: vmU.document.root.id,
+                                          startID: vmU.document.root.children[0].id,
+                                          endID: vmU.document.root.children[1].id,
+                                          text: "核心決策")]
+    vmU.searchQuery = "核心"
+    vmU.performSearch()
+    check(vmU.searchResults.count == 2, "summary-text search returns covered siblings")
+    // Unrelated queries unaffected
+    vmU.searchQuery = "甲"
+    vmU.performSearch()
+    check(vmU.searchResults.contains(vmU.document.root.children[0].id), "regular node search still works")
+
 
     // v20.5: URL normalization for openURL
     check(MindMapViewModel.makeOpenableURL("example.com")?.absoluteString == "https://example.com", "scheme-less URLs get https://")
