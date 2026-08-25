@@ -38,7 +38,6 @@ public struct MindNode: Codable, Identifiable, Equatable {
         collapsed = try container.decodeIfPresent(Bool.self, forKey: .collapsed) ?? false
         colorTag = try container.decodeIfPresent(String.self, forKey: .colorTag)
         url = try container.decodeIfPresent(String.self, forKey: .url)
-        url = try container.decodeIfPresent(String.self, forKey: .url)
         marked = try container.decodeIfPresent(Bool.self, forKey: .marked) ?? false
         children = try container.decodeIfPresent([MindNode].self, forKey: .children) ?? []
     }
