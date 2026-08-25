@@ -25,6 +25,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
             <key>CFBundleTypeName</key><string>MindFlow Document</string>
             <key>CFBundleTypeRole</key><string>Editor</string>
             <key>LSHandlerRank</key><string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array><string>com.agenthub.mindmap</string></array>
             <key>CFBundleTypeExtensions</key>
             <array><string>mindmap</string></array>
         </dict>

@@ -1,6 +1,22 @@
 # MindFlow 更新日誌
 
-## v20.3
+## v21.3
+- 打包稽核：Document Types 加入 LSItemContentTypes（引用 com.agenthub.mindmap UTI）；CHANGELOG 同步
+
+## v21.2
+- 新增 docs/ROADMAP.md：三大候選功能的設計考量與風險評估；交叉狀態稽核通過
+
+## v21.1
+- 修復交互態缺陷：簡報中切換分頁／開新檔／匯入時自動收尾簡報，收合還原不再錯置
+
+## v21.0
+- 「全部取代」回報取代處數（文字＋備註＋關聯線標籤）；零匹配時優雅提示
+
+## v20.6
+- 開啟網址智慧補全 https://、修剪空白；無效網址明確提示
+
+## v20.5
+- （與 v20.4 同日整備批次）
 - 新增 scripts/check-ui-coverage.sh 孤兒 API 自動偵動偵測，併入 verify.sh 驗證閘門；移除死方法 setURL/autosaveNow；修正新增視窗快捷鍵覆蓋衝突
 
 ## v20.2
