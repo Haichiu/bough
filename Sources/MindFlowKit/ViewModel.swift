@@ -1010,16 +1010,6 @@ public final class MindMapViewModel: ObservableObject {
         notify("已複製 OPML 到剪貼簿 ✓")
     }
 
-    /// Sets or clears a URL link on the node.
-    public func setURL(id: UUID, to urlString: String?) {
-        guard document.root.contains(id) else { return }
-        mutate { doc in
-            doc.root.update(id) { node in
-                let trimmed = urlString?.trimmingCharacters(in: .whitespacesAndNewlines)
-                node.url = (trimmed?.isEmpty == true) ? nil : trimmed
-            }
-        }
-    }
 
     /// Opens the node's URL in the default browser.
     public func openURL(id: UUID) {

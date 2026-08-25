@@ -128,6 +128,11 @@ struct MindFlowApp: App {
                 Button(vm.showOutlineNumbers ? "隱藏大綱編號" : "大綱顯示編號") {
                     vm.showOutlineNumbers.toggle()
                 }
+                Button("聚焦所選分支") {
+                    if let sel = vm.selection { vm.toggleFocus(on: sel) }
+                }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+                .disabled(vm.selection == nil || vm.zenMode)
                 Button(vm.presentationActive ? "結束簡報" : "簡報模式（逐層揭開）") {
                     if vm.presentationActive { vm.exitPresentation() } else { vm.enterPresentation() }
                 }
