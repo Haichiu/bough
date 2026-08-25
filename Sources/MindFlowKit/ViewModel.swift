@@ -410,6 +410,8 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var presentationActive = false
     private var savedCollapseStates: [UUID: Bool]?
     private var presentationDepth = 1
+    /// Undo entries made before entering presentation; steps inside are non-undoable.
+    private var undoBaselineCount: Int?
 
     /// Enters presentation mode: shows only the first layer, ready to reveal more.
     public func enterPresentation() {
@@ -421,6 +423,7 @@ public final class MindMapViewModel: ObservableObject {
         }
         snap(document.root)
         savedCollapseStates = states
+        undoBaselineCount = undoStack.count
         presentationDepth = 1
         presentationActive = true
         expandToLevel(1)
@@ -466,6 +469,12 @@ public final class MindMapViewModel: ObservableObject {
         }
         activeCollapseLevel = nil
         savedCollapseStates = nil
+        // Presentation steps never enter the undo history: trim back to baseline.
+        if let baseline = undoBaselineCount, undoStack.count > baseline {
+            undoStack.removeLast(undoStack.count - baseline)
+            redoStack.removeAll()
+        }
+        undoBaselineCount = nil
         NotificationCenter.default.post(name: .mindFlowFit, object: nil)
         notify("已離開簡報模式")
     }

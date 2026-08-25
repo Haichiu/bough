@@ -438,6 +438,24 @@ do {
         check(f.root.children[0].note == "外部筆記", "freemind import reads foreign richcontent notes")
         // Unknown color maps to no tag (graceful), known hex maps to its tag
         check(f.root.children[0].colorTag == nil, "unknown freemind colors map to no tag")
+
+    // v19.3: presentation steps stay out of undo history
+    let vm6 = MindMapViewModel()
+    vm6.document = MindDocument(title: "U", root: MindNode(text: "Root", children: [
+        MindNode(text: "A", children: [MindNode(text: "A1")]),
+        MindNode(text: "B"),
+    ]))
+    vm6.selection = nil
+    vm6.addChild(to: vm6.document.root.children[1].id) // one real undo entry
+    let baselineUndo = 1
+    vm6.enterPresentation()
+    vm6.stepPresentation()
+    vm6.stepPresentation()
+    vm6.exitPresentation()
+    // Undo once should revert the pre-presentation addChild, not a presentation step.
+    vm6.undo()
+    check(vm6.document.root.children[1].children.isEmpty, "undo after presentation skips presentation steps")
+    check(vm6.document.root.text == "Root" && vm6.document.root.children.count == 2, "undo lands on pre-presentation document")
     } else {
         check(false, "foreign freemind parses")
     }
