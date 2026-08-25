@@ -744,6 +744,34 @@ public final class MindMapViewModel: ObservableObject {
         switchTab(to: (activeIndex + offset + sessions.count) % sessions.count)
     }
 
+    /// Replaces all occurrences of find text in node texts across the map.
+    public func replaceAll(_ find: String, with replaceText: String) {
+        guard !find.isEmpty else { return }
+        mutate { doc in
+            func walkAndReplace(_ node: inout MindNode) {
+                if node.text.localizedCaseInsensitiveContains(find) {
+                    node.text = node.text.replacingOccurrences(
+                        of: find,
+                        with: replaceText,
+                        options: .caseInsensitive
+                    )
+                }
+                if !node.note.isEmpty {
+                    node.note = node.note.replacingOccurrences(
+                        of: find,
+                        with: replaceText,
+                        options: .caseInsensitive
+                    )
+                }
+                for i in node.children.indices {
+                    walkAndReplace(&node.children[i])
+                }
+            }
+            walkAndReplace(&doc.root)
+        }
+        notify("已取代所有匹配項目 ✓")
+    }
+
     public func jumpToNextResult() {
         if searchResults.isEmpty { performSearch() }
         guard !searchResults.isEmpty else { return }

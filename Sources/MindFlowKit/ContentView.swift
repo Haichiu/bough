@@ -11,6 +11,7 @@ public struct ContentView: View {
     @State private var outlineEditingID: UUID?
     @State private var outlineDraft = ""
     @State private var autosaveTask: Task<Void, Never>?
+    @State private var replaceText = ""
     @State private var draggingTab: Int?
     @State private var tabDragX: CGFloat = 0
 
@@ -638,6 +639,13 @@ public struct ContentView: View {
                 .frame(minWidth: 34)
             Button { vm.jumpToNextResult() } label: { Image(systemName: "chevron.down") }
                 .buttonStyle(.borderless)
+            Divider()
+            TextField("取代為…", text: $replaceText)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 120)
+            Button("全部取代") { vm.replaceAll(vm.searchQuery, with: replaceText) }
+                .buttonStyle(.bordered)
+                .disabled(replaceText.isEmpty)
             Button { vm.showSearch = false } label: { Image(systemName: "xmark") }
                 .buttonStyle(.borderless)
         }
