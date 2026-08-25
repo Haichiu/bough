@@ -345,6 +345,26 @@ public struct ContentView: View {
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
+    /// Thumbnail + removal for the selected node's attached picture.
+    @ViewBuilder
+    private func nodeImageSection(id: UUID) -> some View {
+        if let dataURL = vm.document.root.find(id)?.image, !dataURL.isEmpty {
+            HStack(spacing: 8) {
+                if let nsImage = ImageStore.shared.image(forDataURL: dataURL) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 72, maxHeight: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .help("附加圖片預覽")
+                }
+                Button("移除圖片") { vm.setNodeImage(id: id, to: nil) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+            }
+        }
+    }
+
     /// Web-link field + open button for the selected node.
     private func nodeLinkSection(id: UUID) -> some View {
         HStack(spacing: 6) {
@@ -427,6 +447,8 @@ public struct ContentView: View {
                         Text("備註…").foregroundStyle(.secondary).padding(6).allowsHitTesting(false)
                     }
                 }
+            Divider()
+            nodeImageSection(id: id)
             Divider()
             nodeLinkSection(id: id)
             nodeColorTagSection(id: id)
@@ -871,7 +893,7 @@ public struct ContentView: View {
                 .font(.callout).foregroundStyle(.secondary)
             Text("更多功能：顯示選單的「簡報模式」可逐層揭開地圖上台報告；點關聯線中間的圓點可在檢閱器加標籤；檔案選單支援 Markdown、OPML、FreeMind、PNG、PDF、SVG 進出。")
                 .font(.callout).foregroundStyle(.secondary)
-            Text("小絕招：把網頁或筆記裡選取的文字直接拖進畫布，放開在哪個主題上就長成它的子樹。")
+            Text("小絕招：把網頁或筆記裡選取的文字直接拖進畫布，放開在哪個主題上就長成它的子樹；截圖後直接拖到主題上也能附圖（檢閱器可移除）。")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
                 Spacer()
