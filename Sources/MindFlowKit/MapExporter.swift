@@ -30,6 +30,15 @@ public enum MapExporter {
                     lines.append("\(indent)  > \(child.note)")
                 }
                 walk(child, level: level + 1)
+                // Summaries ending at this child are emitted right after its subtree,
+                // so the annotated content stays visible in text-based exports.
+                for s in document.summaries where s.parentID == node.id && s.endID == child.id {
+                    if !s.text.isEmpty {
+                        let startIndex = node.children.firstIndex(where: { $0.id == s.startID }) ?? 0
+                        let startText = node.children[startIndex].text
+                        lines.append("\(indent)- ↳ 概要（含\(startText)）: \(s.text)")
+                    }
+                }
             }
         }
         walk(document.root, level: 0)

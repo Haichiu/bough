@@ -635,6 +635,21 @@ do {
     let svgSum = MapExporter.svg(svgDoc)
     check(svgSum.contains("兩個重點"), "svg export draws summary label")
 
+    // v22.0: markdown export carries summary text (visible, documented convention)
+    var sumDoc2 = MindDocument(title: "SM", root: MindNode(text: "Root", children: [
+        MindNode(text: "S1"), MindNode(text: "S2"), MindNode(text: "S3"),
+    ]))
+    sumDoc2.summaries = [MindSummary(parentID: sumDoc2.root.id,
+                                     startID: sumDoc2.root.children[0].id,
+                                     endID: sumDoc2.root.children[1].id,
+                                     text: "這兩項是重點")]
+    let mdSum = MapExporter.markdown(sumDoc2)
+    check(mdSum.contains("↳ 概要（含S1）: 這兩項是重點"), "markdown export includes summary text after range")
+    // Summaries ending at a later sibling don't leak into earlier positions
+    check(!mdSum.contains("↳ 概要（含S3）"), "summary anchored to its own range end")
+    let mdNoSum = MapExporter.markdown(MindDocument(title: "N", root: MindNode(text: "R", children: [MindNode(text: "x")])))
+    check(!mdNoSum.contains("↳ 概要"), "documents without summaries stay clean")
+
 
     // v20.5: URL normalization for openURL
     check(MindMapViewModel.makeOpenableURL("example.com")?.absoluteString == "https://example.com", "scheme-less URLs get https://")
