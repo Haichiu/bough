@@ -90,6 +90,8 @@ App 內按 **⌘/** 隨時查看。
 自動保存在 `~/Library/Application Support/MindFlow/`。
 
 `.mindmap` 檔案就是開放的 JSON 文字檔，完整格式規格見 [docs/FORMAT.md](docs/FORMAT.md)——你的圖永遠不會被鎖在任何工具裡。
+
+完整功能驗收清單見 [docs/TESTING.md](docs/TESTING.md)。
 另存新檔（⌘S）後的 `.mindmap` 檔案是開放格式（JSON），可用任何文字編輯器打開。
 
 ## 常見問題
