@@ -759,6 +759,31 @@ do {
     vmM.collapseAll()
     check(vmM.activeCollapseLevel == nil, "collapseAll clears the level indicator")
 
+    // v25.x stress test: node with ALL attributes set simultaneously across all layouts
+    let tinyPNGStress = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    let megaNode = MindNode(
+        text: "這是一段非常非常長的文字一定會超過單行寬度上限而需要換行處理的文字",
+        note: "這是一段很長的備註文字用來測試多行顯示",
+        marked: true, colorTag: "red",
+        url: "https://example.com/stress-test",
+        image: "data:image/png;base64," + tinyPNGStress,
+        children: [MindNode(text: "子主題")]
+    )
+    let stressRoot = MindNode(text: "Stress", children: [megaNode])
+    for dirName in ["logicRight", "balanced", "fishbone", "bracket"] {
+        let d = MapDirection(rawValue: dirName)!
+        let sl = LayoutEngine.layout(root: stressRoot, direction: d)
+        check(sl[stressRoot.children[0].id] != nil, "\(dirName): mega node laid out")
+        check(sl.count == 3, "\(dirName): all nodes have layout frames")
+    }
+    // Export works with max-complexity node
+    let stressSvg = MapExporter.svg(MindDocument(title: "S", root: stressRoot))
+    check(stressSvg.contains("★"), "stress svg has star")
+    check(stressSvg.contains("<image href=\"data:image/png"), "stress svg has embedded image")
+    check(stressSvg.contains("#e05252") || stressSvg.contains("e05252"), "stress svg has color tag")
+    check(stressSvg.contains("https://example.com/stress-test"), "stress svg has URL link")
+    check(stressSvg.contains("備註"), "stress svg has note tooltip")
+
     // Edge case: summaries referencing deleted nodes don't crash rendering
     var ghostDoc = MindDocument(title: "G", root: MindNode(text: "Root", children: [MindNode(text: "Only")]))
     ghostDoc.summaries = [MindSummary(parentID: ghostDoc.root.id,
