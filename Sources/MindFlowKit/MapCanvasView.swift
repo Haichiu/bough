@@ -372,7 +372,7 @@ struct MapCanvasView: View {
 
     private func reparentGesture(item: NodeItem, origin: CGPoint, layouts: [UUID: NodeLayout],
                                  geoSize: CGSize, bounds: CGRect) -> some Gesture {
-        DragGesture(minimumDistance: 4)
+        DragGesture(minimumDistance: 8)
             .onChanged { value in
                 // Hold Option while dragging for free placement.
                 if NSEvent.modifierFlags.contains(.option) {
