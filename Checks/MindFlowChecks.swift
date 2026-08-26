@@ -759,6 +759,17 @@ do {
     vmM.collapseAll()
     check(vmM.activeCollapseLevel == nil, "collapseAll clears the level indicator")
 
+    // Edge case: summaries referencing deleted nodes don't crash rendering
+    var ghostDoc = MindDocument(title: "G", root: MindNode(text: "Root", children: [MindNode(text: "Only")]))
+    ghostDoc.summaries = [MindSummary(parentID: ghostDoc.root.id,
+                                      startID: UUID(), endID: UUID(), text: "ghost")]
+    let ghostLayouts = LayoutEngine.layout(root: ghostDoc.root)
+    check(SummaryGeometry.bracket(for: ghostDoc.summaries[0], parentNode: ghostDoc.root,
+                                  layouts: ghostLayouts, origin: .zero) == nil,
+          "summary with missing endpoints returns nil geometry")
+    let ghostSvg = MapExporter.svg(ghostDoc)
+    check(!ghostSvg.contains("概要"), "svg skips ghost summaries")
+
     // v25.9: first-run experience with all new features
     let vmN = MindMapViewModel()
     // Simulate fresh install: clear sessions, use sample doc
