@@ -50,7 +50,7 @@ public enum LayoutEngine {
     public static func nodeSize(for text: String, depth: Int, hasImage: Bool = false) -> CGSize {
         let attrs: [NSAttributedString.Key: Any] = [.font: font(for: depth)]
         let measured = (text.isEmpty ? " " : text).size(withAttributes: attrs)
-        var padding: CGFloat = depth == 0 ? 44 : 30
+        let padding: CGFloat = depth == 0 ? 44 : 30
         var minHeight: CGFloat = depth == 0 ? 48 : (depth == 1 ? 36 : 30)
         if hasImage { minHeight += imageDisplayHeight }
         let minWidth: CGFloat = depth == 0 ? 120 : (hasImage ? max(56, 132) : 56)

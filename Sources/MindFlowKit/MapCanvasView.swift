@@ -278,10 +278,9 @@ struct MapCanvasView: View {
             }
         }
         .position(x: item.layout.center.x + origin.x, y: item.layout.center.y + origin.y)
-        .onTapGesture(count: 2) {
-            vm.selection = item.node.id
-            vm.editingID = item.node.id
-        }
+        // Double-tap gesture removed (v25.8): it forced a ~300ms delay on every
+        // single tap while SwiftUI waited to disambiguate single vs double.
+        // Editing entry works via "click selected node again" pattern below.
         .onTapGesture {
             if isShiftHeld() {
                 if !vm.presentationActive {
