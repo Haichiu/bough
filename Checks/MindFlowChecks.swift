@@ -784,6 +784,8 @@ do {
     check(stressSvg.contains("https://example.com/stress-test"), "stress svg has URL link")
     check(stressSvg.contains("備註"), "stress svg has note tooltip")
 
+
+
     // Edge case: summaries referencing deleted nodes don't crash rendering
     var ghostDoc = MindDocument(title: "G", root: MindNode(text: "Root", children: [MindNode(text: "Only")]))
     ghostDoc.summaries = [MindSummary(parentID: ghostDoc.root.id,
