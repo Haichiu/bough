@@ -271,7 +271,7 @@ public struct ContentView: View {
                         vm.selection = vm.sessions[index].document.root.id
                         vm.editingID = vm.sessions[index].document.root.id
                     }
-                    .help("切換到此分頁（拖曳可排序；雙擊改標題）")
+                    .help("切換到此分頁（拖曳可排序）")
                     .accessibilityLabel("切換到分頁：\(tabTitle(vm.sessions[index]))")
                     .contextMenu {
                         Button("建立分頁副本") { vm.duplicateActiveTab() }
@@ -881,7 +881,7 @@ public struct ContentView: View {
                     ("Tab", "加入子主題"),
                     ("Return", "加入兄弟主題"),
                     ("Delete", "刪除選取主題"),
-                    ("雙擊", "編輯文字"),
+                    ("點選後再點一次", "編輯文字"),
                     ("方向鍵 ↑↓", "在兄弟之間移動"),
                     ("← →", "跳到上層 / 下層"),
                     ("空白鍵", "收合 / 展開"),
