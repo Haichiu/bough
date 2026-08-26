@@ -759,6 +759,25 @@ do {
     vmM.collapseAll()
     check(vmM.activeCollapseLevel == nil, "collapseAll clears the level indicator")
 
+    // v25.9: first-run experience with all new features
+    let vmN = MindMapViewModel()
+    // Simulate fresh install: clear sessions, use sample doc
+    let sample = MindTemplates.make("會議記錄")
+    check(!sample.root.children.isEmpty, "sample document has topics")
+    // Sample works with all rendering paths
+    let sampleLayouts = LayoutEngine.layout(root: sample.root, direction: .logicRight)
+    check(sampleLayouts.count > 0, "sample document lays out correctly")
+    let sampleSvg = MapExporter.svg(sample)
+    check(sampleSvg.contains("<svg"), "sample exports to SVG without crash")
+    // Templates work with new features
+    for name in ["空白", "會議記錄", "專案計畫", "每週回顧"] {
+        let t = MindTemplates.make(name)
+        let tl = LayoutEngine.layout(root: t.root, direction: .logicRight)
+        check(tl.count > 0, "template \(name) lays out correctly")
+        let ts = MapExporter.svg(t)
+        check(ts.contains("</svg>"), "template \(name) exports cleanly")
+    }
+
     // v25.8: cross-feature regression suite (self-contained)
     let pngData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
     var regDoc = MindDocument(title: "REG", root: MindNode(text: "Root", children: [
