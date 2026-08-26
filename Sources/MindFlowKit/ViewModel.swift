@@ -424,6 +424,9 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var presentationActive = false
     private var savedCollapseStates: [UUID: Bool]?
     private var presentationDepth = 1
+    /// True when the cursor is over the map canvas (not inspector/toolbar).
+    /// Used to gate scroll-wheel handling so scrolling UI chrome doesn't pan the map.
+    @Published public var isCursorOverCanvas = false
     /// Undo entries made before entering presentation; steps inside are non-undoable.
     private var undoBaselineCount: Int?
 

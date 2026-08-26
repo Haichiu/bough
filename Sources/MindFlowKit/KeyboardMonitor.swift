@@ -32,6 +32,7 @@ public final class KeyboardMonitor {
         guard let vm else { return event }
 
         if event.type == .scrollWheel {
+            guard vm.isCursorOverCanvas else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if flags.contains(.command) {
                 let factor = max(0.8, min(1.25, 1 + event.scrollingDeltaY * 0.02))

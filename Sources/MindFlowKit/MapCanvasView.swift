@@ -75,6 +75,7 @@ struct MapCanvasView: View {
                 fitToView(bounds: bounds, geo: geo.size)
             }
             .overlay(alignment: .center) { emptyStateHint(items: items) }
+            .onHover { hovering in vm.isCursorOverCanvas = hovering }
             .overlay(alignment: .bottom) { statusToast }
             .overlay {
                 if let rect = lassoRect {
