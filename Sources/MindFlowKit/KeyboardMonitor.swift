@@ -54,6 +54,14 @@ public final class KeyboardMonitor {
             return event
         }
 
+        // Closing the focus race: setting editingID triggers a SwiftUI update, but AppKit
+        // only makes the field editor first responder on a later runloop turn. During that
+        // window the guard above still sees the old responder, so keystrokes intended for
+        // the node were being swallowed as canvas shortcuts (Tab spawned a child, Return
+        // spawned a sibling, Space collapsed). Larger maps widened the window. Once the
+        // app has decided a node is being edited, the keyboard belongs to that node.
+        if vm.editingID != nil { return event }
+
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let chars = event.charactersIgnoringModifiers ?? ""
 

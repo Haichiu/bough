@@ -279,23 +279,8 @@ struct MapCanvasView: View {
         // Double-tap gesture removed (v25.8): it forced a ~300ms delay on every
         // single tap while SwiftUI waited to disambiguate single vs double.
         // Editing entry works via "click selected node again" pattern below.
-        .onTapGesture {
-            if isShiftHeld() {
-                if !vm.presentationActive {
-                    vm.toggleBatchMember(item.node.id)
-                }
-                return
-            }
-            if vm.editingID != nil { vm.stopEditing() }
-            if vm.selection == item.node.id {
-                // Second click on the selected node starts editing — no double-click needed.
-                vm.editingID = item.node.id
-            } else {
-                vm.selection = item.node.id
-            }
-        }
-        .gesture(reparentGesture(item: item, origin: origin, layouts: layouts,
-                                 geoSize: geoSize, bounds: bounds))
+        .gesture(nodePointerGesture(item: item, origin: origin, layouts: layouts,
+                                    geoSize: geoSize, bounds: bounds))
     }
 
     // MARK: - Gestures
@@ -368,41 +353,82 @@ struct MapCanvasView: View {
             .onEnded { _ in lastZoom = scale }
     }
 
-    private func reparentGesture(item: NodeItem, origin: CGPoint, layouts: [UUID: NodeLayout],
-                                 geoSize: CGSize, bounds: CGRect) -> some Gesture {
-        DragGesture(minimumDistance: 8)
+    /// Below this displacement a pointer sequence is a click, not a drag.
+    private static let dragThreshold: CGFloat = 4
+    @State private var pointerMoved = false
+
+    /// A node used to carry both .onTapGesture and DragGesture(minimumDistance: 8).
+    /// SwiftUI has to disambiguate those against each other, which made drags skip on
+    /// the first frames and let taps get eaten. One pointer sequence, one state machine:
+    /// under the threshold it is a click, over it a drag.
+    private func nodePointerGesture(item: NodeItem, origin: CGPoint, layouts: [UUID: NodeLayout],
+                                    geoSize: CGSize, bounds: CGRect) -> some Gesture {
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
-                // Hold Option while dragging for free placement.
-                if NSEvent.modifierFlags.contains(.option) {
-                    freeMoveID = item.node.id
+                if !pointerMoved {
+                    let moved = max(abs(value.translation.width), abs(value.translation.height))
+                    guard moved > Self.dragThreshold else { return }
+                    pointerMoved = true
                 }
-                // Keep coordinates in map space; the drawing layer applies origin.
-                let current = CGPoint(x: item.layout.center.x + value.translation.width / scale,
-                                      y: item.layout.center.y + value.translation.height / scale)
-                drag = ReparentDrag(id: item.node.id, source: item.layout.center, current: current,
-                                    translation: value.translation)
-                if freeMoveID == nil {
-                    reorderHint = reorderHint(at: current, draggedID: item.node.id, layouts: layouts)
-                    autoScrollToward(current, geoSize: geoSize, bounds: bounds)
-                }
+                dragChanged(value, item: item, layouts: layouts, geoSize: geoSize, bounds: bounds)
             }
             .onEnded { _ in
                 defer {
                     drag = nil
                     reorderHint = nil
                     freeMoveID = nil
+                    pointerMoved = false
                 }
-                guard let dragState = drag else { return }
-                if freeMoveID == dragState.id {
-                    vm.nudgeOffset(id: dragState.id,
-                                   dx: dragState.translation.width / scale,
-                                   dy: dragState.translation.height / scale)
-                } else if let target = hitTest(point: dragState.current, draggedID: dragState.id, layouts: layouts) {
-                    vm.move(id: dragState.id, toParent: target)
-                } else if let hint = reorderHint {
-                    vm.moveSibling(id: dragState.id, toIndex: hint.targetIndex)
+                guard pointerMoved else {
+                    handleNodeClick(item: item)
+                    return
                 }
+                dragEnded(layouts: layouts)
             }
+    }
+
+    private func handleNodeClick(item: NodeItem) {
+        if isShiftHeld() {
+            if !vm.presentationActive { vm.toggleBatchMember(item.node.id) }
+            return
+        }
+        if vm.editingID != nil && vm.editingID != item.node.id { vm.stopEditing() }
+        if vm.selection == item.node.id {
+            // Second click on the selected node starts editing — no double-click needed.
+            vm.editingID = item.node.id
+        } else {
+            vm.selection = item.node.id
+        }
+    }
+
+    private func dragChanged(_ value: DragGesture.Value, item: NodeItem,
+                             layouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect) {
+        // Hold Option while dragging for free placement.
+        if NSEvent.modifierFlags.contains(.option) {
+            freeMoveID = item.node.id
+        }
+        // Keep coordinates in map space; the drawing layer applies origin.
+        let current = CGPoint(x: item.layout.center.x + value.translation.width / scale,
+                              y: item.layout.center.y + value.translation.height / scale)
+        drag = ReparentDrag(id: item.node.id, source: item.layout.center, current: current,
+                            translation: value.translation)
+        if freeMoveID == nil {
+            reorderHint = reorderHint(at: current, draggedID: item.node.id, layouts: layouts)
+            autoScrollToward(current, geoSize: geoSize, bounds: bounds)
+        }
+    }
+
+    private func dragEnded(layouts: [UUID: NodeLayout]) {
+        guard let dragState = drag else { return }
+        if freeMoveID == dragState.id {
+            vm.nudgeOffset(id: dragState.id,
+                           dx: dragState.translation.width / scale,
+                           dy: dragState.translation.height / scale)
+        } else if let target = hitTest(point: dragState.current, draggedID: dragState.id, layouts: layouts) {
+            vm.move(id: dragState.id, toParent: target)
+        } else if let hint = reorderHint {
+            vm.moveSibling(id: dragState.id, toIndex: hint.targetIndex)
+        }
     }
 
     /// While dragging over a sibling's row (but not onto a node), suggest a reordering slot.
