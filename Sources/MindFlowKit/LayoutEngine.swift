@@ -47,7 +47,23 @@ public enum LayoutEngine {
     /// Extra vertical space an attached image occupies below the label.
     static let imageDisplayHeight: CGFloat = 90
 
+    /// AppKit text measurement is the dominant cost of layout, and layout used to run
+    /// on every SwiftUI body evaluation. Memoize by the exact inputs that affect the result.
+    /// Bounded: cleared wholesale once it exceeds the limit (cheap, and a map that large
+    /// re-measures at most once per pan).
+    private nonisolated(unsafe) static var sizeCache: [String: CGSize] = [:]
+    private static let sizeCacheLimit = 8000
+
     public static func nodeSize(for text: String, depth: Int, hasImage: Bool = false) -> CGSize {
+        let cacheKey = "\(depth)|\(hasImage ? 1 : 0)|\(text)"
+        if let hit = sizeCache[cacheKey] { return hit }
+        let computed = measureNodeSize(for: text, depth: depth, hasImage: hasImage)
+        if sizeCache.count >= sizeCacheLimit { sizeCache.removeAll(keepingCapacity: true) }
+        sizeCache[cacheKey] = computed
+        return computed
+    }
+
+    private static func measureNodeSize(for text: String, depth: Int, hasImage: Bool) -> CGSize {
         let attrs: [NSAttributedString.Key: Any] = [.font: font(for: depth)]
         let measured = (text.isEmpty ? " " : text).size(withAttributes: attrs)
         let padding: CGFloat = depth == 0 ? 44 : 30
@@ -75,8 +91,31 @@ public enum LayoutEngine {
 
     static func hGap(for depth: Int) -> CGFloat { depth == 0 ? 72 : 44 }
 
+    /// Memoized entry point. The previous implementation ran a full two-pass tree walk
+    /// (two text measurements per node) on every SwiftUI body evaluation, which meant every
+    /// pan/zoom/hover event re-laid out the whole map. Layout is a pure function of these
+    /// three inputs, so a single-entry cache collapses a per-event cost to a per-edit cost.
+    private nonisolated(unsafe) static var cachedRoot: MindNode?
+    private nonisolated(unsafe) static var cachedDirection: MapDirection?
+    private nonisolated(unsafe) static var cachedOffsets: [String: CGPoint] = [:]
+    private nonisolated(unsafe) static var cachedResult: [UUID: NodeLayout] = [:]
+
     public static func layout(root: MindNode, direction: MapDirection = .logicRight,
                               offsets: [String: CGPoint] = [:]) -> [UUID: NodeLayout] {
+        if let cachedRoot, cachedDirection == direction,
+           cachedOffsets == offsets, cachedRoot == root {
+            return cachedResult
+        }
+        let result = computeLayout(root: root, direction: direction, offsets: offsets)
+        cachedRoot = root
+        cachedDirection = direction
+        cachedOffsets = offsets
+        cachedResult = result
+        return result
+    }
+
+    private static func computeLayout(root: MindNode, direction: MapDirection,
+                                      offsets: [String: CGPoint]) -> [UUID: NodeLayout] {
         var heights: [UUID: CGFloat] = [:]
         _ = subtreeHeight(root, depth: 0, heights: &heights)
         var result: [UUID: NodeLayout] = [:]

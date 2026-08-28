@@ -2098,6 +2098,26 @@ do {
         let layoutTime = Date().timeIntervalSince(layoutStart)
         check(layoutTime < 0.5, "Layout fast enough")
 
+        // Large-map layout: cold (first compute) vs warm (memoized).
+        // Layout used to run on every SwiftUI body evaluation, so the warm path is
+        // what a pan/zoom/hover event actually costs now.
+        var bigRoot = MindNode(text: "perf-root")
+        for branch in 0..<30 {
+            var child = MindNode(text: "branch-\(branch)")
+            for leaf in 0..<50 { child.children.append(MindNode(text: "leaf-\(branch)-\(leaf)")) }
+            bigRoot.children.append(child)
+        }
+        let nodeCount = 1 + bigRoot.children.count + bigRoot.children.reduce(0) { $0 + $1.children.count }
+        let coldStart = Date()
+        _ = LayoutEngine.layout(root: bigRoot)
+        let coldMS = Date().timeIntervalSince(coldStart) * 1000
+        let warmStart = Date()
+        for _ in 0..<10 { _ = LayoutEngine.layout(root: bigRoot) }
+        let warmMS = Date().timeIntervalSince(warmStart) * 1000 / 10
+        print(String(format: "INFO layout %d nodes: cold %.2f ms, warm %.3f ms (%.0fx)",
+                     nodeCount, coldMS, warmMS, coldMS / max(warmMS, 0.0001)))
+        check(warmMS < coldMS / 5, "Layout memoization gives >5x on repeat evaluation")
+
         // Search speed
         vm.searchQuery = "\u{6e2c}\u{8a66}"
         let searchStart = Date()
