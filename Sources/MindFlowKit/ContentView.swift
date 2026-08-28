@@ -5,6 +5,7 @@ public struct ContentView: View {
     @EnvironmentObject private var vm: MindMapViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var searchFocused: Bool
+    @FocusState private var outlineFocused: Bool
     @State private var noteDraft = ""
     @State private var showInspector = true
     @State private var inspectorTab = 0
@@ -164,12 +165,7 @@ public struct ContentView: View {
         .onOpenURL { url in vm.openFromURL(url) }
         .sheet(isPresented: $vm.showTemplatePicker) { templatePicker }
         .onChange(of: vm.showSearch) { showing in
-            if showing {
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                    searchFocused = true
-                }
-            }
+            if showing { searchFocused = true }
         }
         .onChange(of: vm.document) { _ in scheduleAutosave() }
         .onChange(of: vm.sessions) { _ in scheduleAutosave() }
@@ -266,11 +262,6 @@ public struct ContentView: View {
                                 tabDragX = 0
                             }
                     )
-                    .onTapGesture(count: 2) {
-                        vm.switchTab(to: index)
-                        vm.selection = vm.sessions[index].document.root.id
-                        vm.editingID = vm.sessions[index].document.root.id
-                    }
                     .help("切換到此分頁（拖曳可排序）")
                     .accessibilityLabel("切換到分頁：\(tabTitle(vm.sessions[index]))")
                     .contextMenu {
@@ -613,6 +604,8 @@ public struct ContentView: View {
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     .font(.body)
+                    .focused($outlineFocused)
+                    .onAppear { outlineFocused = true }
                     .onSubmit {
                         vm.rename(id: row.id, to: outlineDraft)
                         outlineEditingID = nil
@@ -650,15 +643,16 @@ public struct ContentView: View {
         )
         .cornerRadius(5)
         .contextMenu { outlineRowMenu(row) }
-        .onTapGesture(count: 2) {
-            vm.selection = row.id
-            outlineDraft = row.text
-            outlineEditingID = row.id
-        }
         .onTapGesture {
             guard outlineEditingID != row.id else { return }
             vm.stopEditing()
-            vm.selection = row.id
+            if vm.selection == row.id {
+                // Second click on the selected row starts renaming — no double-click.
+                outlineDraft = row.text
+                outlineEditingID = row.id
+            } else {
+                vm.selection = row.id
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(row.text)

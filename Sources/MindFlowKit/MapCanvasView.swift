@@ -125,9 +125,6 @@ struct MapCanvasView: View {
                 vm.selection = nil
                 vm.showSearch = false
             }
-            .onTapGesture(count: 2) {
-                vm.addChild(to: vm.selection ?? vm.document.root.id)
-            }
     }
 
     private func connectionsCanvas(items: [NodeItem], layouts: [UUID: NodeLayout],
@@ -475,7 +472,7 @@ struct MapCanvasView: View {
             summariesCanvas(layouts: layouts, origin: origin)
             dragIndicator(origin: origin)
             reorderIndicator(origin: origin)
-            ForEach(items) { item in
+            ForEach(visibleItems(items: items, geoSize: geoSize, bounds: bounds)) { item in
                 nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                          layouts: layouts, geoSize: geoSize, bounds: bounds,
                          isSearchHit: vm.searchResults.contains(item.node.id),
@@ -752,11 +749,11 @@ struct CanvasTextDropDelegate: DropDelegate {
             Text("\(Int((scale * 100).rounded()))%")
                 .font(.caption.monospacedDigit())
                 .frame(minWidth: 40)
-                .onTapGesture(count: 2) {
+                .onTapGesture {
                     scale = 1
                     lastZoom = 1
                 }
-                .help("連點兩下回到 100%")
+                .help("點一下回到 100%")
             Button("+") { zoom(by: 1.15) }
             if let level = vm.activeCollapseLevel {
                 Text("第 \(level) 層")
