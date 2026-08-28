@@ -331,6 +331,16 @@ public final class MindMapViewModel: ObservableObject {
         notify("已刪除主題（⌘Z 可復原）")
     }
 
+    /// Enters edit mode on an existing node. `replacingWith` implements type-to-replace:
+    /// typing a printable character on a selected node wipes the text and starts editing,
+    /// the way MindNode and XMind behave.
+    public func beginEditing(id: UUID, replacingWith text: String? = nil) {
+        guard document.root.contains(id) else { return }
+        if let text { mutate("replace:\(id)") { $0.root.update(id) { $0.text = text } } }
+        selection = id
+        editingID = id
+    }
+
     public func rename(id: UUID, to text: String) {
         guard document.root.contains(id) else { return }
         mutate { $0.root.update(id) { $0.text = text } }

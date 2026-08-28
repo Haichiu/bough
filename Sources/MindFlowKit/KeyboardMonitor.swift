@@ -135,8 +135,12 @@ public final class KeyboardMonitor {
             vm.addChild(to: vm.selection ?? vm.document.root.id)
             return nil
         case "\r", "\u{3}":
-            if let selection = vm.selection, selection != vm.document.root.id {
-                vm.addSibling(of: selection)
+            // D2 keyboard model: Return edits the selected node. Spawning the next
+            // sibling is what Return does *while editing* (see onCommitEdit), which is
+            // the MindNode/XMind rapid-entry loop. Return used to create a sibling here,
+            // so there was no keyboard route into an existing node at all.
+            if let selection = vm.selection {
+                vm.beginEditing(id: selection)
             } else {
                 vm.addChild(to: vm.document.root.id)
             }
@@ -182,6 +186,18 @@ public final class KeyboardMonitor {
             vm.showHelp = false
             return nil
         default:
+            // Type-to-replace (D2): a bare printable character on a selected node wipes
+            // the text and drops straight into the editor, as MindNode and XMind do.
+            // Excludes the 0xF700-0xF8FF private-use block, which is where AppKit puts
+            // arrows and function keys.
+            if let selection = vm.selection,
+               flags.subtracting(.shift).isEmpty,
+               chars.count == 1,
+               let scalar = chars.unicodeScalars.first,
+               scalar.value >= 0x20, scalar.value != 0x7F, scalar.value < 0xF700 {
+                vm.beginEditing(id: selection, replacingWith: event.characters ?? chars)
+                return nil
+            }
             return event
         }
     }

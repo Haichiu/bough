@@ -2118,6 +2118,21 @@ do {
                      nodeCount, coldMS, warmMS, coldMS / max(warmMS, 0.0001)))
         check(warmMS < coldMS / 5, "Layout memoization gives >5x on repeat evaluation")
 
+        // D2 keyboard model: Return edits the selected node; typing replaces its text.
+        vm.newDocument()
+        let kbNode = vm.addChild(to: nil)!
+        vm.rename(id: kbNode, to: "original")
+        vm.editingID = nil
+        vm.selection = kbNode
+        vm.beginEditing(id: kbNode)
+        check(vm.editingID == kbNode, "beginEditing enters edit on the selected node")
+        check(vm.document.root.find(kbNode)?.text == "original",
+              "beginEditing without replacement keeps the text")
+        vm.editingID = nil
+        vm.beginEditing(id: kbNode, replacingWith: "X")
+        check(vm.editingID == kbNode && vm.document.root.find(kbNode)?.text == "X",
+              "type-to-replace wipes the text and enters edit")
+
         // Search speed
         vm.searchQuery = "\u{6e2c}\u{8a66}"
         let searchStart = Date()

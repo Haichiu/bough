@@ -62,7 +62,7 @@ public struct ContentView: View {
                 } label: {
                     Label("兄弟主題", systemImage: "plus.square.on.square")
                 }
-                .help("加入兄弟主題（Return）")
+                .help("加入兄弟主題（編輯中按 Return）")
 
                 Button {
                     if let selection = vm.selection { vm.delete(id: selection) }
@@ -873,7 +873,8 @@ public struct ContentView: View {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
                 ForEach([
                     ("Tab", "加入子主題"),
-                    ("Return", "加入兄弟主題"),
+                    ("Return", "編輯選中主題；編輯中再按 Return 建立兄弟主題"),
+                    ("直接打字", "取代選中主題的文字並進入編輯"),
                     ("Delete", "刪除選取主題"),
                     ("點選後再點一次", "編輯文字"),
                     ("方向鍵 ↑↓", "在兄弟之間移動"),

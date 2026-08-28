@@ -198,6 +198,13 @@ struct MapCanvasView: View {
                      }
                      vm.commitNodeText(id: item.node.id, text: text)
                      vm.stopEditing()
+                     // D2: Return while editing means "done — now give me the next
+                     // sibling". Empty text is excluded, otherwise a blank node would
+                     // spawn an endless chain of blank siblings.
+                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        item.node.id != vm.document.root.id {
+                         vm.addSibling(of: item.node.id)
+                     }
                  })
         .contextMenu {
             Button("加入子主題") { vm.addChild(to: item.node.id) }
