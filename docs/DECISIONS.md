@@ -99,3 +99,32 @@ S4（樣式系統 / Theme Editor）是 Owner 付費給 XMind 的真正理由，�
 | 精簡後 Owner 發現常想用被砍的功能 | D3 砍過頭，從 git 歷史取回，但需重新審查它占的手勢預算 |
 | Accessibility 自動化無法穩定命中畫布節點 | D4 不可行，改為在 App 內建測試指令通道（URL scheme / 命令列旗標） |
 | Owner 實際坐下來用了但仍不想回來 | D1 錯了，問題不在手感而在心智圖這個形式本身 |
+
+---
+
+## D6 執行順序修正（2026-08-28，Owner 外出期間由主 agent 決定）
+
+D5 原訂 S0 → S1 互動重設 → S2 精簡 → S3 效能。實際盤點後改為
+**S0 → S1' 精準互動/效能修復 → （待 Owner 確認）S2 → S4**。
+
+理由：把 12 個待砰功能 grep 過一遍，每一個的命中數都在 70-100+，代表它們橫向
+糴纏整個 7,338 行。先砰會讓 App 在數小時內處於不可用狀態，而 Owner 的核心痛點
+正是「無法測試、還沒真的用起來」。先做小而精準、每項都有行號證據的修復，讓 App
+今天就能用，再回頭決定精簡幅度。
+
+**D6 帶出的新問題（需 Owner 裁決）**：既然 D3 的保留清單這麼小（單一邏輯圖版面、
+Tab/Return、拖曳重掛、大綱、搜尋、自動保存、Undo、.mindmap、Markdown/PNG/PDF/SVG），
+而爛掉的是 UI 層（MapCanvasView + ContentView + NodeView = 1,966 行）與 ViewModel
+（1,509 行），Model/FileIO/LayoutEngine/匯出器（約 900 行，狀況良好）全部是保留品。
+**「重寫 UI 層」可能比「從 UI 層減法拆出 12 個功能、然後反正還是要重寫互動」更省事。**
+兩個選項的證據已備齊，等 Owner 回來裁決。在此之前不做不可逆的刪除。
+
+### S1' 已落地（每項都有稽核行號證據）
+
+| commit | 內容 | 證據 |
+|---|---|---|
+| 7ae5e48 | 移除全部 count:2；接上死掉的 viewport culling；修好大綱改名焦點 | MapCanvasView:128 / ContentView:269,616,653；visibleItems() 全專案零呼叫 |
+| e5b4535 | 版面與文字量測記憶化 | 1531 節點：冷 16.06 ms → 熱 0.001 ms |
+| 6400548 | 節點單一指標狀態機（<4pt 為點擊）；編輯交接期不再吐鍵 | MapCanvasView:285+300 tap/drag 同掛；KeyboardMonitor 焦點競態 |
+| 52afb9c | D2 鍵盤模型：Return 編輯、編輯中 Return 生兄弟、直接打字取代 | Return 過去只能新增、無法用鍵盤進入既有節點 |
+
