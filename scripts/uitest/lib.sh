@@ -51,6 +51,27 @@ uit_launch(){ # <fixture-basename> [waitsec] -> echoes pid
   done
   osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1 || true
   sleep 1
+  # Close ghost untitled windows (multi-window state can appear from stray tabs).
+  osascript <<'AS' >/dev/null 2>&1 || true
+tell application "System Events"
+  tell (first process whose name is "MindFlow")
+    repeat with i from (count of windows) to 1 by -1
+      set w to window i
+      try
+        set t to name of w
+      on error
+        set t to ""
+      end try
+      if t is "" or t is missing value then
+        try
+          click (first button of w whose subrole is "AXCloseButton")
+        end try
+      end if
+    end repeat
+  end tell
+end tell
+AS
+  sleep 0.5
   pgrep -x MindFlow | head -1
 }
 
@@ -85,16 +106,23 @@ uit_report(){ # <name> <0|1> <msg-on-fail>
 
 uit_wingeom(){ # echoes: x y w h
   local s
-  s=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to get {position, size} of window 1' 2>/dev/null || true)
+  s=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to get {position, size} of (first window whose name contains " – ")' 2>/dev/null || true)
   echo "$s" | tr -d ' ' | awk -F',' '{print $1, $2, $3, $4}'
 }
 
-uit_axdump(){ # TSV: role x y w h value (entire contents of window 1)
+uit_axdump(){ # TSV: role x y w h value (entire contents of the canvas window)
+  # Canvas window = the one whose title contains " – " (e.g. "N-0000 – v3.8 · …").
+  # Ghost untitled windows (empty title) must be ignored.
   osascript <<'AS'
 tell application "System Events"
   tell (first process whose name is "MindFlow")
     set tabCh to character id 9
-    set els to entire contents of window 1
+    try
+      set w to first window whose name contains " – "
+    on error
+      set w to window 1
+    end try
+    set els to entire contents of w
     set out to {}
     repeat with el in els
       set r to ""
@@ -123,8 +151,26 @@ return out as text
 AS
 }
 
-uit_click(){ # x y — System Events synthesized click
-  osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to click at {$1, $2}" >/dev/null 2>&1
+uit_click(){ # x y — coordinate click (cliclick posts CGEvents; SE fallback)
+  local cc="/opt/homebrew/bin/cliclick"
+  if [[ -x "$cc" ]]; then
+    "$cc" -e 60 "c:$1,$2" >/dev/null 2>&1
+  else
+    osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to click at {$1, $2}" >/dev/null 2>&1
+  fi
+}
+
+uit_drag(){ # x1 y1 x2 y2 — press, optional micro-move, release (cliclick)
+  local cc="/opt/homebrew/bin/cliclick"
+  "$cc" -e 40 "dd:$1,$2" >/dev/null 2>&1
+  local mx=$(( ( $1 + $3 ) / 2 )) my=$(( ( $2 + $4 ) / 2 ))
+  "$cc" -e 40 "dm:$mx,$my" >/dev/null 2>&1
+  "$cc" -e 40 "w:80" >/dev/null 2>&1
+  "$cc" -e 40 "du:$3,$4" >/dev/null 2>&1
+}
+
+uit_menu(){ # <menu bar item name> <menu item name> — AX menu click (IME-proof)
+  osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to click menu item \"$2\" of menu 1 of menu bar item \"$1\" of menu bar 1" >/dev/null 2>&1
 }
 
 uit_key(){ # keycode (48=Tab, 53=Esc)

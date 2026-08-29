@@ -831,7 +831,11 @@ public struct ContentView: View {
             Button { vm.jumpToNextResult() } label: { Image(systemName: "chevron.down") }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("跳到下一個搜尋結果")
-            Divider()
+            // A Divider inside an HStack has unbounded maxHeight, so it stretched this
+            // bar to the full proposed height of the window. The .ultraThinMaterial
+            // background then covered the entire canvas, which looked like the map had
+            // failed to render. Pin it to the row height.
+            Divider().frame(height: 22)
             TextField("取代為…", text: $replaceText)
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
