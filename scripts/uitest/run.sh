@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T-003 UI test harness — runs U1..U6 sequentially, aggregates results.
+# T-003 UI test harness — runs U1..U7 sequentially, aggregates results.
 # Usage: ./run.sh [u1 u2 ...]   (default: all)
 set -u
 cd "$(dirname "$0")"
@@ -9,7 +9,7 @@ trap uit_restore EXIT TERM INT
 PASS=0; FAIL=0; SKIP=0
 COMMIT="${UITEST_COMMIT:-$(git -C "$PROJ" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 BINARY_SHA=$(shasum -a 256 "$APP/Contents/MacOS/MindFlow" 2>/dev/null | awk '{print substr($1,1,16)}')
-SCEN="${*:-u1 u2 u3 u4 u5 u6}"
+SCEN="${*:-u1 u2 u3 u4 u5 u6 u7}"
 for s in $SCEN; do
   echo "===== $s ====="
   out=$(bash "./$s.sh" 2>&1); status=$?

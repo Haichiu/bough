@@ -188,6 +188,49 @@ uit_menu(){ # <menu bar item name> <menu item name> — AX menu click (IME-proof
   osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to click menu item \"$2\" of menu 1 of menu bar item \"$1\" of menu bar 1" >/dev/null 2>&1
 }
 
+uit_export_svg(){ # <fixed-output-path> — nested File > Export menu + NSSavePanel
+  local target="$1" dir base stem result
+  dir=$(dirname "$target"); base=$(basename "$target"); stem="${base%.svg}"
+  mkdir -p "$dir"; rm -f "$target"
+  result=$(osascript <<'AS' 2>/dev/null
+tell application "System Events"
+  tell (first process whose name is "MindFlow")
+    set fileTitle to "File"
+    if exists menu bar item "檔案" of menu bar 1 then set fileTitle to "檔案"
+    click menu bar item fileTitle of menu bar 1
+    delay 0.2
+    click menu item "SVG 向量圖…" of menu 1 of menu item "匯出" of menu 1 of menu bar item fileTitle of menu bar 1
+    return "opened"
+  end tell
+end tell
+AS
+) || true
+  [[ "$result" == "opened" ]] || { echo "ERROR: SVG export menu did not open" >&2; return 1; }
+  sleep 0.8
+
+  uit_require_frontmost
+  osascript -e 'tell application "System Events" to keystroke "g" using {command down, shift down}' >/dev/null 2>&1
+  sleep 0.4
+  uit_type "$dir"
+  uit_key 36
+  sleep 0.8
+
+  result=$(osascript <<AS 2>/dev/null
+tell application "System Events"
+  tell (first process whose name is "MindFlow")
+    set value of text field 1 of window "Save" to "$stem"
+    perform action "AXPress" of button "Save" of window "Save"
+    return "saved"
+  end tell
+end tell
+AS
+) || true
+  [[ "$result" == "saved" ]] || { echo "ERROR: SVG save panel failed ($result)" >&2; return 1; }
+  for _ in $(seq 1 50); do [[ -s "$target" ]] && return 0; sleep 0.1; done
+  echo "ERROR: SVG was not written to $target" >&2
+  return 1
+}
+
 uit_key(){ # keycode (36=Return, 48=Tab, 53=Esc, 123-126=arrows)
   uit_require_frontmost
   osascript -e "tell application \"System Events\" to key code $1" 2>/dev/null
