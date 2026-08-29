@@ -5,7 +5,7 @@
 # 輸入用 cliclick t:（Unicode 事件），並先 Ctrl+Space 切到 ABC 輸入法。
 set -u
 cd "$(dirname "$0")"; source ./lib.sh
-uit_ensure_backup
+uit_prepare_backup || exit 1
 uit_launch small-20 30 >/dev/null || { uit_report U4 1 "launch failed"; exit 1; }
 sleep 0.5
 uit_ime_switch

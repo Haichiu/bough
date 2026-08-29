@@ -13,19 +13,38 @@ APP="${UITEST_APP:-$HOME/Desktop/MindFlow.app}"
 SLOT_ID="0D3F1CE0-0000-4000-8000-0000000000F1"
 APP_SUPPORT="$HOME/Library/Application Support/MindFlow"
 TABS="$APP_SUPPORT/tabs"
-# Unique per run. A single shared name meant the backup was created once and then
-# reused forever: a snapshot from 2026-08-28 was still on disk two days later, and
-# uit_restore would have replaced the owner's real tabs with it wholesale.
-UIT_BACKUP="$APP_SUPPORT/tabs.pre-uitest-$$-$(date +%s)"
+# A suite exports one transaction to its child scenarios. Standalone scenarios
+# create their own. run.sh always replaces inherited values before touching tabs.
+UIT_BACKUP="${UIT_BACKUP:-}"
+UIT_BACKUP_OWNER="${UIT_BACKUP_OWNER:-}"
 ART_DIR="/tmp/uitest-artifacts"
 mkdir -p "$ART_DIR"
 
+uit_new_backup(){
+  UIT_BACKUP="$APP_SUPPORT/tabs.pre-uitest-$$-$(date +%s)-$RANDOM"
+  UIT_BACKUP_OWNER=$$
+  export UIT_BACKUP UIT_BACKUP_OWNER
+}
+
 uit_ensure_backup(){
   mkdir -p "$APP_SUPPORT"
+  [[ -n "$UIT_BACKUP" && -n "$UIT_BACKUP_OWNER" ]] || {
+    echo "ERROR: backup transaction is uninitialized" >&2; return 1;
+  }
+  if [[ "$UIT_BACKUP_OWNER" != "$$" ]]; then
+    kill -0 "$UIT_BACKUP_OWNER" 2>/dev/null || {
+      echo "ERROR: inherited backup owner $UIT_BACKUP_OWNER is not running" >&2; return 1;
+    }
+    [[ -d "$UIT_BACKUP" ]] || {
+      echo "ERROR: inherited backup $UIT_BACKUP is missing" >&2; return 1;
+    }
+    return 0
+  fi
   [[ -d "$UIT_BACKUP" ]] && return 0
   # Failing to back up must stop the run: everything after this point mutates the
-  # owner's real tabs directory.
+  # owner's real tabs directory. Remove any partial destination, never the source.
   if ! cp -R "$TABS" "$UIT_BACKUP"; then
+    rm -rf "$UIT_BACKUP"
     echo "ERROR: could not back up $TABS; refusing to run" >&2
     return 1
   fi
@@ -34,6 +53,20 @@ uit_ensure_backup(){
   if [[ "$stale" -gt 3 ]]; then
     echo "WARN: $stale uitest backups in $APP_SUPPORT; earlier runs did not restore" >&2
   fi
+}
+
+uit_prepare_backup(){
+  if [[ -z "$UIT_BACKUP" && -z "$UIT_BACKUP_OWNER" ]]; then
+    uit_new_backup
+  elif [[ -z "$UIT_BACKUP" || -z "$UIT_BACKUP_OWNER" ]]; then
+    echo "ERROR: incomplete inherited backup transaction" >&2
+    return 1
+  fi
+  uit_ensure_backup || return 1
+  if [[ "$UIT_BACKUP_OWNER" == "$$" ]]; then
+    trap uit_restore EXIT TERM INT
+  fi
+  return 0
 }
 
 uit_pkill(){
@@ -117,13 +150,16 @@ uit_quit_flush(){ # graceful Cmd+Q -> willTerminate autosave rewrites the tabs s
 }
 
 uit_restore(){
+  # A child may use its parent's snapshot, but only the creator may restore or
+  # delete it. This keeps every suite anchored to its pre-run state.
+  [[ -n "$UIT_BACKUP_OWNER" && "$UIT_BACKUP_OWNER" == "$$" ]] || return 0
   uit_pkill
-  # Only ever restores the backup this run made, then drops it, so a snapshot can
-  # never outlive the run that took it.
   if [[ -d "$UIT_BACKUP" ]]; then
     rm -rf "$TABS"
-    cp -R "$UIT_BACKUP" "$TABS"
-    rm -rf "$UIT_BACKUP"
+    if ! mv "$UIT_BACKUP" "$TABS"; then
+      echo "ERROR: could not restore $TABS; backup remains at $UIT_BACKUP" >&2
+      return 1
+    fi
   fi
 }
 

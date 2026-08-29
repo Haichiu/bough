@@ -4,7 +4,11 @@
 set -u
 cd "$(dirname "$0")"
 source ./lib.sh
-uit_ensure_backup
+# The suite owns one fresh snapshot. Children inherit this exact transaction;
+# any UIT_BACKUP left in the caller environment is intentionally discarded.
+uit_new_backup
+uit_ensure_backup || exit 1
+export UIT_BACKUP UIT_BACKUP_OWNER
 trap uit_restore EXIT TERM INT
 PASS=0; FAIL=0; SKIP=0
 COMMIT="${UITEST_COMMIT:-$(git -C "$PROJ" rev-parse --short HEAD 2>/dev/null || echo unknown)}"

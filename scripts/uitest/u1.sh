@@ -3,7 +3,7 @@
 # 備註：root 選取時標籤為「中心主題」；非 root 節點選取時為「主題」。
 set -u
 cd "$(dirname "$0")"; source ./lib.sh
-uit_ensure_backup
+uit_prepare_backup || exit 1
 uit_launch small-20 30 >/dev/null || { uit_report U1 1 "launch failed"; exit 1; }
 sleep 0.5
 D=$(uit_axdump)
