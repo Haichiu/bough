@@ -1,0 +1,42 @@
+#!/usr/bin/env osascript -l JavaScript
+// CGEvent mouse driver. Usage:
+//   osascript -l JavaScript mouse.jxa click X Y
+//   osascript -l JavaScript mouse.jxa drag X1 Y1 X2 Y2 [steps]
+// Coordinates are global screen points (same space as System Events AX position).
+ObjC.import('CoreGraphics')
+ObjC.import('Foundation')
+
+function run(argv) {
+  const cmd = argv[0]
+  const n = argv.slice(1).map(Number)
+  const MOVE = 5, DOWN = 1, UP = 2, DRAG = 6, HID = 0
+
+  function post(type, x, y) {
+    const ev = $.CGEventCreateMouseEvent($(), type, { x: x, y: y }, 0)
+    $.CGEventPost(HID, ev)
+  }
+  function sleep(ms) { $.NSThread.sleepForTimeInterval(ms / 1000) }
+
+  if (cmd === 'click') {
+    const [x, y] = n
+    post(MOVE, x, y); sleep(120)
+    post(DOWN, x, y); sleep(90)
+    post(UP, x, y); sleep(60)
+    return 'clicked ' + x + ',' + y
+  }
+  if (cmd === 'drag') {
+    const [x1, y1, x2, y2, stepsIn] = n
+    const steps = stepsIn || 4
+    post(MOVE, x1, y1); sleep(150)
+    post(DOWN, x1, y1); sleep(120)
+    for (let i = 1; i <= steps; i++) {
+      const x = x1 + ((x2 - x1) * i) / steps
+      const y = y1 + ((y2 - y1) * i) / steps
+      post(DRAG, x, y); sleep(90)
+    }
+    sleep(120)
+    post(UP, x2, y2); sleep(60)
+    return 'dragged ' + x1 + ',' + y1 + ' -> ' + x2 + ',' + y2
+  }
+  return 'unknown cmd: ' + cmd
+}

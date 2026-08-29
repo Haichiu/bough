@@ -1,0 +1,38 @@
+// Tab latency probe. Usage: osascript -l JavaScript tablatency.jxa <timeoutMs>
+// Posts Tab (keycode 48) via CGEvent, then polls the AX focused element of
+// MindFlow's window 1 until it becomes a text editor. Prints MS=<n> on success,
+// TIMEOUT before=<role> on failure, PRE_EDITED if already editing.
+ObjC.import('CoreGraphics')
+ObjC.import('Foundation')
+
+function run(argv) {
+  const timeout = parseInt(argv[0] || '5000', 10)
+  const se = Application('System Events')
+  const proc = se.processes.byName('MindFlow')
+
+  function focusedRole() {
+    try {
+      const el = proc.windows[0].attributes.byName('AXFocusedUIElement').value()
+      return String(el.role())
+    } catch (e) { return '' }
+  }
+
+  const before = focusedRole()
+  if (before === 'AXTextArea' || before === 'AXTextField') { console.log('PRE_EDITED'); return }
+
+  const down = $.CGEventCreateKeyboardEvent($(), 48, true)
+  $.CGEventPost(0, down)
+  const up = $.CGEventCreateKeyboardEvent($(), 48, false)
+  $.CGEventPost(0, up)
+
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeout) {
+    const r = focusedRole()
+    if (r === 'AXTextArea' || r === 'AXTextField') {
+      console.log('MS=' + (Date.now() - t0))
+      return
+    }
+    delay(0.01)
+  }
+  console.log('TIMEOUT before=' + before)
+}

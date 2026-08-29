@@ -1,0 +1,6 @@
+// Prints the AX role of MindFlow window 1's focused element (empty string if none).
+const se = Application('System Events')
+try {
+  const el = se.processes.byName('MindFlow').windows[0].attributes.byName('AXFocusedUIElement').value()
+  console.log(String(el.role()))
+} catch (e) { console.log('') }

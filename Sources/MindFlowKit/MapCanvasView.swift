@@ -146,7 +146,11 @@ struct MapCanvasView: View {
         }
     }
 
-    /// Only materializes nodes intersecting the viewport, keeping huge maps responsive.
+    /// NOT WIRED UP. This was dead code in the original codebase (defined, never called),
+    /// and wiring it in on 2026-08-29 coincided with a report of a blank canvas. The
+    /// coordinate inversion below has therefore never been verified against a running app.
+    /// Do not enable it without a rendering test that proves nodes still appear.
+    /// The measured layout win came from LayoutEngine memoization, not from culling.
     private func visibleItems(items: [NodeItem], geoSize: CGSize, bounds: CGRect) -> [NodeItem] {
         let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
         let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
@@ -505,7 +509,7 @@ struct MapCanvasView: View {
             summariesCanvas(layouts: layouts, origin: origin)
             dragIndicator(origin: origin)
             reorderIndicator(origin: origin)
-            ForEach(visibleItems(items: items, geoSize: geoSize, bounds: bounds)) { item in
+            ForEach(items) { item in
                 nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                          layouts: layouts, geoSize: geoSize, bounds: bounds,
                          isSearchHit: vm.searchResults.contains(item.node.id),
