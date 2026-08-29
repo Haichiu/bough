@@ -1,6 +1,8 @@
-// Prints the AX role of MindFlow window 1's focused element (empty string if none).
+// Prints the AX role of MindFlow's canvas window focused element (empty string if none).
+// Canvas window = the one whose title contains " - " (en-dash form " – ").
 const se = Application('System Events')
 try {
-  const el = se.processes.byName('MindFlow').windows[0].attributes.byName('AXFocusedUIElement').value()
+  const win = se.processes.byName('MindFlow').windows.whose({name: {_contains: ' – '}})[0]
+  const el = win.attributes.byName('AXFocusedUIElement').value()
   console.log(String(el.role()))
 } catch (e) { console.log('') }

@@ -1,0 +1,18 @@
+#!/usr/bin/osascript -l JavaScript
+// CGWindowList dump for MindFlow-owned windows (identify borderless overlays).
+ObjC.import('CoreGraphics')
+ObjC.import('Foundation')
+function run(){
+  const list = $.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, $.kCGNullWindowID)
+  const arr = ObjC.deepUnwrap(list) || []
+  const rows = []
+  for (const w of arr) {
+    if ((w.kCGWindowOwnerName||'') !== 'MindFlow') continue
+    const b = w.kCGWindowBounds || {}
+    rows.push('#'+(w.kCGWindowNumber||'?')+' layer='+(w.kCGWindowLayer??'?')+
+      ' name='+(w.kCGWindowName||'-')+' alpha='+(w.kCGWindowAlpha??'?')+
+      ' bounds='+JSON.stringify(b)+' onscreen='+(w.kCGWindowIsOnscreen??'?')+
+      ' type='+(w.kCGWindowType??'?'))
+  }
+  return rows.join('\n') || '(none)'
+}

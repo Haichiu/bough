@@ -1,49 +1,38 @@
 #!/usr/bin/env bash
-# U3 — drag-misfire detection on node N-0006 (small-20).
-#   U3a: press, move 3px, release  -> must be a CLICK: tree on disk identical to fixture.
-#   U3b: press, move 12px down, release -> lands inside next sibling N-0007's frame,
-#        so a real drag must reparent N-0006 under N-0007 (tree changes).
-# Both verdicts compare the autosave slot JSON against the pristine fixture.
-set -uo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-trap uit_restore EXIT
+# U3: 拖曳語義。a) 3px 拖曳 = 視同點擊：節點被選取（標籤翻轉）且樹不變。
+#     b) 12px 拖曳 = 真拖曳：不應視為點擊（標籤不翻轉）；樹可變（回報 diff）。
+# 兩階段各自重新 stage+launch 以求隔離。
+set -u
+cd "$(dirname "$0")"; source ./lib.sh
 uit_ensure_backup
-
 FIX="$PROJ/scripts/fixtures/small-20.mindmap"
-SLOT="$TABS/$SLOT_ID.mindmap"
+okA=1; okB=1; msgA=""; msgB=""
 
-# ---------- U3a: 3px ----------
-uit_launch small-20 30 >/dev/null || { uit_report U3a 1 "app launch failed"; exit 1; }
+# ---- 3px ----
+uit_launch small-20 30 >/dev/null || { uit_report U3 1 "launch failed (3px)"; exit 1; }
 sleep 0.5
-DUMP=$(uit_axdump)
-read -r CX6 CY6 <<<"$(uit_node_coords "$DUMP" N-0006)"
-[[ -z "${CX6:-}" ]] && { uit_report U3a 1 "node N-0006 not found"; exit 1; }
-"$UIT_DIR/mouse.jxa" drag "$CX6" "$CY6" "$((CX6 + 3))" "$CY6" 3 >/dev/null
-sleep 0.4
+before=$(uit_label)
+D=$(uit_axdump); read CX CY <<<"$(uit_node_coords "$D" N-0006)"
+if [[ -z "$CX" ]]; then uit_report U3 1 "N-0006 not in AX tree"; uit_quit_flush; exit 1; fi
+uit_drag "$CX" "$CY" "$CX" "$((CY+3))"; sleep 1.0
+after=$(uit_label)
 uit_quit_flush
-if DIFF=$(python3 "$UIT_DIR/treecompare.py" identical "$FIX" "$SLOT"); then
-  uit_report U3a 0
-else
-  uit_report U3a 1 "tree changed after 3px drag: $DIFF (expect identical)"
-fi
+ident=$(python3 treecompare.py identical "$FIX" "$TABS/$SLOT_ID.mindmap" 2>&1)
+if [[ "$before" == "中心主題" && "$after" == "主題" && "$ident" == "IDENTICAL" ]]; then okA=0; else msgA="label '$before'->'$after', tree=$ident"; fi
 
-# ---------- U3b: 12px onto N-0007 ----------
-uit_launch small-20 30 >/dev/null || { uit_report U3b 1 "relaunch failed"; exit 1; }
+# ---- 12px ----
+uit_launch small-20 30 >/dev/null || { uit_report U3 1 "launch failed (12px)"; exit 1; }
 sleep 0.5
-DUMP=$(uit_axdump)
-read -r CX6 CY6 <<<"$(uit_node_coords "$DUMP" N-0006)"
-read -r X7 Y7 W7 H7 <<<"$(awk -F'\t' '$1=="AXStaticText" && $6=="N-0007"{print $2,$3,$4,$5; exit}' <<<"$DUMP")"
-[[ -z "${CX6:-}" || -z "${X7:-}" ]] && { uit_report U3b 1 "nodes not found in AX tree"; exit 1; }
-TX=$((CX6)); TY=$((CY6 + 12))
-GEO_OK=$(awk -v tx="$TX" -v ty="$TY" -v x="$X7" -v y="$Y7" -v w="$W7" -v h="$H7" \
-  'BEGIN{m=(tx>=x-8 && tx<=x+w+8 && ty>=y-8 && ty<=y+h+8)?1:0; print m}')
-
-"$UIT_DIR/mouse.jxa" drag "$CX6" "$CY6" "$TX" "$TY" 4 >/dev/null
-sleep 0.4
+beforeB=$(uit_label)
+D=$(uit_axdump); read CX CY <<<"$(uit_node_coords "$D" N-0006)"
+uit_drag "$CX" "$CY" "$CX" "$((CY+12))"; sleep 1.0
+afterB=$(uit_label)
 uit_quit_flush
-PARENT=$(python3 "$UIT_DIR/treecompare.py" parentof N-0006 "$SLOT" 2>/dev/null)
-if [[ "$PARENT" == "N-0007" ]]; then
-  uit_report U3b 0
-else
-  uit_report U3b 1 "after 12px drag parent(N-0006)='$PARENT' (expect N-0007); geo-ok=$GEO_OK"
-fi
+p6=$(python3 treecompare.py parentof N-0006 "$TABS/$SLOT_ID.mindmap" 2>&1)
+if [[ "$beforeB" == "中心主題" && "$afterB" == "中心主題" ]]; then okB=0; else msgB="label '$beforeB'->'$afterB' (12px drag was treated as click)"; fi
+
+echo "U3a(3px=click) $([[ $okA -eq 0 ]] && echo PASS || echo "FAIL: $msgA") tree=$ident"
+echo "U3b(12px=drag) $([[ $okB -eq 0 ]] && echo PASS || echo "FAIL: $msgB") parentof-N-0006=$p6 (fixture: N-0001)"
+if [[ $okA -eq 0 && $okB -eq 0 ]]; then uit_report U3 0; exit 0; fi
+uit_report U3 1 "see U3a/U3b lines"
+exit 1

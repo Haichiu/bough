@@ -193,6 +193,20 @@ public struct ContentView: View {
         .onChange(of: vm.selection) { sel in
             noteDraft = sel.flatMap { vm.document.root.find($0)?.note } ?? ""
         }
+        .onChange(of: vm.editingID) { editing in
+            // When a node editor goes away AppKit hands first responder to the next
+            // text control in the window, which is the notes editor in the inspector —
+            // so finishing a node silently dropped the caret into 備註. Release first
+            // responder instead. Deferred by one runloop turn because rapid entry
+            // (Return/Tab) sets editingID to the next node immediately.
+            guard editing == nil else { return }
+            DispatchQueue.main.async {
+                guard vm.editingID == nil, !vm.showSearch else { return }
+                if NSApp.keyWindow?.firstResponder is NSTextView {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                }
+            }
+        }
         .onAppear {
             if vm.selection == nil { vm.selection = vm.document.root.id }
         }

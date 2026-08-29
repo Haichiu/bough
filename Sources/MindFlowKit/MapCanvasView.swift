@@ -202,11 +202,16 @@ struct MapCanvasView: View {
                      }
                      vm.commitNodeText(id: item.node.id, text: text)
                      vm.stopEditing()
-                     // D2: Return while editing means "done — now give me the next
-                     // sibling". Empty text is excluded, otherwise a blank node would
-                     // spawn an endless chain of blank siblings.
-                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                        item.node.id != vm.document.root.id {
+                 },
+                 onSubmitEdit: { text in
+                     // D2: Return inside the editor means "done — now the next sibling".
+                     // Empty text is excluded so a blank node cannot chain blank siblings.
+                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                     if trimmed != item.node.text.trimmingCharacters(in: .whitespacesAndNewlines) {
+                         vm.commitNodeText(id: item.node.id, text: text)
+                     }
+                     vm.stopEditing()
+                     if !trimmed.isEmpty, item.node.id != vm.document.root.id {
                          vm.addSibling(of: item.node.id)
                      }
                  })

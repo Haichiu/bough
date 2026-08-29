@@ -173,14 +173,81 @@ uit_menu(){ # <menu bar item name> <menu item name> — AX menu click (IME-proof
   osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to click menu item \"$2\" of menu 1 of menu bar item \"$1\" of menu bar 1" >/dev/null 2>&1
 }
 
-uit_key(){ # keycode (48=Tab, 53=Esc)
+uit_key(){ # keycode (36=Return, 48=Tab, 53=Esc, 123-126=arrows)
   osascript -e "tell application \"System Events\" to key code $1" 2>/dev/null
+}
+
+uit_ime_switch(){ # Ctrl+Space: toggle input source (Zhuyin <-> ABC). Plain keys and
+  # cliclick t: typing only behave predictably under ABC.
+  osascript -e 'tell application "System Events" to keystroke " " using control down' >/dev/null 2>&1
+  sleep 0.8
+}
+
+uit_label(){ # echo inspector selection label: 中心主題 (root) or 主題 (non-root)
+  uit_axdump | awk -F'\t' '$1=="AXStaticText" && $2>=1100 && $3<260 && ($6=="中心主題"||$6=="主題") {print $6; exit}'
+}
+
+uit_canvas_editing(){ # echo canvas editing TextField value (empty string if none).
+  # Canvas fields sit below the tab bar (y>250) and left of the inspector (x<1100).
+  uit_axdump | awk -F'\t' '$1=="AXTextField" && $2<1100 && $3>250 {print $6; exit}'
+}
+
+uit_context_menu(){ # <N-xxxx> <menu item title> — AX right-click menu on a node,
+  # then AXPress the item. Coordinate-free; works under any IME.
+  osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to     set w to (first window whose name contains \" – \")" >/dev/null 2>&1
+  osascript <<AS >/dev/null 2>&1
+tell application "System Events"
+  tell (first process whose name is "MindFlow")
+    set w to first window whose name contains " – "
+    set els to entire contents of w
+    repeat with el in els
+      try
+        if (role of el as text) is "AXStaticText" and (value of el as text) is "$1" then
+          perform action "AXShowMenu" of el
+          exit repeat
+        end if
+      end try
+    end repeat
+    delay 0.8
+    set els2 to entire contents of w
+    repeat with el in els2
+      try
+        if (role of el as text) is "AXMenuItem" and (title of el as text) is "$2" then
+          perform action "AXPress" of el
+          return "pressed"
+        end if
+      end try
+    end repeat
+    return "missing"
+  end tell
+end tell
+AS
+}
+
+uit_commit_field(){ # <expected-value> — AXConfirm the editing TextField holding it
+  osascript <<AS >/dev/null 2>&1
+tell application "System Events"
+  tell (first process whose name is "MindFlow")
+    set w to first window whose name contains " – "
+    set els to entire contents of w
+    repeat with el in els
+      try
+        if (role of el as text) is "AXTextField" and (value of el as text) is "$1" then
+          perform action "AXConfirm" of el
+          return "confirmed"
+        end if
+      end try
+    end repeat
+    return "missing"
+  end tell
+end tell
+AS
 }
 
 uit_type(){ # text
   osascript -e "tell application \"System Events\" to keystroke \"$1\"" 2>/dev/null
 }
 
-uit_node_coords(){ # <dump> <N-xxxx> -> echoes "cx cy" (element center, global screen pts)
-  awk -F'\t' -v n="$2" '$1=="AXStaticText" && $6==n {print $2+$4/2, $3+$5/2; exit}' <<<"$1"
+uit_node_coords(){ # <dump> <N-xxxx> -> echoes "cx cy" (element center, global screen pts, integers)
+  awk -F'\t' -v n="$2" '$1=="AXStaticText" && $6==n {print int($2+$4/2), int($3+$5/2); exit}' <<<"$1"
 }

@@ -1,30 +1,30 @@
-// Tab latency probe. Usage: osascript -l JavaScript tablatency.jxa <timeoutMs>
-// Posts Tab (keycode 48) via CGEvent, then polls the AX focused element of
-// MindFlow's window 1 until it becomes a text editor. Prints MS=<n> on success,
-// TIMEOUT before=<role> on failure, PRE_EDITED if already editing.
-ObjC.import('CoreGraphics')
-ObjC.import('Foundation')
+// Edit-field latency probe (poll-only). Usage: osascript -l JavaScript tablatency.jxa <timeoutMs> [keycode]
+// Polls MindFlow's canvas window AXFocusedUIElement until it becomes a text editor.
+// With a keycode argument it first posts that key via System Events (e.g. 36 = Return,
+// the new-model "edit selected node"); without one it just polls (trigger externally).
+// Prints MS=<n> (ms after probe start), TIMEOUT before=<role>, or PRE_EDITED.
+const se = Application('System Events')
+const proc = se.processes.byName('MindFlow')
+
+function canvasWindow() {
+  return proc.windows.whose({name: {_contains: ' – '}})[0]
+}
+
+function focusedRole() {
+  try {
+    const w = canvasWindow()
+    const el = w.attributes.byName('AXFocusedUIElement').value()
+    return String(el.role())
+  } catch (e) { return '' }
+}
 
 function run(argv) {
-  const timeout = parseInt(argv[0] || '5000', 10)
-  const se = Application('System Events')
-  const proc = se.processes.byName('MindFlow')
-
-  function focusedRole() {
-    try {
-      const el = proc.windows[0].attributes.byName('AXFocusedUIElement').value()
-      return String(el.role())
-    } catch (e) { return '' }
+  const timeout = parseInt(argv[0] || '8000', 10)
+  if (argv[1]) {
+    se.keyCode(parseInt(argv[1], 10))
   }
-
   const before = focusedRole()
   if (before === 'AXTextArea' || before === 'AXTextField') { console.log('PRE_EDITED'); return }
-
-  const down = $.CGEventCreateKeyboardEvent($(), 48, true)
-  $.CGEventPost(0, down)
-  const up = $.CGEventCreateKeyboardEvent($(), 48, false)
-  $.CGEventPost(0, up)
-
   const t0 = Date.now()
   while (Date.now() - t0 < timeout) {
     const r = focusedRole()
@@ -32,7 +32,7 @@ function run(argv) {
       console.log('MS=' + (Date.now() - t0))
       return
     }
-    delay(0.01)
+    delay(0.015)
   }
   console.log('TIMEOUT before=' + before)
 }

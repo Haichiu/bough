@@ -17,11 +17,20 @@ struct NodeView: View {
     var colorTag: String? = nil
     var dimmed: Bool = false
     let onCancelEdit: (String) -> Void
+    /// Called when editing ends without an explicit Return — clicking away, or the
+    /// selection moving on. Commits the text and nothing else.
     let onCommitEdit: (String) -> Void
+    /// Called only for an explicit Return inside the editor. Kept separate because
+    /// Return also means "give me the next sibling", and that must not fire on the
+    /// implicit commit path.
+    var onSubmitEdit: ((String) -> Void)? = nil
 
     @State private var editText = ""
     @State private var isHovered = false
     @State private var escDiscard = false
+    /// Return already committed through onSubmitEdit; stop the isEditing observer
+    /// from committing the same text a second time.
+    @State private var submitted = false
     @State private var freshScale: CGFloat = 1
     @State private var freshOpacity: Double = 1
     @FocusState private var editFocused: Bool
@@ -66,13 +75,14 @@ struct NodeView: View {
         .help(node.note.isEmpty ? "" : "備註：\(node.note)")
         .onChange(of: isEditing) { editing in
             // Clicking away confirms the edit; only Esc discards.
-            if !editing && !escDiscard {
+            if !editing && !escDiscard && !submitted {
                 let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed != node.text.trimmingCharacters(in: .whitespacesAndNewlines) {
                     onCommitEdit(editText)
                 }
             }
             escDiscard = false
+            submitted = false
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15),
                    value: isSelected || isHovered || isDropTarget)
@@ -141,7 +151,10 @@ struct NodeView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 10)
                 .focused($editFocused)
-                .onSubmit { onCommitEdit(editText) }
+                .onSubmit {
+                    submitted = true
+                    (onSubmitEdit ?? onCommitEdit)(editText)
+                }
                 .onExitCommand {
                     escDiscard = true
                     onCancelEdit(editText)

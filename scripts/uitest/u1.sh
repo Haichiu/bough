@@ -1,29 +1,20 @@
 #!/usr/bin/env bash
-# U1 — click an unselected node once -> it becomes selected (breadcrumb shows it),
-# and no editing text field appears (AXTextField count unchanged).
-set -uo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-trap uit_restore EXIT
+# U1: 單擊未選取節點 → 節點被選取（inspector 標籤 中心主題→主題）且不進入編輯。
+# 備註：root 選取時標籤為「中心主題」；非 root 節點選取時為「主題」。
+set -u
+cd "$(dirname "$0")"; source ./lib.sh
 uit_ensure_backup
-
-uit_launch small-20 30 >/dev/null || { uit_report U1 1 "app launch failed"; exit 1; }
+uit_launch small-20 30 >/dev/null || { uit_report U1 1 "launch failed"; exit 1; }
 sleep 0.5
-
-DUMP=$(uit_axdump)
-BASE_FIELDS=$(awk -F'\t' '$1=="AXTextField"' <<<"$DUMP" | wc -l | tr -d ' ')
-read -r CX CY <<<"$(uit_node_coords "$DUMP" N-0007)"
-if [[ -z "${CX:-}" ]]; then uit_report U1 1 "node N-0007 not found in AX tree"; exit 1; fi
-
-uit_click "$CX" "$CY"
-sleep 0.6
-
-DUMP2=$(uit_axdump)
-AFTER_FIELDS=$(awk -F'\t' '$1=="AXTextField"' <<<"$DUMP2" | wc -l | tr -d ' ')
-read -r WX WY WW WH <<<"$(uit_wingeom)"
-BC=$(awk -F'\t' -v ymin="$((WY + WH - 90))" '$1=="AXStaticText" && ($3+0)>=ymin && $6 ~ /N-0007/' <<<"$DUMP2" | wc -l | tr -d ' ')
-
-if [[ "$BC" -ge 1 && "$AFTER_FIELDS" -eq "$BASE_FIELDS" ]]; then
-  uit_report U1 0
-else
-  uit_report U1 1 "breadcrumb-hit=$BC (expect >=1), AXTextField $BASE_FIELDS->$AFTER_FIELDS (expect unchanged)"
+before=$(uit_label)
+D=$(uit_axdump); read CX CY <<<"$(uit_node_coords "$D" N-0005)"
+if [[ -z "$CX" ]]; then uit_report U1 1 "N-0005 not in AX tree"; uit_quit_flush; exit 1; fi
+uit_click "$CX" "$CY"; sleep 0.9
+after=$(uit_label)
+editing=$(uit_canvas_editing)
+uit_quit_flush
+if [[ "$before" == "中心主題" && "$after" == "主題" && -z "$editing" ]]; then
+  uit_report U1 0; exit 0
 fi
+uit_report U1 1 "label '$before'->'$after' (expect 中心主題->主題), editing='$editing' (expect empty)"
+exit 1
