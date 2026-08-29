@@ -231,6 +231,16 @@ AS
   return 1
 }
 
+uit_capture_window(){ # <fixed-png-path> [owner; default MindFlow] — no foreground input
+  local target="$1" owner="${2:-MindFlow}" wid
+  rm -f "$target"
+  wid=$(swift "$UIT_DIR/windowid.swift" "$owner" 2>/dev/null) || {
+    echo "ERROR: no capturable window owned by $owner" >&2; return 1;
+  }
+  /usr/sbin/screencapture -x -o "-l$wid" "$target" 2>/dev/null
+  [[ -s "$target" ]] || { echo "ERROR: window capture produced no PNG for $owner ($wid)" >&2; return 1; }
+}
+
 uit_key(){ # keycode (36=Return, 48=Tab, 53=Esc, 123-126=arrows)
   uit_require_frontmost
   osascript -e "tell application \"System Events\" to key code $1" 2>/dev/null
