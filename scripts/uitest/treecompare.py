@@ -3,6 +3,9 @@
 
 Subcommands:
   identical A B              exit 0 if trees identical (id/text/parent/order); else print diff summary
+  parents A B                print IDENTICAL (exit 0) if id/text/parent maps are equal,
+                             IGNORING child order (autosave may reorder siblings);
+                             else print diff summary and exit 1
   parentof TEXT A            print parent text of first (BFS) node whose text == TEXT
   lastchild TEXT A           print text of last child of first node whose text == TEXT (none if no children)
   count A                    print node count
@@ -78,6 +81,35 @@ def main():
                 for k in sorted(moved)[:5]))
         if retyped:
             parts.append('retyped=' + ','.join(id2t_b.get(k, k) for k in sorted(retyped)[:5]))
+        print(' '.join(parts))
+        sys.exit(1)
+    if cmd == 'parents':
+        # Parent-structure compare, child order-insensitive (autosave may
+        # reorder siblings; 'identical' would false-report moved nodes).
+        a, b = load(sys.argv[2]), load(sys.argv[3])
+        sa, sb = snapshot(a), snapshot(b)
+        if sa == sb:
+            print('IDENTICAL')
+            sys.exit(0)
+        added = set(sb) - set(sa)
+        removed = set(sa) - set(sb)
+        id2t_a = {nid: t for nid, (t, _) in sa.items()}
+        id2t_b = {nid: t for nid, (t, _) in sb.items()}
+        moved = [k for k in set(sa) & set(sb) if sa[k][1] != sb[k][1]]
+        retyped = [k for k in set(sa) & set(sb)
+                   if sa[k][1] == sb[k][1] and sa[k][0] != sb[k][0]]
+        parts = [f'nodes {len(sa)}->{len(sb)}']
+        if added:
+            parts.append('added=' + ','.join(id2t_b.get(k, k) for k in sorted(added)[:5]))
+        if removed:
+            parts.append('removed=' + ','.join(id2t_a.get(k, k) for k in sorted(removed)[:5]))
+        if moved:
+            parts.append('moved=' + ','.join(
+                f'{id2t_b.get(k, k)}:{id2t_a[sa[k][1]] if sa[k][1] in id2t_a else "?"}->{id2t_b[sb[k][1]] if sb[k][1] in id2t_b else "?"}'
+                for k in sorted(moved)[:5]))
+        if retyped:
+            parts.append('retyped=' + ','.join(
+                f'{id2t_b.get(k, k)}:{sa[k][0]}->{sb[k][0]}' for k in sorted(retyped)[:5]))
         print(' '.join(parts))
         sys.exit(1)
     if cmd == 'parentof':

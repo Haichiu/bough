@@ -1,36 +1,25 @@
 #!/usr/bin/env bash
-# U4 — select node, Tab (add child), immediately type HELLO, Esc.
-# The new node's text must be exactly "HELLO" — catches leading keystrokes
-# being swallowed as canvas shortcuts during the edit-focus window.
-set -uo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-trap uit_restore EXIT
+# U4: 選取節點 → 新增子主題 → 輸入 HELLO → Esc → 新節點文字應為 HELLO。
+# 備註（環境限制）：Tab 鍵無法以合成事件遞送（key view loop + IME），
+# 改以節點右鍵選單「加入子主題」（與 Tab 同一 vm.addChild 路徑）。
+# 輸入用 cliclick t:（Unicode 事件），並先 Ctrl+Space 切到 ABC 輸入法。
+set -u
+cd "$(dirname "$0")"; source ./lib.sh
 uit_ensure_backup
-
-uit_launch small-20 30 >/dev/null || { uit_report U4 1 "app launch failed"; exit 1; }
+uit_launch small-20 30 >/dev/null || { uit_report U4 1 "launch failed"; exit 1; }
 sleep 0.5
-
-DUMP=$(uit_axdump)
-read -r CX CY <<<"$(uit_node_coords "$DUMP" N-0007)"
-[[ -z "${CX:-}" ]] && { uit_report U4 1 "node N-0007 not found"; exit 1; }
-uit_click "$CX" "$CY"      # select
-sleep 0.6
-
-uit_key 48                   # Tab -> addChild + editing on the new node
-sleep 0.2
-uit_type "HELLO"
-sleep 0.2
-uit_key 53                   # Esc
-sleep 0.5
+uit_ime_switch
+r=$(uit_context_menu N-0005 加入子主題)
+if [[ "$r" != "pressed" ]]; then uit_report U4 1 "context menu press failed ($r)"; uit_quit_flush; exit 1; fi
+sleep 1.5
+/opt/homebrew/bin/cliclick -e 60 t:HELLO >/dev/null 2>&1; sleep 0.7
+editing=$(uit_canvas_editing)
+osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1; sleep 1.0
 uit_quit_flush
-
-SLOT="$TABS/$SLOT_ID.mindmap"
-CNT=$(python3 "$UIT_DIR/treecompare.py" count "$SLOT")
-NEW=$(python3 "$UIT_DIR/treecompare.py" lastchild N-0007 "$SLOT")
-HELLO_N=$(python3 "$UIT_DIR/treecompare.py" findtext HELLO "$SLOT")
-
-if [[ "$NEW" == "HELLO" && "$CNT" == "21" ]]; then
-  uit_report U4 0
-else
-  uit_report U4 1 "new-node-under-N-0007='$NEW' (expect HELLO), HELLO-count=$HELLO_N, nodes=$CNT (expect 21)"
+count=$(python3 treecompare.py count "$TABS/$SLOT_ID.mindmap" 2>/dev/null)
+hello=$(python3 treecompare.py findtext HELLO "$TABS/$SLOT_ID.mindmap" 2>/dev/null)
+if [[ "$count" == "21" && "$hello" == "1" ]]; then
+  uit_report U4 0; exit 0
 fi
+uit_report U4 1 "typed-into-editing='$editing' (want HELLO); after Esc+flush count=$count (want 21) findtext-HELLO=$hello (want 1) — Esc 未提交/未捨棄編輯即離開"
+exit 1

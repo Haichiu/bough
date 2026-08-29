@@ -35,15 +35,25 @@ uit_stage(){ # <fixture-basename>
   touch "$TABS/$SLOT_ID.mindmap"
 }
 
+uit_pin_geom(){ # Pin the canvas window frame via NSWindow frame autosave so every
+  # launch uses the same geometry (defensive layer under the window-relative
+  # coordinate filters). Two known keys, both written.
+  local frame="100 100 1200 800 0 0 1470 919 "
+  defaults write com.agenthub.mindflow "NSWindow Frame main-AppWindow-1" "$frame"
+  defaults write com.agenthub.mindflow "NSWindow Frame SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MindFlowKit.ContentView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MindFlowKit.MindMapViewModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._AppearanceActionModifier>-1-AppWindow-1" "$frame"
+}
+
 uit_launch(){ # <fixture-basename> [waitsec] -> echoes pid
   local f="$1" waitsec="${2:-30}" t0 w
   uit_pkill
   uit_stage "$f" || return 1
+  uit_pin_geom
   open "$APP"
   t0=$(date +%s)
   while :; do
     if pgrep -x MindFlow >/dev/null 2>&1; then
-      w=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to count of windows' 2>/dev/null || echo 0)
+      # Wait for the CANVAS window specifically (ghost untitled windows appear first).
+      w=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to count (windows whose name contains " – ")' 2>/dev/null || echo 0)
       [[ "${w:-0}" -ge 1 ]] && break
     fi
     sleep 0.3
@@ -72,6 +82,9 @@ tell application "System Events"
 end tell
 AS
   sleep 0.5
+  # Re-verify the canvas window survived ghost cleanup.
+  w=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to count (windows whose name contains " – ")' 2>/dev/null || echo 0)
+  [[ "${w:-0}" -ge 1 ]] || { echo "ERROR: canvas window missing after ghost cleanup" >&2; return 1; }
   pgrep -x MindFlow | head -1
 }
 
@@ -177,19 +190,31 @@ uit_key(){ # keycode (36=Return, 48=Tab, 53=Esc, 123-126=arrows)
   osascript -e "tell application \"System Events\" to key code $1" 2>/dev/null
 }
 
-uit_ime_switch(){ # Ctrl+Space: toggle input source (Zhuyin <-> ABC). Plain keys and
-  # cliclick t: typing only behave predictably under ABC.
-  osascript -e 'tell application "System Events" to keystroke " " using control down' >/dev/null 2>&1
-  sleep 0.8
+uit_ime_switch(){ # Ensure the ABC input source before typing/keys (harness need).
+  # Owner keeps an English keyboard, so we never restore Zhuyin afterwards;
+  # Ctrl+Space is a toggle, so only fire it when ABC is NOT already active.
+  local cur
+  cur=$(defaults read com.apple.HIToolbox AppleSelectedInputSources 2>/dev/null || true)
+  if [[ "$cur" != *"ABC"* && "$cur" != *"com.apple.keylayout.US"* ]]; then
+    osascript -e 'tell application "System Events" to keystroke " " using control down' >/dev/null 2>&1
+    sleep 0.8
+  fi
 }
 
 uit_label(){ # echo inspector selection label: 中心主題 (root) or 主題 (non-root)
-  uit_axdump | awk -F'\t' '$1=="AXStaticText" && $2>=1100 && $3<260 && ($6=="中心主題"||$6=="主題") {print $6; exit}'
+  # Window-relative filter: inspector = right 25% / top 30% of the canvas window.
+  local wx wy ww wh
+  read -r wx wy ww wh <<<"$(uit_wingeom)"
+  uit_axdump | awk -F'\t' -v wx="$wx" -v wy="$wy" -v ww="$ww" -v wh="$wh" \
+    '$1=="AXStaticText" && $2>wx+0.75*ww && $3<wy+0.3*wh && ($6=="中心主題"||$6=="主題") {print $6; exit}'
 }
 
 uit_canvas_editing(){ # echo canvas editing TextField value (empty string if none).
-  # Canvas fields sit below the tab bar (y>250) and left of the inspector (x<1100).
-  uit_axdump | awk -F'\t' '$1=="AXTextField" && $2<1100 && $3>250 {print $6; exit}'
+  # Window-relative filter: canvas = below top 30% / left of right 25% (inspector).
+  local wx wy ww wh
+  read -r wx wy ww wh <<<"$(uit_wingeom)"
+  uit_axdump | awk -F'\t' -v wx="$wx" -v wy="$wy" -v ww="$ww" -v wh="$wh" \
+    '$1=="AXTextField" && $3>wy+0.3*wh && $2<wx+0.75*ww {print $6; exit}'
 }
 
 uit_context_menu(){ # <N-xxxx> <menu item title> — AX right-click menu on a node,

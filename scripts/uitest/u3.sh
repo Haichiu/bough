@@ -17,7 +17,7 @@ if [[ -z "$CX" ]]; then uit_report U3 1 "N-0006 not in AX tree"; uit_quit_flush;
 uit_drag "$CX" "$CY" "$CX" "$((CY+3))"; sleep 1.0
 after=$(uit_label)
 uit_quit_flush
-ident=$(python3 treecompare.py identical "$FIX" "$TABS/$SLOT_ID.mindmap" 2>&1)
+ident=$(python3 treecompare.py parents "$FIX" "$TABS/$SLOT_ID.mindmap" 2>&1)
 if [[ "$before" == "中心主題" && "$after" == "主題" && "$ident" == "IDENTICAL" ]]; then okA=0; else msgA="label '$before'->'$after', tree=$ident"; fi
 
 # ---- 12px ----
