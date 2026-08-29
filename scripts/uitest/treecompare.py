@@ -3,8 +3,8 @@
 
 Subcommands:
   identical A B              exit 0 if trees identical (id/text/parent/order); else print diff summary
-  parents A B                print IDENTICAL (exit 0) if text/parent-text multisets are equal,
-                             IGNORING internal ids and child order;
+  parents A B                print IDENTICAL (exit 0) if sorted id/parent-id pairs are equal,
+                             IGNORING only child order;
                              else print diff summary and exit 1
   parentof TEXT A            print parent text of first (BFS) node whose text == TEXT
   lastchild TEXT A           print text of last child of first node whose text == TEXT (none if no children)
@@ -13,7 +13,7 @@ Subcommands:
 """
 import json
 import sys
-from collections import Counter, deque
+from collections import deque
 
 
 def load(path):
@@ -55,11 +55,13 @@ def snapshot(doc):
     return {nid: (text, parent) for nid, text, parent in walk(doc)}
 
 
+def canonical_id(value):
+    return value.lower()
+
+
 def parent_snapshot(doc):
-    rows = list(walk(doc))
-    id2text = {nid: text for nid, text, _ in rows}
-    return Counter((text, id2text.get(parent, 'ROOT') if parent else 'ROOT')
-                   for _, text, parent in rows)
+    return sorted((canonical_id(nid), canonical_id(parent) if parent else 'ROOT')
+                  for nid, _, parent in walk(doc))
 
 
 def main():
@@ -91,19 +93,37 @@ def main():
         print(' '.join(parts))
         sys.exit(1)
     if cmd == 'parents':
-        # Compare observable tree structure: fixture text labels and their
-        # parent labels. Internal ids and sibling order are persistence details.
-        a, b = parent_snapshot(load(sys.argv[2])), parent_snapshot(load(sys.argv[3]))
+        # IDs are serialized product data. Ignore only sibling order; changing
+        # an ID is a real structural regression because links/offsets key on it.
+        doc_a, doc_b = load(sys.argv[2]), load(sys.argv[3])
+        a, b = parent_snapshot(doc_a), parent_snapshot(doc_b)
         if a == b:
             print('IDENTICAL')
             sys.exit(0)
-        added = list((b - a).elements())
-        removed = list((a - b).elements())
-        parts = [f'nodes {sum(a.values())}->{sum(b.values())}']
+        pa, pb = dict(a), dict(b)
+        rows_a, rows_b = list(walk(doc_a)), list(walk(doc_b))
+        id2text_a = {canonical_id(nid): text for nid, text, _ in rows_a}
+        id2text_b = {canonical_id(nid): text for nid, text, _ in rows_b}
+        text2id_a = {text: canonical_id(nid) for nid, text, _ in rows_a}
+        text2id_b = {text: canonical_id(nid) for nid, text, _ in rows_b}
+        added = sorted(set(pb) - set(pa))
+        removed = sorted(set(pa) - set(pb))
+        moved = sorted(nid for nid in set(pa) & set(pb) if pa[nid] != pb[nid])
+        reids = sorted(text for text in set(text2id_a) & set(text2id_b)
+                       if text2id_a[text] != text2id_b[text])
+        parts = [f'nodes {len(pa)}->{len(pb)}']
         if added:
-            parts.append('added=' + ','.join(f'{n}->{p}' for n, p in sorted(added)[:5]))
+            parts.append('added=' + ','.join(
+                f'{id2text_b.get(nid, "?")}[{nid}]->{pb[nid]}' for nid in added[:5]))
         if removed:
-            parts.append('removed=' + ','.join(f'{n}->{p}' for n, p in sorted(removed)[:5]))
+            parts.append('removed=' + ','.join(
+                f'{id2text_a.get(nid, "?")}[{nid}]->{pa[nid]}' for nid in removed[:5]))
+        if moved:
+            parts.append('moved=' + ','.join(
+                f'{id2text_b.get(nid, "?")}[{nid}]:{pa[nid]}->{pb[nid]}' for nid in moved[:5]))
+        if reids:
+            parts.append('reid=' + ','.join(
+                f'{text}:{text2id_a[text]}->{text2id_b[text]}' for text in reids[:5]))
         print(' '.join(parts))
         sys.exit(1)
     if cmd == 'parentof':

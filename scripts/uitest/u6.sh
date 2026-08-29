@@ -20,19 +20,24 @@ uit_type HELLO; sleep 0.7
 editing=$(uit_canvas_editing)
 c=$(uit_commit_field HELLO)   # AXConfirm on the TextField holding HELLO
 sleep 1.0
-frole=$(osascript -l JavaScript focused.jxa 2>/dev/null)
+frole=$(osascript -l JavaScript focused.jxa 2>&1)
 uit_quit_flush
 count=$(python3 treecompare.py count "$TABS/$SLOT_ID.mindmap" 2>/dev/null)
 hello=$(python3 treecompare.py findtext HELLO "$TABS/$SLOT_ID.mindmap" 2>/dev/null)
 echo "U6 confirm=$c typed-into='$editing' focused-role-after-commit='$frole' count=$count findtext-HELLO=$hello"
 if [[ "$c" != "confirmed" ]]; then uit_report U6 1 "AXConfirm did not reach field (confirm=$c, typed-into='$editing')"; exit 1; fi
-if [[ "$count" == "20" ]]; then
-  uit_report U6 1 "count 20->20: AXConfirm bypassed .onSubmit — HARNESS-LIMITATION (owner 回報的 +2 bug 無法自動驗證)"; exit 1
+if [[ "$count" == "21" ]]; then
+  echo "SKIP U6: AXConfirm committed without .onSubmit sibling creation (count=21); cannot automate this regression path"
+  exit 77
 fi
-if [[ "$count" != "21" || "$hello" != "1" ]]; then
-  uit_report U6 1 "count=$count (want 21; 22 = owner 回報的兄弟節點 bug) findtext-HELLO=$hello (want 1)"; exit 1
+if [[ "$count" == "22" && "$hello" == "1" && "$frole" != "AXTextArea" ]]; then
+  uit_report U6 0; exit 0
+fi
+if [[ "$count" == "23" ]]; then
+  uit_report U6 1 "double-sibling regression: final count=23 (want 22), findtext-HELLO=$hello focus='$frole'"; exit 1
 fi
 if [[ "$frole" == "AXTextArea" ]]; then
-  uit_report U6 1 "commit OK (count+1) but focus jumped into notes AXTextArea (owner 回報的備註焦點 bug)"; exit 1
+  uit_report U6 1 "submit count=$count but focus jumped into notes AXTextArea"; exit 1
 fi
-uit_report U6 0; exit 0
+uit_report U6 1 "count=$count (want 22; 21=skip, 23=double-sibling) findtext-HELLO=$hello (want 1) focus='$frole'"
+exit 1

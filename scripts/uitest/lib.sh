@@ -205,13 +205,17 @@ uit_ime_switch(){ # Ensure the ABC input source before typing/keys (harness need
   fi
 }
 
+uit_label_from_dump(){ # <dump> — inspector label from one explicit AX snapshot
+  local wx wy ww wh
+  read -r wx wy ww wh <<<"$(uit_wingeom)"
+  awk -F'\t' -v wx="$wx" -v wy="$wy" -v ww="$ww" -v wh="$wh" \
+    '$1=="AXStaticText" && $2>wx+0.65*ww && $3<wy+0.35*wh && ($6=="中心主題"||$6=="主題") {print $6; exit}' <<<"$1"
+}
+
 uit_label(){ # echo inspector selection label: 中心主題 (root) or 主題 (non-root)
   # Window-relative filter: inspector = right 35% / top 35% (measured: label at
   # 72% width / 20% height across builds).
-  local wx wy ww wh
-  read -r wx wy ww wh <<<"$(uit_wingeom)"
-  uit_axdump | awk -F'\t' -v wx="$wx" -v wy="$wy" -v ww="$ww" -v wh="$wh" \
-    '$1=="AXStaticText" && $2>wx+0.65*ww && $3<wy+0.35*wh && ($6=="中心主題"||$6=="主題") {print $6; exit}'
+  uit_label_from_dump "$(uit_axdump)"
 }
 
 uit_canvas_editing(){ # echo canvas editing TextField value (empty string if none).

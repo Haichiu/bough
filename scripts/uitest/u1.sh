@@ -6,11 +6,18 @@ cd "$(dirname "$0")"; source ./lib.sh
 uit_ensure_backup
 uit_launch small-20 30 >/dev/null || { uit_report U1 1 "launch failed"; exit 1; }
 sleep 0.5
-before=$(uit_label)
-D=$(uit_axdump); read CX CY <<<"$(uit_node_coords "$D" N-0005)"
+D=$(uit_axdump)
+printf '%s\n' "$D" > "$ART_DIR/U1-before.tsv"
+before=$(uit_label_from_dump "$D")
+read CX CY <<<"$(uit_node_coords "$D" N-0005)"
 if [[ -z "$CX" ]]; then uit_report U1 1 "N-0005 not in AX tree"; uit_quit_flush; exit 1; fi
 uit_click "$CX" "$CY"; sleep 0.9
-after=$(uit_label)
+D2=$(uit_axdump)
+printf '%s\n' "$D2" > "$ART_DIR/U1-after.tsv"
+after=$(uit_label_from_dump "$D2")
+before_candidates=$(awk -F'\t' '$1=="AXStaticText" && ($6=="中心主題"||$6=="主題") {printf "%s@%s,%s ", $6,$2,$3}' <<<"$D")
+after_candidates=$(awk -F'\t' '$1=="AXStaticText" && ($6=="中心主題"||$6=="主題") {printf "%s@%s,%s ", $6,$2,$3}' <<<"$D2")
+echo "U1 label-candidates before=[$before_candidates] after=[$after_candidates]"
 editing=$(uit_canvas_editing)
 uit_quit_flush
 if [[ "$before" == "中心主題" && "$after" == "主題" && -z "$editing" ]]; then

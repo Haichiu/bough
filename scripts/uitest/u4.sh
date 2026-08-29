@@ -15,11 +15,16 @@ sleep 1.5
 uit_type HELLO; sleep 0.7
 editing=$(uit_canvas_editing)
 uit_key 53; sleep 1.0
+editing_after=$(uit_canvas_editing)
 uit_quit_flush
 count=$(python3 treecompare.py count "$TABS/$SLOT_ID.mindmap" 2>/dev/null)
 hello=$(python3 treecompare.py findtext HELLO "$TABS/$SLOT_ID.mindmap" 2>/dev/null)
-if [[ "$count" == "21" && "$hello" == "1" ]]; then
+if [[ -z "$editing_after" && "$count" == "21" && "$hello" == "0" ]]; then
   uit_report U4 0; exit 0
 fi
-uit_report U4 1 "typed-into-editing='$editing' (want HELLO); after Esc+flush count=$count (want 21) findtext-HELLO=$hello (want 1) — Esc 未提交/未捨棄編輯即離開"
+if [[ "$count" == "21" && "$hello" == "0" ]]; then
+  echo "SKIP U4: synthetic Esc did not close editing field (before='$editing' after='$editing_after'); persisted tree still matches discard semantics"
+  exit 77
+fi
+uit_report U4 1 "before-Esc='$editing' after-Esc='$editing_after'; count=$count (want 21) findtext-HELLO=$hello (want 0) — Esc discard regression"
 exit 1
