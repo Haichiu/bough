@@ -165,8 +165,14 @@ public struct ContentView: View {
             }
         }
         .overlay(alignment: .top) {
-            searchOverlay
-                .transition(.move(edge: .top).combined(with: .opacity))
+            // This overlay had no condition, so the search/replace bar was rendered
+            // permanently. showSearch was toggled by Cmd+F, Esc and the close button but
+            // nothing read it, which is why the X button appeared dead and why the bar
+            // "reappeared" on every interaction — it had never left.
+            if vm.showSearch {
+                searchOverlay
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: vm.showSearch)
         .sheet(isPresented: $vm.showHelp) { helpSheet }
