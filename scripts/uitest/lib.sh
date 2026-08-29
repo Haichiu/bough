@@ -191,7 +191,7 @@ tell application "System Events"
     on error
       set w to window 1
     end try
-    set els to entire contents of w
+    set els to {w} & (entire contents of w)
     set out to {}
     repeat with el in els
       set r to ""
