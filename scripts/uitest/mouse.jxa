@@ -5,6 +5,13 @@
 // Coordinates are global screen points (same space as System Events AX position).
 ObjC.import('CoreGraphics')
 ObjC.import('Foundation')
+const se = Application('System Events')
+function requireMindFlowFrontmost() {
+  const front = se.applicationProcesses.whose({frontmost: true})[0]
+  let frontName = ''
+  try { frontName = String(front.name()) } catch (e) {}
+  if (frontName !== 'MindFlow') throw new Error('global input blocked: frontmost=' + (frontName || 'unknown'))
+}
 
 function run(argv) {
   const cmd = argv[0]
@@ -18,6 +25,7 @@ function run(argv) {
   function sleep(ms) { $.NSThread.sleepForTimeInterval(ms / 1000) }
 
   if (cmd === 'click') {
+    requireMindFlowFrontmost()
     const [x, y] = n
     post(MOVE, x, y); sleep(120)
     post(DOWN, x, y); sleep(90)
@@ -25,6 +33,7 @@ function run(argv) {
     return 'clicked ' + x + ',' + y
   }
   if (cmd === 'drag') {
+    requireMindFlowFrontmost()
     const [x1, y1, x2, y2, stepsIn] = n
     const steps = stepsIn || 4
     post(MOVE, x1, y1); sleep(150)

@@ -27,6 +27,14 @@ uit_pkill(){
   for _ in $(seq 1 50); do pgrep -x MindFlow >/dev/null 2>&1 || return 0; sleep 0.1; done
 }
 
+uit_require_frontmost(){
+  local front
+  front=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null || true)
+  if [[ "$front" == "MindFlow" ]]; then return 0; fi
+  echo "ERROR: global input blocked: frontmost='${front:-unknown}', expected MindFlow" >&2
+  exit 70
+}
+
 uit_stage(){ # <fixture-basename>
   local f="$PROJ/scripts/fixtures/$1.mindmap"
   [[ -f "$f" ]] || { echo "missing fixture $f" >&2; return 1; }
@@ -35,19 +43,10 @@ uit_stage(){ # <fixture-basename>
   touch "$TABS/$SLOT_ID.mindmap"
 }
 
-uit_pin_geom(){ # Pin the canvas window frame via NSWindow frame autosave so every
-  # launch uses the same geometry (defensive layer under the window-relative
-  # coordinate filters). Two known keys, both written.
-  local frame="100 100 1200 800 0 0 1470 919 "
-  defaults write com.agenthub.mindflow "NSWindow Frame main-AppWindow-1" "$frame"
-  defaults write com.agenthub.mindflow "NSWindow Frame SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MindFlowKit.ContentView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MindFlowKit.MindMapViewModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._AppearanceActionModifier>-1-AppWindow-1" "$frame"
-}
-
 uit_launch(){ # <fixture-basename> [waitsec] -> echoes pid
   local f="$1" waitsec="${2:-30}" t0 w
   uit_pkill
   uit_stage "$f" || return 1
-  uit_pin_geom
   open "$APP"
   t0=$(date +%s)
   while :; do
@@ -91,6 +90,7 @@ AS
 uit_quit_flush(){ # graceful Cmd+Q -> willTerminate autosave rewrites the tabs slot
   osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to set frontmost to true' >/dev/null 2>&1
   sleep 0.3
+  uit_require_frontmost
   osascript -e 'tell application "System Events" to keystroke "q" using command down' >/dev/null 2>&1
   local alive=1
   for _ in $(seq 1 100); do pgrep -x MindFlow >/dev/null 2>&1 || { alive=0; break; }; sleep 0.1; done
@@ -108,7 +108,7 @@ uit_restore(){
 }
 
 uit_report(){ # <name> <0|1> <msg-on-fail>
-  local name="$1" ok="$2" msg="$3"
+  local name="$1" ok="$2" msg="${3:-}"
   if [[ "$ok" == "0" ]]; then
     echo "PASS $name"
   else
@@ -165,6 +165,7 @@ AS
 }
 
 uit_click(){ # x y — coordinate click (cliclick posts CGEvents; SE fallback)
+  uit_require_frontmost
   local cc="/opt/homebrew/bin/cliclick"
   if [[ -x "$cc" ]]; then
     "$cc" -e 60 "c:$1,$2" >/dev/null 2>&1
@@ -174,6 +175,7 @@ uit_click(){ # x y — coordinate click (cliclick posts CGEvents; SE fallback)
 }
 
 uit_drag(){ # x1 y1 x2 y2 — press, optional micro-move, release (cliclick)
+  uit_require_frontmost
   local cc="/opt/homebrew/bin/cliclick"
   "$cc" -e 40 "dd:$1,$2" >/dev/null 2>&1
   local mx=$(( ( $1 + $3 ) / 2 )) my=$(( ( $2 + $4 ) / 2 ))
@@ -187,6 +189,7 @@ uit_menu(){ # <menu bar item name> <menu item name> — AX menu click (IME-proof
 }
 
 uit_key(){ # keycode (36=Return, 48=Tab, 53=Esc, 123-126=arrows)
+  uit_require_frontmost
   osascript -e "tell application \"System Events\" to key code $1" 2>/dev/null
 }
 
@@ -196,6 +199,7 @@ uit_ime_switch(){ # Ensure the ABC input source before typing/keys (harness need
   local cur
   cur=$(defaults read com.apple.HIToolbox AppleSelectedInputSources 2>/dev/null || true)
   if [[ "$cur" != *"ABC"* && "$cur" != *"com.apple.keylayout.US"* ]]; then
+    uit_require_frontmost
     osascript -e 'tell application "System Events" to keystroke " " using control down' >/dev/null 2>&1
     sleep 0.8
   fi
@@ -221,8 +225,7 @@ uit_canvas_editing(){ # echo canvas editing TextField value (empty string if non
 
 uit_context_menu(){ # <N-xxxx> <menu item title> — AX right-click menu on a node,
   # then AXPress the item. Coordinate-free; works under any IME.
-  osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to     set w to (first window whose name contains \" – \")" >/dev/null 2>&1
-  osascript <<AS >/dev/null 2>&1
+  osascript <<AS 2>/dev/null
 tell application "System Events"
   tell (first process whose name is "MindFlow")
     set w to first window whose name contains " – "
@@ -252,7 +255,7 @@ AS
 }
 
 uit_commit_field(){ # <expected-value> — AXConfirm the editing TextField holding it
-  osascript <<AS >/dev/null 2>&1
+  osascript <<AS 2>/dev/null
 tell application "System Events"
   tell (first process whose name is "MindFlow")
     set w to first window whose name contains " – "
@@ -271,8 +274,14 @@ end tell
 AS
 }
 
-uit_type(){ # text
-  osascript -e "tell application \"System Events\" to keystroke \"$1\"" 2>/dev/null
+uit_type(){ # text — cliclick Unicode typing, guarded against wrong-app delivery
+  uit_require_frontmost
+  local cc="/opt/homebrew/bin/cliclick"
+  if [[ -x "$cc" ]]; then
+    "$cc" -e 60 "t:$1" >/dev/null 2>&1
+  else
+    osascript -e "tell application \"System Events\" to keystroke \"$1\"" 2>/dev/null
+  fi
 }
 
 uit_node_coords(){ # <dump> <N-xxxx> -> echoes "cx cy" (element center, global screen pts, integers)

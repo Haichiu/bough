@@ -9,16 +9,17 @@ uit_ensure_backup
 uit_launch large-1500 60 >/dev/null || { uit_report U5 1 "launch failed"; exit 1; }
 sleep 0.5
 uit_ime_switch
+uit_require_frontmost
 lat=$(osascript -l JavaScript tablatency.jxa 8000 36 2>&1)
 sleep 0.5
 role=$(osascript -l JavaScript focused.jxa 2>/dev/null)
-osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1; sleep 1.0
+uit_key 53; sleep 1.0
 # add-child on selected root via menu bar（主題 → 加入子主題），再輸入 HELLO → Esc
 r=$(uit_menu 主題 加入子主題)
 sleep 1.5
-/opt/homebrew/bin/cliclick -e 60 t:HELLO >/dev/null 2>&1; sleep 0.7
+uit_type HELLO; sleep 0.7
 role2=$(osascript -l JavaScript focused.jxa 2>/dev/null)
-osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1; sleep 1.0
+uit_key 53; sleep 1.0
 uit_quit_flush
 count=$(python3 treecompare.py count "$TABS/$SLOT_ID.mindmap" 2>/dev/null)
 hello=$(python3 treecompare.py findtext HELLO "$TABS/$SLOT_ID.mindmap" 2>/dev/null)

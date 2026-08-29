@@ -21,6 +21,10 @@ function focusedRole() {
 function run(argv) {
   const timeout = parseInt(argv[0] || '8000', 10)
   if (argv[1]) {
+    const front = se.applicationProcesses.whose({frontmost: true})[0]
+    let frontName = ''
+    try { frontName = String(front.name()) } catch (e) {}
+    if (frontName !== 'MindFlow') throw new Error('global input blocked: frontmost=' + (frontName || 'unknown'))
     se.keyCode(parseInt(argv[1], 10))
   }
   const before = focusedRole()

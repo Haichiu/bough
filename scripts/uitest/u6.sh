@@ -16,7 +16,7 @@ uit_ime_switch
 r=$(uit_context_menu N-0005 加入子主題)
 if [[ "$r" != "pressed" ]]; then uit_report U6 1 "context menu press failed ($r)"; uit_quit_flush; exit 1; fi
 sleep 1.5
-/opt/homebrew/bin/cliclick -e 60 t:HELLO >/dev/null 2>&1; sleep 0.7
+uit_type HELLO; sleep 0.7
 editing=$(uit_canvas_editing)
 c=$(uit_commit_field HELLO)   # AXConfirm on the TextField holding HELLO
 sleep 1.0

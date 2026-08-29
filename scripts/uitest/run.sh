@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T-003 UI test harness — runs U1..U5 sequentially, aggregates results.
+# T-003 UI test harness — runs U1..U6 sequentially, aggregates results.
 # Usage: ./run.sh [u1 u2 ...]   (default: all)
 set -u
 cd "$(dirname "$0")"
@@ -12,6 +12,10 @@ for s in $SCEN; do
   echo "===== $s ====="
   out=$(bash "./$s.sh" 2>&1); status=$?
   echo "$out"
+  if [[ $status -eq 70 ]]; then
+    echo "ABORT: foreground ownership lost during $s"
+    exit 70
+  fi
   last=$(printf '%s\n' "$out" | tail -1)
   if [[ $status -eq 0 && "$last" == PASS* ]]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 done
