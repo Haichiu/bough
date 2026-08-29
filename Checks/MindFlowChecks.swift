@@ -2238,6 +2238,34 @@ do {
     }
 }
 
+// Canvas fit. Measured from a real window: the content occupied 765pt of a 672pt-tall
+// window, so the bottom of every opened map was cut off.
+do {
+    let viewport = CGSize(width: 690, height: 582)
+
+    let tall = CGSize(width: 778, height: 898)
+    let s = CanvasFit.scale(content: tall, viewport: viewport)
+    check(tall.width * s <= viewport.width + 0.5, "content wider than canvas is shrunk to fit")
+    check(tall.height * s <= viewport.height + 0.5, "content taller than canvas is shrunk to fit")
+
+    let wide = CGSize(width: 2400, height: 300)
+    let w = CanvasFit.scale(content: wide, viewport: viewport)
+    check(wide.width * w <= viewport.width + 0.5, "very wide content is shrunk to fit")
+
+    let small = CGSize(width: 200, height: 120)
+    check(CanvasFit.scale(content: small, viewport: viewport) == CanvasFit.maxInitial,
+          "a small map is not blown up past the initial cap")
+
+    check(CanvasFit.scale(content: .zero, viewport: viewport) == 1,
+          "empty content leaves the zoom untouched")
+    check(CanvasFit.scale(content: tall, viewport: .zero) == 1,
+          "a zero-sized canvas leaves the zoom untouched")
+
+    let huge = CGSize(width: 40000, height: 40000)
+    check(CanvasFit.scale(content: huge, viewport: viewport) == CanvasFit.zoomRange.lowerBound,
+          "content past the zoom floor stops at the floor")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

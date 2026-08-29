@@ -37,7 +37,7 @@ struct MapCanvasView: View {
     @State private var textDropActive = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let zoomRange: ClosedRange<CGFloat> = 0.25...3
+    private static let zoomRange = CanvasFit.zoomRange
 
     var body: some View {
         GeometryReader { geo in
@@ -63,9 +63,17 @@ struct MapCanvasView: View {
             .animation(reduceMotion ? nil : .spring(response: 0.3), value: vm.statusMessage)
             .onAppear {
                 canvasSize = geo.size
-                centerContent(geo: geo, bounds: bounds)
+                fitToView(bounds: bounds, geo: geo.size)
             }
             .onChange(of: geo.size) { canvasSize = $0 }
+            // onAppear fires before the tab's document has been restored, so the fit above
+            // is computed against an empty map and lands on the 1.2 cap. Nothing used to
+            // recompute it once the real content arrived, which is why opening a map showed
+            // it overflowing the canvas. Keyed on the root's identity so this refits when a
+            // document loads or the tab changes, and not while the map is being edited.
+            .onChange(of: vm.document.root.id) { _ in
+                fitToView(bounds: bounds, geo: geo.size)
+            }
             .onChange(of: vm.selection) { id in
                 guard vm.lastNavWasKeyboard else { return }
                 revealNode(id, layouts: layouts, bounds: bounds, geo: geo.size)
@@ -640,16 +648,6 @@ struct CanvasTextDropDelegate: DropDelegate {
         return best?.0
     }
 
-    private func centerContent(geo: GeometryProxy, bounds: CGRect) {
-        // The inner container is centered by the outer frame; start with a friendly zoom.
-        let fitScale = min(geo.size.width / max(bounds.width, 1), geo.size.height / max(bounds.height, 1), 1.2)
-        let initial = min(Self.zoomRange.upperBound, max(Self.zoomRange.lowerBound, fitScale))
-        scale = initial
-        lastZoom = initial
-        pan = .zero
-        lastPan = .zero
-    }
-
     @ViewBuilder
     private var statusToast: some View {
         if let message = vm.statusMessage {
@@ -746,8 +744,7 @@ struct CanvasTextDropDelegate: DropDelegate {
 
     private func fitToView(bounds: CGRect, geo: CGSize) {
         guard bounds.width > 0, bounds.height > 0 else { return }
-        let fit = min(geo.width / bounds.width, geo.height / bounds.height, 1.2)
-        scale = min(Self.zoomRange.upperBound, max(Self.zoomRange.lowerBound, fit))
+        scale = CanvasFit.scale(content: bounds.size, viewport: geo)
         lastZoom = scale
         pan = .zero
         lastPan = .zero
