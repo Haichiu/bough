@@ -58,6 +58,13 @@ struct MapCanvasView: View {
                 mapContent(items: items, layouts: layouts, theme: theme, bounds: bounds,
                            origin: origin, geoSize: geo.size, dropTarget: dropTarget, focusIDs: focusIDs)
             }
+            // The map container is deliberately larger than the viewport, and a ZStack takes
+            // the size of its largest child, so this stack grew to the container's size.
+            // GeometryReader pins oversized content to its top-leading corner rather than
+            // centring it, which parked the map half its overflow down and to the right and
+            // pushed the lower nodes off the bottom of the window. Pinning the stack to the
+            // viewport puts the centring back where it belongs.
+            .frame(width: geo.size.width, height: geo.size.height)
             .overlay(alignment: .bottomTrailing) { zoomControls }
             .overlay { dropHighlightBorder }
             .animation(reduceMotion ? nil : .spring(response: 0.3), value: vm.statusMessage)
@@ -66,14 +73,6 @@ struct MapCanvasView: View {
                 fitToView(bounds: bounds, geo: geo.size)
             }
             .onChange(of: geo.size) { canvasSize = $0 }
-            // onAppear fires before the tab's document has been restored, so the fit above
-            // is computed against an empty map and lands on the 1.2 cap. Nothing used to
-            // recompute it once the real content arrived, which is why opening a map showed
-            // it overflowing the canvas. Keyed on the root's identity so this refits when a
-            // document loads or the tab changes, and not while the map is being edited.
-            .onChange(of: vm.document.root.id) { _ in
-                fitToView(bounds: bounds, geo: geo.size)
-            }
             .onChange(of: vm.selection) { id in
                 guard vm.lastNavWasKeyboard else { return }
                 revealNode(id, layouts: layouts, bounds: bounds, geo: geo.size)
