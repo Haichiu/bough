@@ -221,25 +221,39 @@ public struct ContentView: View {
     private var breadcrumbBar: some View {
         Group {
             if let selID = vm.selection {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(vm.breadcrumbPath(to: selID), id: \.id) { node in
-                            Button(node.text.isEmpty ? "\u{2026}" : node.text) {
-                                vm.selection = node.id
-                            }
-                            .buttonStyle(.borderless)
+                // A horizontal ScrollView always claims the full proposed width, so hanging
+                // the capsule background on it smeared a translucent bar across the whole
+                // window instead of drawing a pill around the path. The row sizes to its
+                // own content instead, and deep paths are bounded by showing the tail.
+                let path = vm.breadcrumbPath(to: selID)
+                let shown = path.suffix(6)
+                HStack(spacing: 4) {
+                    if path.count > shown.count {
+                        Text("\u{2026}")
                             .font(.caption)
-                            if node.id != vm.selection {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 8))
-                                    .foregroundStyle(.secondary)
-                            }
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(shown, id: \.id) { node in
+                        Button(node.text.isEmpty ? "\u{2026}" : node.text) {
+                            vm.selection = node.id
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .lineLimit(1)
+                        if node.id != vm.selection {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(.ultraThinMaterial, in: Capsule())
+                .fixedSize()
                 .padding(.bottom, 40)
             }
         }

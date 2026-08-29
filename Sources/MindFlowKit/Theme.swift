@@ -59,6 +59,19 @@ extension Theme {
     })
 }
 
+extension Theme {
+    /// Pairs with `rootBackground`. That fill is deliberately lighter in dark mode so the
+    /// central topic stays crisp against a near-black canvas, which means white label text
+    /// sits on a light fill and washes out. The label follows the fill instead of assuming
+    /// the fill is always dark.
+    public static let rootForeground = Color(NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return isDark
+            ? NSColor(calibratedWhite: 0.12, alpha: 1)
+            : NSColor.white
+    })
+}
+
 extension Color {
     init(hex: UInt32) {
         self.init(.sRGB,

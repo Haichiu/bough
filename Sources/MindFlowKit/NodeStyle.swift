@@ -37,7 +37,7 @@ public struct NodeStyle {
         case 0:
             return NodeStyle(font: .systemFont(ofSize: 18, weight: .semibold),
                              cornerRadius: 14,
-                             textColor: .white,
+                             textColor: Theme.rootForeground,
                              fillBase: Theme.rootBackground, fillOpacity: 1,
                              strokeBase: nil, strokeOpacity: 0, strokeWidth: 0,
                              horizontalInset: 24, verticalInset: 13,
