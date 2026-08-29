@@ -202,19 +202,21 @@ uit_ime_switch(){ # Ensure the ABC input source before typing/keys (harness need
 }
 
 uit_label(){ # echo inspector selection label: 中心主題 (root) or 主題 (non-root)
-  # Window-relative filter: inspector = right 25% / top 30% of the canvas window.
+  # Window-relative filter: inspector = right 35% / top 35% (measured: label at
+  # 72% width / 20% height across builds).
   local wx wy ww wh
   read -r wx wy ww wh <<<"$(uit_wingeom)"
   uit_axdump | awk -F'\t' -v wx="$wx" -v wy="$wy" -v ww="$ww" -v wh="$wh" \
-    '$1=="AXStaticText" && $2>wx+0.75*ww && $3<wy+0.3*wh && ($6=="中心主題"||$6=="主題") {print $6; exit}'
+    '$1=="AXStaticText" && $2>wx+0.65*ww && $3<wy+0.35*wh && ($6=="中心主題"||$6=="主題") {print $6; exit}'
 }
 
 uit_canvas_editing(){ # echo canvas editing TextField value (empty string if none).
-  # Window-relative filter: canvas = below top 30% / left of right 25% (inspector).
+  # Window-relative filter: canvas = below top 25% / left of right 35%
+  # (excludes tab-bar fields at y~10% and the inspector notes field at x~74%).
   local wx wy ww wh
   read -r wx wy ww wh <<<"$(uit_wingeom)"
   uit_axdump | awk -F'\t' -v wx="$wx" -v wy="$wy" -v ww="$ww" -v wh="$wh" \
-    '$1=="AXTextField" && $3>wy+0.3*wh && $2<wx+0.75*ww {print $6; exit}'
+    '$1=="AXTextField" && $3>wy+0.25*wh && $2<wx+0.65*ww {print $6; exit}'
 }
 
 uit_context_menu(){ # <N-xxxx> <menu item title> — AX right-click menu on a node,

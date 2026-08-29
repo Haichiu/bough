@@ -4,6 +4,14 @@ set -e
 cd "$(dirname "$0")/.."
 echo "==> UI coverage check…"
 bash "$(dirname "$0")/check-ui-coverage.sh"
+echo "==> No bare-key menu shortcuts…"
+# macOS matches menu key equivalents before the first responder, so an unmodified
+# menu shortcut hijacks the key while the user is typing into a node editor.
+if grep -n 'modifiers: \[\]' Sources/MindFlow/MindFlowApp.swift; then
+  echo "FAIL: menu shortcut without modifiers (see lines above)" >&2
+  exit 1
+fi
+
 echo "==> Running MindFlowChecks…"
 swift run MindFlowChecks
 echo "==> Release build…"

@@ -171,21 +171,22 @@ struct MindFlowApp: App {
                 }
                 .keyboardShortcut("c", modifiers: [.option, .command])
                 Divider()
+                // No bare-key menu shortcut. macOS matches menu key equivalents before the
+                // first responder sees the key, so an unmodified Tab/Return/Delete/z here
+                // fires the menu item even while a text field is being typed into.
+                // KeyboardMonitor already owns these keys and knows about editing state.
                 Button("加入子主題") { vm.addChild(to: vm.selection ?? vm.document.root.id) }
-                    .keyboardShortcut(KeyEquivalent.tab, modifiers: [])
                 Button("加入兄弟主題") {
                     if let selection = vm.selection, selection != vm.document.root.id {
                         vm.addSibling(of: selection)
                     }
                 }
-                .keyboardShortcut(.return, modifiers: [])
                 Button("刪除主題") {
                     if let selection = vm.selection { vm.delete(id: selection) }
                 }
-                .keyboardShortcut(.delete, modifiers: [])
                 Divider()
-                Button("復原") { vm.undo() }.keyboardShortcut("z", modifiers: [])
-                Button("重做") { vm.redo() }.keyboardShortcut("z", modifiers: [.shift])
+                Button("復原") { vm.undo() }.keyboardShortcut("z", modifiers: [.command])
+                Button("重做") { vm.redo() }.keyboardShortcut("z", modifiers: [.command, .shift])
             }
         }
     }
