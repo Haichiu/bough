@@ -6,6 +6,14 @@ public struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var searchFocused: Bool
     @FocusState private var outlineFocused: Bool
+
+    /// Single exit path for the search/replace bar, shared by Esc and the close button.
+    private func closeSearch() {
+        searchFocused = false
+        vm.showSearch = false
+        vm.searchQuery = ""
+        vm.searchResults = []
+    }
     @State private var noteDraft = ""
     @State private var showInspector = true
     @State private var inspectorTab = 0
@@ -812,6 +820,10 @@ public struct ContentView: View {
                 .frame(width: 220)
                 .focused($searchFocused)
                 .onSubmit { vm.jumpToNextResult() }
+                // Esc could not close this bar. KeyboardMonitor passes every key through
+                // while a text field is first responder, so the canvas Esc handler never
+                // ran, and the X button was the only exit.
+                .onExitCommand { closeSearch() }
             Text(vm.searchResults.isEmpty ? "0" : "\(vm.searchIndex + 1)/\(vm.searchResults.count)")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -827,7 +839,7 @@ public struct ContentView: View {
             Button("全部取代") { vm.replaceAll(vm.searchQuery, with: replaceText) }
                 .buttonStyle(.bordered)
                 .disabled(replaceText.isEmpty)
-            Button { vm.showSearch = false } label: { Image(systemName: "xmark") }
+            Button { closeSearch() } label: { Image(systemName: "xmark") }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("關閉搜尋")
         }

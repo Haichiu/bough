@@ -17,6 +17,13 @@ public final class KeyboardMonitor {
     private var monitor: Any?
     private weak var vm: MindMapViewModel?
 
+    /// How long the keyboard is handed to a node after editingID changes, before the
+    /// canvas takes shortcuts back. Long enough for AppKit to install the field editor,
+    /// short enough that a stuck editingID cannot lock the keyboard out.
+    private static let editingHandoffWindow: TimeInterval = 0.6
+    private var lastSeenEditingID: UUID?
+    private var editingHandoffStart = Date.distantPast
+
     public func start(vm: MindMapViewModel) {
         self.vm = vm
         guard monitor == nil else { return }
@@ -58,9 +65,19 @@ public final class KeyboardMonitor {
         // only makes the field editor first responder on a later runloop turn. During that
         // window the guard above still sees the old responder, so keystrokes intended for
         // the node were being swallowed as canvas shortcuts (Tab spawned a child, Return
-        // spawned a sibling, Space collapsed). Larger maps widened the window. Once the
-        // app has decided a node is being edited, the keyboard belongs to that node.
-        if vm.editingID != nil { return event }
+        // spawned a sibling, Space collapsed). Larger maps widened the window.
+        //
+        // The handoff is deliberately time-boxed. An unbounded "editingID != nil means
+        // hands off" rule would kill the keyboard outright whenever editingID is set but
+        // no editor ever appears. Esc is always excluded so there is a way back.
+        if vm.editingID != lastSeenEditingID {
+            lastSeenEditingID = vm.editingID
+            editingHandoffStart = Date()
+        }
+        if vm.editingID != nil, event.charactersIgnoringModifiers != "\u{1B}",
+           Date().timeIntervalSince(editingHandoffStart) < Self.editingHandoffWindow {
+            return event
+        }
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let chars = event.charactersIgnoringModifiers ?? ""
