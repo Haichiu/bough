@@ -36,13 +36,7 @@ public struct NodeLayout: Equatable {
 public enum LayoutEngine {
     static let vGap: CGFloat = 12
 
-    static func font(for depth: Int) -> NSFont {
-        switch depth {
-        case 0: return .systemFont(ofSize: 17, weight: .semibold)
-        case 1: return .systemFont(ofSize: 14, weight: .medium)
-        default: return .systemFont(ofSize: 13)
-        }
-    }
+    static func font(for depth: Int) -> NSFont { NodeStyle.of(depth: depth).font }
 
     /// Extra vertical space an attached image occupies below the label.
     static let imageDisplayHeight: CGFloat = 90
@@ -57,37 +51,14 @@ public enum LayoutEngine {
     public static func nodeSize(for text: String, depth: Int, hasImage: Bool = false) -> CGSize {
         let cacheKey = "\(depth)|\(hasImage ? 1 : 0)|\(text)"
         if let hit = sizeCache[cacheKey] { return hit }
-        let computed = measureNodeSize(for: text, depth: depth, hasImage: hasImage)
+        let computed = NodeStyle.of(depth: depth).size(for: text, hasImage: hasImage)
         if sizeCache.count >= sizeCacheLimit { sizeCache.removeAll(keepingCapacity: true) }
         sizeCache[cacheKey] = computed
         return computed
     }
 
-    private static func measureNodeSize(for text: String, depth: Int, hasImage: Bool) -> CGSize {
-        let attrs: [NSAttributedString.Key: Any] = [.font: font(for: depth)]
-        let measured = (text.isEmpty ? " " : text).size(withAttributes: attrs)
-        let padding: CGFloat = depth == 0 ? 44 : 30
-        var minHeight: CGFloat = depth == 0 ? 48 : (depth == 1 ? 36 : 30)
-        if hasImage { minHeight += imageDisplayHeight }
-        let minWidth: CGFloat = depth == 0 ? 120 : (hasImage ? max(56, 132) : 56)
-        // Wrap long text into up to three lines and grow the box vertically.
-        let maxTextWidth: CGFloat = depth == 0 ? 280 : 250
-        let lines = max(1, min(3, Int(ceil(measured.width / maxTextWidth))))
-        let textBlockWidth = min(measured.width, maxTextWidth)
-        let width = max(minWidth, min(ceil(textBlockWidth) + padding + 10, 340))
-        let lineHeight = ceil(measured.height)
-        var height = min(max(minHeight, CGFloat(lines) * lineHeight + (depth == 0 ? 18 : 12)), 100)
-        if hasImage { height += imageDisplayHeight }
-        return CGSize(width: width, height: height)
-    }
 
-    static func cornerRadius(for depth: Int) -> CGFloat {
-        switch depth {
-        case 0: return 12
-        case 1: return 18
-        default: return 15
-        }
-    }
+    static func cornerRadius(for depth: Int) -> CGFloat { NodeStyle.of(depth: depth).cornerRadius }
 
     static func hGap(for depth: Int) -> CGFloat { depth == 0 ? 72 : 44 }
 

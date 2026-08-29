@@ -400,7 +400,11 @@ do {
                  children: [MindNode(text: "L2")]),
     ]))
     let svgRich = MapExporter.svg(rich)
-    check(svgRich.contains("fill=\"#2e3b4f\""), "svg root uses navy fill")
+    // The root fill is declared in calibrated RGB. Converted to sRGB — which is what SVG
+    // means by a hex colour — it is #3c4c62. The old exporter hardcoded #2e3b4f, the same
+    // numbers read as device RGB, so every export came out a shade darker than the screen.
+    check(svgRich.contains("fill=\"#3c4c62\""), "svg root fill matches the on-screen colour")
+    check(!svgRich.contains("#2e3b4f"), "the hand-computed root literal is gone for good")
     check(svgRich.contains("stroke=\"none\"") || svgRich.contains("stroke=\"#2e3b4f\""), "root rect has stroke attr")
     check(svgRich.contains(">★</text>"), "svg draws star for marked nodes")
     check(svgRich.contains("#f5c542"), "svg star is gold")
@@ -408,7 +412,11 @@ do {
     check(svgRich.contains("<a href=\"https://example.com\">"), "svg wraps linked node in anchor")
     // Red color tag is defined as Color(hex: 0xE05252) in Theme.colorTags.
     check(svgRich.lowercased().contains("#e05252"), "svg renders color-tag bar")
-    check(svgRich.contains("fill=\"#ffffff\" stroke=\"#"), "svg deep nodes are white with colored outline")
+    // v3.9: appearance now comes from NodeStyle, so assert the new visual language.
+    check(svgRich.contains("fill-opacity=\"0.12\""), "svg deep nodes use the branch-tinted wash")
+    check(svgRich.contains("stroke-opacity=\"0.38\""), "svg deep nodes keep a hairline branch outline")
+    check(svgRich.contains("rx=\"14.0\""), "svg root radius comes from NodeStyle, not a literal 9")
+    check(svgRich.contains("font-size=\"18.0\""), "svg root font size matches the screen, not a literal 17")
 
     // v19.1: FreeMind notes + colors survive the round-trip
     let mmDoc = MindDocument(title: "MM", root: MindNode(text: "Root", children: [
@@ -1043,6 +1051,47 @@ do {
     // 1.0s was loose enough to hide a 50x regression; a cold layout of this map
     // measures in tens of milliseconds.
     check(elapsed < 0.25, String(format: "cold layout under 250ms (%.1fms)", elapsed * 1000))
+}
+
+// MARK: - Node text always fits the box that was measured for it
+//
+// LayoutEngine, NodeView and MapExporter used to hardcode font, insets and line
+// limit separately, and had already drifted. They now all read NodeStyle, so the
+// invariant worth guarding is the one that binding creates: the lines a renderer
+// draws must fit inside the size layout reserved.
+do {
+    let samples = [
+        "短",
+        "Quarterly planning",
+        "這是一個比較長的中文主題文字，用來確認沒有空格的語言也能正確換行而不溢出邊界",
+        "Supercalifragilisticexpialidociousandthensomemorewithoutanyspaces",
+        "",
+    ]
+    var worstOverflow: CGFloat = 0
+    for depth in [0, 1, 2, 4] {
+        let style = NodeStyle.of(depth: depth)
+        for text in samples {
+            let size = style.size(for: text)
+            let lines = style.wrappedLines(for: text)
+            check(lines.count <= style.lineLimit,
+                  "depth \(depth) honours line limit (\(lines.count) <= \(style.lineLimit))")
+
+            let widest = lines
+                .map { $0.size(withAttributes: [.font: style.font]).width }
+                .max() ?? 0
+            let usableWidth = size.width - style.horizontalInset * 2
+            let atWidthCap = size.width >= NodeStyle.maxNodeWidth
+            worstOverflow = max(worstOverflow, widest - usableWidth)
+            check(atWidthCap || widest <= usableWidth + 0.5,
+                  "depth \(depth) text fits width (\(Int(widest)) <= \(Int(usableWidth)))")
+
+            let neededHeight = CGFloat(lines.count) * style.lineHeight
+            let usableHeight = size.height - style.verticalInset * 2
+            let atHeightCap = size.height >= NodeStyle.maxNodeHeight
+            check(atHeightCap || neededHeight <= usableHeight + 0.5,
+                  "depth \(depth) text fits height (\(Int(neededHeight)) <= \(Int(usableHeight)))")
+        }
+    }
 }
 
 // MARK: - Interactive relayout budget

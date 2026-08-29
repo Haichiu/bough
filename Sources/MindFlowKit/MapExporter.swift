@@ -89,8 +89,18 @@ public enum MapExporter {
         bounds = bounds.insetBy(dx: -pad, dy: -pad)
         let width = max(bounds.width, 1), height = max(bounds.height, 1)
 
+        // Several NodeStyle colours are appearance-dependent (the root fill, and .primary
+        // for deeper text). The SVG canvas is always white, so resolve everything against
+        // the light appearance: otherwise exporting while in dark mode produced white text
+        // on a pale wash, and the same document exported to different colours depending on
+        // a system setting.
         func hex(_ color: Color) -> String {
-            let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
+            var ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
+            if let light = NSAppearance(named: .aqua) {
+                light.performAsCurrentDrawingAppearance {
+                    ns = NSColor(color).usingColorSpace(.sRGB) ?? ns
+                }
+            }
             return String(format: "#%02x%02x%02x", Int(round(ns.redComponent * 255)), Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
         }
         func esc(_ s: String) -> String {
@@ -147,15 +157,17 @@ public enum MapExporter {
             parts.append("<text x=\"\(g.textAnchor.x)\" y=\"\(g.textAnchor.y)\" font-size=\"12\" font-weight=\"bold\" fill=\"#666666\" text-anchor=\"middle\">\(esc(label))</text>")
         }
 
-        // Nodes (visual language matches NodeView: root navy, level-1 filled,
-        // deeper levels outlined; color-tag bar, star mark, note tooltip, link).
+        // Nodes. Appearance comes from NodeStyle, the same value the canvas draws with
+        // and LayoutEngine measures with, so exports cannot drift from the screen the way
+        // they had: 12pt text against the screen's 13pt, rx 9 at every depth, no wrapping.
         for l in layouts.values.sorted(by: { $0.depth < $1.depth }) {
             guard let node = document.root.find(l.id) else { continue }
             let f = l.frame
-            let color = hex(theme.color(forIndex: l.colorIndex))
-            let fill = l.depth >= 2 ? "#ffffff" : (l.depth == 0 ? "#2e3b4f" : color)
-            let stroke = l.depth >= 2 ? color : "none"
-            var rect = "<rect x=\"\(f.minX)\" y=\"\(f.minY)\" width=\"\(f.width)\" height=\"\(f.height)\" rx=\"9\" fill=\"\(fill)\" stroke=\"\(stroke)\" stroke-width=\"1.5\"/>"
+            let style = NodeStyle.of(depth: l.depth, branchColor: theme.color(forIndex: l.colorIndex))
+            let strokeAttrs = style.strokeBase.map {
+                "stroke=\"\(hex($0))\" stroke-opacity=\"\(style.strokeOpacity)\" stroke-width=\"\(style.strokeWidth)\""
+            } ?? "stroke=\"none\""
+            var rect = "<rect x=\"\(f.minX)\" y=\"\(f.minY)\" width=\"\(f.width)\" height=\"\(f.height)\" rx=\"\(style.cornerRadius)\" fill=\"\(hex(style.fillBase))\" fill-opacity=\"\(style.fillOpacity)\" \(strokeAttrs)/>"
             if !node.note.isEmpty {
                 rect += "<title>備註：\(esc(node.note))</title>"
             }
@@ -175,9 +187,14 @@ public enum MapExporter {
             if node.marked {
                 parts.append("<text x=\"\(f.minX + 6)\" y=\"\(f.minY + 14)\" font-size=\"10\" fill=\"#f5c542\">★</text>")
             }
-            let fontSize: CGFloat = l.depth == 0 ? 17 : (l.depth == 1 ? 14 : 12)
-            let textColor = l.depth <= 1 ? "#ffffff" : "#1a1a1a"
-            parts.append("<text x=\"\(f.midX)\" y=\"\(f.midY + fontSize * 0.35)\" font-family=\"-apple-system, PingFang TC, sans-serif\" font-size=\"\(fontSize)\" fill=\"\(textColor)\" text-anchor=\"middle\">\(esc(node.text))</text>")
+            let lines = style.wrappedLines(for: node.text)
+            let lineHeight = style.lineHeight
+            // Centre the whole block, then step down one line at a time.
+            let firstBaseline = f.midY - CGFloat(lines.count - 1) * lineHeight / 2 + lineHeight * 0.35
+            for (index, line) in lines.enumerated() {
+                let y = firstBaseline + CGFloat(index) * lineHeight
+                parts.append("<text x=\"\(f.midX)\" y=\"\(y)\" font-family=\"-apple-system, PingFang TC, sans-serif\" font-size=\"\(style.font.pointSize)\" fill=\"\(hex(style.textColor))\" text-anchor=\"middle\">\(esc(line))</text>")
+            }
         }
 
         return """

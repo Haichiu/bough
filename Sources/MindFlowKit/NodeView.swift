@@ -118,20 +118,15 @@ struct NodeView: View {
 
     @ViewBuilder
     private func background(depth: Int, radius: CGFloat) -> some View {
-        if depth == 0 {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Theme.rootBackground)
-        } else if depth == 1 {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(branchColor)
-        } else {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .overlay(
+        let style = NodeStyle.of(depth: depth, branchColor: branchColor)
+        return RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(style.fill)
+            .overlay {
+                if let stroke = style.stroke {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .stroke(branchColor, lineWidth: 1.5)
-                )
-        }
+                        .stroke(stroke, lineWidth: style.strokeWidth)
+                }
+            }
     }
 
     @ViewBuilder
@@ -161,12 +156,15 @@ struct NodeView: View {
                 }
             }
         } else {
+            let style = NodeStyle.of(depth: depth, branchColor: branchColor)
             Text(node.text.isEmpty ? " " : node.text)
-                .font(Font(LayoutEngine.font(for: depth)))
-                .foregroundStyle(depth <= 1 ? Color.white : Color.primary)
-                .lineLimit(3)
+                .font(Font(style.font))
+                .foregroundStyle(style.textColor)
+                .lineLimit(style.lineLimit)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 6)
+                // Must match NodeStyle.size's insets or the drawn text wraps
+                // differently from the measured text and clips.
+                .padding(.horizontal, style.horizontalInset)
         }
     }
 
