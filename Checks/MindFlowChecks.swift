@@ -1040,7 +1040,41 @@ do {
     let elapsed = Date().timeIntervalSince(start)
     check(layouts.count == counter && counter >= 2000,
           "big map fully laid out (\(counter) nodes)")
-    check(elapsed < 1.0, String(format: "layout under 1.0s (%.3fs)", elapsed))
+    // 1.0s was loose enough to hide a 50x regression; a cold layout of this map
+    // measures in tens of milliseconds.
+    check(elapsed < 0.25, String(format: "cold layout under 250ms (%.1fms)", elapsed * 1000))
+}
+
+// MARK: - Interactive relayout budget
+//
+// T-003's U5 could not measure UI latency through synthetic events, so the
+// performance guarantee lives here instead. Every keystroke inside a node editor
+// mutates the document and invalidates the layout memo, so per-keystroke
+// relayout cost on a large map is what decides whether typing feels laggy.
+// This check exists to keep that number honest, not to prove the UI is fast.
+do {
+    func build(_ depth: Int, _ counter: inout Int) -> MindNode {
+        var node = MindNode(text: "N-\(counter)")
+        counter += 1
+        if depth > 0 {
+            node.children = [build(depth - 1, &counter), build(depth - 1, &counter)]
+        }
+        return node
+    }
+    var counter = 0
+    var root = build(10, &counter)
+    _ = LayoutEngine.layout(root: root) // warm the text-size cache
+
+    let iterations = 20
+    let start = Date()
+    for i in 0..<iterations {
+        root.text = "typing \(i)"
+        _ = LayoutEngine.layout(root: root)
+    }
+    let perEdit = Date().timeIntervalSince(start) / Double(iterations)
+    check(perEdit < 0.05,
+          String(format: "relayout per keystroke on %d nodes under 50ms (%.1fms)",
+                 counter, perEdit * 1000))
 }
 
 // MARK: - v3.0: multi-document tabs
