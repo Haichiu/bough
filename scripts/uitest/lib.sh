@@ -13,13 +13,27 @@ APP="${UITEST_APP:-$HOME/Desktop/MindFlow.app}"
 SLOT_ID="0D3F1CE0-0000-4000-8000-0000000000F1"
 APP_SUPPORT="$HOME/Library/Application Support/MindFlow"
 TABS="$APP_SUPPORT/tabs"
-UIT_BACKUP="$APP_SUPPORT/tabs.pre-uitest-backup"
+# Unique per run. A single shared name meant the backup was created once and then
+# reused forever: a snapshot from 2026-08-28 was still on disk two days later, and
+# uit_restore would have replaced the owner's real tabs with it wholesale.
+UIT_BACKUP="$APP_SUPPORT/tabs.pre-uitest-$$-$(date +%s)"
 ART_DIR="/tmp/uitest-artifacts"
 mkdir -p "$ART_DIR"
 
 uit_ensure_backup(){
   mkdir -p "$APP_SUPPORT"
-  [[ -d "$UIT_BACKUP" ]] || cp -R "$TABS" "$UIT_BACKUP" 2>/dev/null || true
+  [[ -d "$UIT_BACKUP" ]] && return 0
+  # Failing to back up must stop the run: everything after this point mutates the
+  # owner's real tabs directory.
+  if ! cp -R "$TABS" "$UIT_BACKUP"; then
+    echo "ERROR: could not back up $TABS; refusing to run" >&2
+    return 1
+  fi
+  local stale
+  stale=$(find "$APP_SUPPORT" -maxdepth 1 -type d -name 'tabs.pre-uitest-*' | wc -l | tr -d ' ')
+  if [[ "$stale" -gt 3 ]]; then
+    echo "WARN: $stale uitest backups in $APP_SUPPORT; earlier runs did not restore" >&2
+  fi
 }
 
 uit_pkill(){
@@ -104,7 +118,13 @@ uit_quit_flush(){ # graceful Cmd+Q -> willTerminate autosave rewrites the tabs s
 
 uit_restore(){
   uit_pkill
-  if [[ -d "$UIT_BACKUP" ]]; then rm -rf "$TABS"; cp -R "$UIT_BACKUP" "$TABS"; fi
+  # Only ever restores the backup this run made, then drops it, so a snapshot can
+  # never outlive the run that took it.
+  if [[ -d "$UIT_BACKUP" ]]; then
+    rm -rf "$TABS"
+    cp -R "$UIT_BACKUP" "$TABS"
+    rm -rf "$UIT_BACKUP"
+  fi
 }
 
 uit_report(){ # <name> <0|1> <msg-on-fail>
