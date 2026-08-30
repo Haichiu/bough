@@ -458,6 +458,13 @@ public final class MindMapViewModel: ObservableObject {
         activeCollapseLevel = nil
     }
 
+    public func toggleAllBranches() {
+        let hasExpandedBranch = document.root.children.contains {
+            !$0.children.isEmpty && !$0.collapsed
+        }
+        if hasExpandedBranch { collapseAll() } else { expandAll() }
+    }
+
     // MARK: - Presentation（簡報逐層揭開）
 
     @Published public var presentationActive = false
@@ -771,6 +778,17 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var showHelp = false
     @Published public var printRequest = false
     @Published public var zenMode = false
+    @Published public var showInspector = false
+    @Published public var inspectorTab = 0
+
+    public func toggleOutline() {
+        if showInspector && inspectorTab == 1 {
+            showInspector = false
+        } else {
+            inspectorTab = 1
+            showInspector = true
+        }
+    }
 
     public func toggleZen() {
         zenMode.toggle()
@@ -1384,6 +1402,13 @@ public final class MindMapViewModel: ObservableObject {
     }
 
     // MARK: - Search
+
+    public func focusAndSelectCenter() {
+        focusBranchID = nil
+        batchSelection.removeAll()
+        selection = document.root.id
+        NotificationCenter.default.post(name: .mindFlowReset, object: nil)
+    }
 
     public func selectParent() {
         lastNavWasKeyboard = true

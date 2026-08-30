@@ -121,8 +121,27 @@ struct MindFlowApp: App {
                     .keyboardShortcut("p", modifiers: [.command])
             }
             CommandMenu("顯示") {
-                Button(vm.zenMode ? "離開專注模式" : "專注模式") { vm.toggleZen() }
-                    .keyboardShortcut("f", modifiers: [.command, .shift])
+                // Menu registration and the local monitor share one exact dispatcher.
+                Button(vm.zenMode ? "離開專注模式" : "專注模式") {
+                    KeyboardMonitor.performCoreShortcut(
+                        characters: "f", modifiers: [.command, .option], vm: vm)
+                }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+                Button("切換圖／大綱") {
+                    KeyboardMonitor.performCoreShortcut(
+                        characters: "m", modifiers: [.shift, .command], vm: vm)
+                }
+                .keyboardShortcut("m", modifiers: [.shift, .command])
+                Button("回中心主題") {
+                    KeyboardMonitor.performCoreShortcut(
+                        characters: "r", modifiers: [.command], vm: vm)
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+                Button("全部收合／展開") {
+                    KeyboardMonitor.performCoreShortcut(
+                        characters: "/", modifiers: [.option, .command], vm: vm)
+                }
+                .keyboardShortcut("/", modifiers: [.option, .command])
                 Divider()
                 Button(vm.showOutlineNumbers ? "隱藏大綱編號" : "大綱顯示編號") {
                     vm.showOutlineNumbers.toggle()
@@ -130,11 +149,12 @@ struct MindFlowApp: App {
                 Button("聚焦所選分支") {
                     if let sel = vm.selection { vm.toggleFocus(on: sel) }
                 }
-                .keyboardShortcut("f", modifiers: [.command, .option])
                 .disabled(vm.selection == nil || vm.zenMode)
                 Button(vm.presentationActive ? "結束簡報" : "簡報模式（逐層揭開）") {
-                    if vm.presentationActive { vm.exitPresentation() } else { vm.enterPresentation() }
+                    KeyboardMonitor.performCoreShortcut(
+                        characters: "p", modifiers: [.command, .option], vm: vm)
                 }
+                .keyboardShortcut("p", modifiers: [.command, .option])
                 .disabled(vm.zenMode)
             }
             CommandMenu("版面") {
@@ -158,7 +178,8 @@ struct MindFlowApp: App {
             }
             CommandMenu("主題") {
                 Button("複製主題與子樹") {
-                    if let selection = vm.selection { vm.duplicate(id: selection) }
+                    KeyboardMonitor.performCoreShortcut(
+                        characters: "d", modifiers: [.command], vm: vm)
                 }
                 .keyboardShortcut("d", modifiers: [.command])
                 Button("切換星號標記") {

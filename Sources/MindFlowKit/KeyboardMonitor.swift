@@ -36,6 +36,77 @@ public final class KeyboardMonitor {
         }
     }
 
+    /// Performs the XMind core shortcuts that need exact modifier matching.
+    /// The event monitor and behavioral checks share this one dispatch path.
+    @discardableResult
+    public static func performCoreShortcut(characters: String,
+                                           modifiers rawModifiers: NSEvent.ModifierFlags,
+                                           vm: MindMapViewModel) -> Bool {
+        let modifiers = rawModifiers
+            .intersection(.deviceIndependentFlagsMask)
+            .subtracting([.capsLock, .help, .numericPad, .function])
+        let key = characters.lowercased()
+        let isVerticalArrow = key == "\u{F700}" || key == "\u{F701}"
+        let isArrow = isVerticalArrow || key == "\u{F702}" || key == "\u{F703}"
+        let isCoreShortcut =
+            (modifiers == [.option] && isVerticalArrow)
+            || (modifiers == [.option, .command] && (isVerticalArrow || ["/", "f", "p"].contains(key)))
+            || (modifiers == [.command] && (isArrow || ["d", "r"].contains(key)))
+            || (modifiers == [.shift, .command] && key == "m")
+
+        // Presentation owns the keyboard and trims its temporary undo history on exit.
+        // Do not let a hidden core shortcut mutate the document into that trimmed range.
+        if vm.presentationActive && isCoreShortcut {
+            if modifiers == [.option, .command] && key == "p" { vm.exitPresentation() }
+            return true
+        }
+
+        if modifiers == [.option], isVerticalArrow {
+            if let selection = vm.selection {
+                vm.moveSibling(id: selection, offset: key == "\u{F700}" ? -1 : 1)
+            }
+            return true
+        }
+        if modifiers == [.option, .command] {
+            if isVerticalArrow {
+                if let selection = vm.selection {
+                    vm.moveSibling(id: selection, toIndex: key == "\u{F700}" ? 0 : .max)
+                }
+                return true
+            }
+            if key == "/" { vm.toggleAllBranches(); return true }
+            if key == "f" { vm.toggleZen(); return true }
+            if key == "p" {
+                if !vm.zenMode { vm.enterPresentation() }
+                return true
+            }
+        }
+        if modifiers == [.command] {
+            if isArrow {
+                if let selection = vm.selection {
+                    switch key {
+                    case "\u{F700}": vm.nudgeOffset(id: selection, dx: 0, dy: -10)
+                    case "\u{F701}": vm.nudgeOffset(id: selection, dx: 0, dy: 10)
+                    case "\u{F702}": vm.nudgeOffset(id: selection, dx: -10, dy: 0)
+                    case "\u{F703}": vm.nudgeOffset(id: selection, dx: 10, dy: 0)
+                    default: break
+                    }
+                }
+                return true
+            }
+            if key == "d" {
+                if let selection = vm.selection { vm.duplicate(id: selection) }
+                return true
+            }
+            if key == "r" { vm.focusAndSelectCenter(); return true }
+        }
+        if modifiers == [.shift, .command], key == "m" {
+            vm.toggleOutline()
+            return true
+        }
+        return false
+    }
+
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard let vm else { return event }
 
@@ -83,7 +154,9 @@ public final class KeyboardMonitor {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let chars = event.charactersIgnoringModifiers ?? ""
 
-        // Option+Cmd+Up/Down: move the selected node among its siblings.
+        if Self.performCoreShortcut(characters: chars, modifiers: flags, vm: vm) { return nil }
+
+        // Remaining Command shortcuts.
         if flags.contains(.command) {
             // Xmind editor.addParentTopic is Command+Enter on macOS. Do not let extra
             // Shift/Option/Control modifiers silently trigger a different command.
@@ -105,38 +178,6 @@ public final class KeyboardMonitor {
                 return nil
             default:
                 break
-            }
-            if let selection = vm.selection {
-                // ⌘ arrows nudge the node's manual offset.
-                switch chars {
-                case "\u{F700}":
-                    vm.nudgeOffset(id: selection, dx: 0, dy: -10)
-                    return nil
-                case "\u{F701}":
-                    vm.nudgeOffset(id: selection, dx: 0, dy: 10)
-                    return nil
-                case "\u{F702}":
-                    vm.nudgeOffset(id: selection, dx: -10, dy: 0)
-                    return nil
-                case "\u{F703}":
-                    vm.nudgeOffset(id: selection, dx: 10, dy: 0)
-                    return nil
-                default:
-                    break
-                }
-                // ⌥⌘↑/↓ reorder siblings.
-                if flags.contains(.option) {
-                    switch chars {
-                    case "\u{F700}":
-                        vm.moveSibling(id: selection, offset: -1)
-                        return nil
-                    case "\u{F701}":
-                        vm.moveSibling(id: selection, offset: 1)
-                        return nil
-                    default:
-                        break
-                    }
-                }
             }
             // Xmind parity: ⌘/ folds a branch, ⇧⌘N opens the notes editor. Both are read
             // straight out of Xmind's own command table (editor.toggleBranch,

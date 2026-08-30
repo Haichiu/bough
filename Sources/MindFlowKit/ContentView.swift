@@ -20,8 +20,6 @@ public struct ContentView: View {
     // whenever it was present and nothing else claimed focus, AppKit handed the caret to
     // it and typing silently went into 備註 instead of the map. Notes are summoned with
     // ⇧⌘N, which is what Xmind binds editor.showNotesEditor to.
-    @State private var showInspector = false
-    @State private var inspectorTab = 0
     @State private var outlineEditingID: UUID?
     @State private var outlineDraft = ""
     @State private var autosaveTask: Task<Void, Never>?
@@ -38,7 +36,7 @@ public struct ContentView: View {
             }
             HStack(spacing: 0) {
                 MapCanvasView()
-                if showInspector && !vm.zenMode {
+                if vm.showInspector && !vm.zenMode {
                     inspector
                         .frame(width: 280)
                 }
@@ -136,7 +134,7 @@ public struct ContentView: View {
                 }
                 .help("把整張圖複製成 Markdown 到剪貼簿（⌘⇧C）")
 
-                Toggle(isOn: $showInspector) {
+                Toggle(isOn: $vm.showInspector) {
                     Label("檢閱器", systemImage: "sidebar.trailing")
                 }
                 .toggleStyle(.button)
@@ -147,8 +145,8 @@ public struct ContentView: View {
         .overlay(alignment: .bottom) { breadcrumbBar }
         .onReceive(NotificationCenter.default.publisher(for: .mindFlowShowNotes)) { _ in
             guard vm.selection != nil else { return }
-            inspectorTab = 0
-            showInspector = true
+            vm.inspectorTab = 0
+            vm.showInspector = true
             // The editor does not exist yet on this pass, so the focus request has to wait
             // for it to be installed.
             DispatchQueue.main.async { noteFocused = true }
@@ -200,9 +198,6 @@ public struct ContentView: View {
             guard let request else { return }
             performExport(request)
             vm.exportRequest = nil
-        }
-        .onChange(of: vm.zenMode) { _ in
-            if vm.zenMode { showInspector = showInspector } // state preserved
         }
         .onChange(of: vm.printRequest) { request in
             guard request else { return }
@@ -375,14 +370,14 @@ public struct ContentView: View {
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker("模式", selection: $inspectorTab) {
+            Picker("模式", selection: $vm.inspectorTab) {
                 Text("備註").tag(0)
                 Text("大綱").tag(1)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
 
-            if inspectorTab == 0 {
+            if vm.inspectorTab == 0 {
                 noteInspector
             } else {
                 outlineView
@@ -937,14 +932,16 @@ public struct ContentView: View {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
                 ForEach([
                     ("Tab", "加入子主題"),
-                    ("Return", "編輯選中主題；編輯中再按 Return 建立兄弟主題"),
+                    ("Return / ⇧Return", "新增兄弟主題（後／前）"),
+                    ("⌘Return", "插入父主題"),
                     ("直接打字", "取代選中主題的文字並進入編輯"),
                     ("Delete", "刪除選取主題"),
                     ("點選後再點一次", "編輯文字"),
                     ("方向鍵 ↑↓", "在兄弟之間移動"),
                     ("← →", "跳到上層 / 下層"),
-                    ("空白鍵", "收合 / 展開"),
-                    ("⌥⌘↑↓", "調整排序"),
+                    ("空白鍵", "編輯選中主題"),
+                    ("⌘/ / ⌘⌥/", "收合分支 / 全部收合或展開"),
+                    ("⌥↑↓ / ⌥⌘↑↓", "兄弟移一格 / 移到頭尾"),
                     ("拖曳節點", "重新掛接或排序"),
                     ("⌘F / ⌘G", "搜尋 / 下一個結果"),
                     ("⌘D", "複製整棵子樹"),
@@ -958,8 +955,8 @@ public struct ContentView: View {
                     ("⌘⇧C", "複製為 Markdown 到剪貼簿"),
                     ("⌘⌥D", "建立目前分頁副本"),
                     ("⌘⇧V", "貼上剪貼簿條列建節點"),
-                    ("⌘⇧F", "專注模式"),
-                    ("⌘⌥F", "聚焦所選分支"),
+                    ("⌘⌥F / ⌘⌥P", "專注模式 / 簡報模式"),
+                    ("⇧⌘M / ⌘R", "切換圖與大綱 / 回中心主題"),
                     ("⌘⌥1-4 / ⌘⌥L", "切換版面（指定／循環）"),
                     ("⌘P", "列印"),
                     ("⌘,", "偏好設定")
@@ -970,7 +967,7 @@ public struct ContentView: View {
                     }
                 }
             }
-            Text("小技巧：所有變更都會自動保存；每個分頁都是獨立的一份圖。")
+            Text("小技巧：所有變更都會自動保存；每個分頁都是獨立的一份圖。分支聚焦可從顯示選單使用。")
                 .font(.callout).foregroundStyle(.secondary)
             Text("更多功能：顯示選單的「簡報模式」可逐層揭開地圖上台報告；點關聯線中間的圓點可在檢閱器加標籤；檔案選單支援 Markdown、OPML、FreeMind、PNG、PDF、SVG 進出。")
                 .font(.callout).foregroundStyle(.secondary)

@@ -2326,6 +2326,144 @@ do {
     }
 }
 
+// MARK: - T-034: XMind core shortcut dispatch
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+
+        // Alt+Up/Down exchanges one sibling at a time.
+        vm.newDocument()
+        let stepA = vm.addChild(to: nil)!
+        let stepB = vm.addChild(to: nil)!
+        let stepC = vm.addChild(to: nil)!
+        let stepD = vm.addChild(to: nil)!
+        vm.editingID = nil
+        vm.selection = stepC
+        check(KeyboardMonitor.performCoreShortcut(characters: "\u{F700}", modifiers: [.option], vm: vm)
+              && vm.document.root.children.map(\.id) == [stepA, stepC, stepB, stepD],
+              "Alt+Up moves the selected sibling up exactly one place")
+        check(KeyboardMonitor.performCoreShortcut(characters: "\u{F701}", modifiers: [.option], vm: vm)
+              && vm.document.root.children.map(\.id) == [stepA, stepB, stepC, stepD],
+              "Alt+Down moves the selected sibling down exactly one place")
+        vm.selection = nil
+        check(!KeyboardMonitor.performCoreShortcut(characters: "x", modifiers: [.option], vm: vm),
+              "an unmapped Option key is not swallowed")
+        vm.selection = stepC
+        check(KeyboardMonitor.performCoreShortcut(
+                  characters: "\u{F700}", modifiers: [.option, .capsLock], vm: vm)
+              && vm.document.root.children.map(\.id) == [stepA, stepC, stepB, stepD],
+              "Caps Lock does not disable Alt+Up")
+
+        // Alt+Command+Up/Down moves to an edge and must never fall through to nudge.
+        vm.newDocument()
+        let topA = vm.addChild(to: nil)!
+        let topB = vm.addChild(to: nil)!
+        let topC = vm.addChild(to: nil)!
+        let topD = vm.addChild(to: nil)!
+        vm.nudgeOffset(id: topC, dx: 7, dy: 9)
+        vm.editingID = nil
+        vm.selection = topC
+        let topOffsets = vm.document.offsets
+        check(KeyboardMonitor.performCoreShortcut(characters: "\u{F700}", modifiers: [.option, .command], vm: vm)
+              && vm.document.root.children.map(\.id) == [topC, topA, topB, topD]
+              && vm.document.offsets == topOffsets,
+              "Alt+Command+Up moves to the top without changing offsets")
+
+        vm.newDocument()
+        let bottomA = vm.addChild(to: nil)!
+        let bottomB = vm.addChild(to: nil)!
+        let bottomC = vm.addChild(to: nil)!
+        let bottomD = vm.addChild(to: nil)!
+        vm.nudgeOffset(id: bottomB, dx: -3, dy: 4)
+        vm.editingID = nil
+        vm.selection = bottomB
+        let bottomOffsets = vm.document.offsets
+        check(KeyboardMonitor.performCoreShortcut(characters: "\u{F701}", modifiers: [.option, .command], vm: vm)
+              && vm.document.root.children.map(\.id) == [bottomA, bottomC, bottomD, bottomB]
+              && vm.document.offsets == bottomOffsets,
+              "Alt+Command+Down moves to the bottom without changing offsets")
+
+        // Plain Command+arrows retain manual nudge behavior and never reorder.
+        vm.newDocument()
+        let nudged = vm.addChild(to: nil)!
+        let nudgeSibling = vm.addChild(to: nil)!
+        vm.editingID = nil
+        vm.selection = nudged
+        let nudgeOrder = vm.document.root.children.map(\.id)
+        check(KeyboardMonitor.performCoreShortcut(characters: "\u{F700}", modifiers: [.command], vm: vm)
+              && KeyboardMonitor.performCoreShortcut(characters: "\u{F703}", modifiers: [.command], vm: vm)
+              && vm.document.root.children.map(\.id) == nudgeOrder
+              && vm.document.offsets[nudged.uuidString] == CGPoint(x: 10, y: -10)
+              && vm.document.root.find(nudgeSibling) != nil,
+              "plain Command+arrows nudge without reordering")
+
+        // Command+D duplicates the selected subtree with fresh IDs.
+        vm.newDocument()
+        let original = vm.addChild(to: nil)!
+        let originalLeaf = vm.addChild(to: original)!
+        vm.editingID = nil
+        vm.selection = original
+        check(KeyboardMonitor.performCoreShortcut(characters: "d", modifiers: [.command], vm: vm),
+              "Command+D is handled")
+        let duplicated = vm.selection!
+        check(vm.document.root.children.map(\.id) == [original, duplicated]
+              && duplicated != original
+              && vm.document.root.find(duplicated)?.children.first?.id != originalLeaf,
+              "Command+D duplicates the selected subtree with fresh UUIDs")
+
+        // Command+Option+/ toggles every branch collapsed, then expanded.
+        vm.newDocument()
+        let branch = vm.addChild(to: nil)!
+        _ = vm.addChild(to: branch)!
+        vm.editingID = nil
+        check(KeyboardMonitor.performCoreShortcut(characters: "/", modifiers: [.command, .option], vm: vm)
+              && vm.document.root.find(branch)?.collapsed == true,
+              "Command+Option+/ collapses all branches")
+        check(KeyboardMonitor.performCoreShortcut(characters: "/", modifiers: [.command, .option], vm: vm)
+              && vm.document.root.find(branch)?.collapsed == false,
+              "Command+Option+/ expands all branches on the next press")
+
+        // Command+Option+F/P and Shift+Command+M toggle their visible modes.
+        check(KeyboardMonitor.performCoreShortcut(characters: "f", modifiers: [.command, .option], vm: vm)
+              && vm.zenMode,
+              "Command+Option+F enters zen mode")
+        check(KeyboardMonitor.performCoreShortcut(characters: "f", modifiers: [.command, .option], vm: vm)
+              && !vm.zenMode,
+              "Command+Option+F exits zen mode")
+
+        let beforePresentation = vm.document
+        check(KeyboardMonitor.performCoreShortcut(characters: "p", modifiers: [.command, .option], vm: vm)
+              && vm.presentationActive,
+              "Command+Option+P enters presentation mode")
+        let duringPresentation = vm.document
+        check(KeyboardMonitor.performCoreShortcut(characters: "d", modifiers: [.command], vm: vm)
+              && KeyboardMonitor.performCoreShortcut(characters: "/", modifiers: [.command, .option], vm: vm)
+              && vm.document == duringPresentation,
+              "core mutation shortcuts are blocked during presentation")
+        check(KeyboardMonitor.performCoreShortcut(characters: "p", modifiers: [.command, .option], vm: vm)
+              && !vm.presentationActive && vm.document == beforePresentation,
+              "Command+Option+P exits presentation and restores the map")
+
+        check(KeyboardMonitor.performCoreShortcut(characters: "m", modifiers: [.shift, .command], vm: vm)
+              && vm.showInspector && vm.inspectorTab == 1,
+              "Shift+Command+M opens the outline panel")
+        check(KeyboardMonitor.performCoreShortcut(characters: "m", modifiers: [.shift, .command], vm: vm)
+              && !vm.showInspector,
+              "Shift+Command+M returns to the map")
+
+        // Command+R leaves branch focus and selects the central topic.
+        vm.focusBranchID = branch
+        vm.batchSelection = [branch]
+        vm.selection = branch
+        check(KeyboardMonitor.performCoreShortcut(characters: "r", modifiers: [.command], vm: vm)
+              && vm.selection == vm.document.root.id
+              && vm.focusBranchID == nil && vm.batchSelection.isEmpty,
+              "Command+R selects and returns to the central topic")
+    }
+}
+
 // Canvas fit. Measured from a real window: the content occupied 765pt of a 672pt-tall
 // window, so the bottom of every opened map was cut off.
 do {
