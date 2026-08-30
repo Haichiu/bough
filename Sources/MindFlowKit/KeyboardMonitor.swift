@@ -5,6 +5,7 @@ extension Notification.Name {
     public static let mindFlowZoom = Notification.Name("mindflow.zoom")
     public static let mindFlowFit = Notification.Name("mindflow.fit")
     public static let mindFlowReset = Notification.Name("mindflow.reset")
+    public static let mindFlowShowNotes = Notification.Name("mindflow.shownotes")
 }
 
 /// Local event monitor implementing XMind-style shortcuts:
@@ -130,6 +131,17 @@ public final class KeyboardMonitor {
                     }
                 }
             }
+            // Xmind parity: ⌘/ folds a branch, ⇧⌘N opens the notes editor. Both are read
+            // straight out of Xmind's own command table (editor.toggleBranch,
+            // editor.showNotesEditor) rather than guessed.
+            if chars == "/" {
+                if let selection = vm.selection { vm.toggleCollapse(id: selection) }
+                return nil
+            }
+            if chars.lowercased() == "n", flags.contains(.shift) {
+                NotificationCenter.default.post(name: .mindFlowShowNotes, object: nil)
+                return nil
+            }
             return event // let remaining Cmd shortcuts pass through
         }
 
@@ -152,12 +164,12 @@ public final class KeyboardMonitor {
             vm.addChild(to: vm.selection ?? vm.document.root.id)
             return nil
         case "\r", "\u{3}":
-            // D2 keyboard model: Return edits the selected node. Spawning the next
-            // sibling is what Return does *while editing* (see onCommitEdit), which is
-            // the MindNode/XMind rapid-entry loop. Return used to create a sibling here,
-            // so there was no keyboard route into an existing node at all.
-            if let selection = vm.selection {
-                vm.beginEditing(id: selection)
+            // Xmind parity: Enter is editor.addTopic, a new sibling. The central topic has
+            // no sibling, so there it means a new main topic. addSibling already drops
+            // straight into editing, which is the rapid-entry loop. Editing an existing
+            // node is Space (editor.showEditBox), not Enter.
+            if let selection = vm.selection, selection != vm.document.root.id {
+                vm.addSibling(of: selection)
             } else {
                 vm.addChild(to: vm.document.root.id)
             }
@@ -170,8 +182,9 @@ public final class KeyboardMonitor {
             }
             return nil
         case " ":
+            // Xmind parity: editor.showEditBox. Folding moved to ⌘/ to free this up.
             if let selection = vm.selection {
-                vm.toggleCollapse(id: selection)
+                vm.beginEditing(id: selection)
             }
             return nil
         case "\u{F700}": // up

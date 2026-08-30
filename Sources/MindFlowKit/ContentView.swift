@@ -6,6 +6,7 @@ public struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var searchFocused: Bool
     @FocusState private var outlineFocused: Bool
+    @FocusState private var noteFocused: Bool
 
     /// Single exit path for the search/replace bar, shared by Esc and the close button.
     private func closeSearch() {
@@ -15,7 +16,11 @@ public struct ContentView: View {
         vm.searchResults = []
     }
     @State private var noteDraft = ""
-    @State private var showInspector = true
+    // Closed on launch. The notes editor is the first text control in the window, so
+    // whenever it was present and nothing else claimed focus, AppKit handed the caret to
+    // it and typing silently went into 備註 instead of the map. Notes are summoned with
+    // ⇧⌘N, which is what Xmind binds editor.showNotesEditor to.
+    @State private var showInspector = false
     @State private var inspectorTab = 0
     @State private var outlineEditingID: UUID?
     @State private var outlineDraft = ""
@@ -140,6 +145,14 @@ public struct ContentView: View {
         .navigationTitle(vm.document.root.text.isEmpty ? vm.document.title : vm.document.root.text)
         .navigationSubtitle(saveSubtitle)
         .overlay(alignment: .bottom) { breadcrumbBar }
+        .onReceive(NotificationCenter.default.publisher(for: .mindFlowShowNotes)) { _ in
+            guard vm.selection != nil else { return }
+            inspectorTab = 0
+            showInspector = true
+            // The editor does not exist yet on this pass, so the focus request has to wait
+            // for it to be installed.
+            DispatchQueue.main.async { noteFocused = true }
+        }
         .overlay(alignment: .topLeading) {
             if let fid = vm.focusBranchID, let fnode = vm.document.root.find(fid) {
                 HStack(spacing: 6) {
@@ -477,6 +490,7 @@ public struct ContentView: View {
             Text(node.id == vm.document.root.id ? "中心主題" : "主題")
                 .font(.subheadline).foregroundStyle(.secondary)
             TextEditor(text: $noteDraft)
+                .focused($noteFocused)
                 .autocorrectionDisabled()
                 .accessibilityLabel("備註內容")
                 .onChange(of: noteDraft) { draft in
