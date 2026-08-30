@@ -290,6 +290,35 @@ public final class MindMapViewModel: ObservableObject {
         return newNode.id
     }
 
+    /// Inserts a new sibling immediately before the selected node (Xmind Shift+Enter).
+    @discardableResult
+    public func addSiblingBefore(of id: UUID) -> UUID? {
+        guard id != document.root.id,
+              let parentNode = document.root.parent(of: id),
+              let index = parentNode.children.firstIndex(where: { $0.id == id }) else { return nil }
+        let newNode = MindNode(text: "")
+        mutate { doc in
+            doc.root.update(parentNode.id) { parent in
+                parent.children.insert(newNode, at: index)
+            }
+        }
+        selection = newNode.id
+        editingID = newNode.id
+        flash(newNode.id)
+        notify("已在前方新增兄弟主題，直接輸入文字")
+        return newNode.id
+    }
+
+    /// Cancels inline editing. Only a newly-created empty leaf is safe to discard.
+    public func cancelNodeEditing(id: UUID, draft: String) {
+        if draft.trimmingCharacters(in: .whitespaces).isEmpty,
+           let node = document.root.find(id), node.text.isEmpty, node.children.isEmpty {
+            delete(id: id)
+            notify("已捨棄空白主題")
+        }
+        stopEditing()
+    }
+
     /// Commits inline editing. Empty text on a brand-new node discards it.
     public func commitNodeText(id: UUID, text: String) {
         let flattened = text
@@ -1247,14 +1276,14 @@ public final class MindMapViewModel: ObservableObject {
         } }
     }
 
-    /// Wraps the node in a brand-new parent at the same position.
+    /// Wraps only the selected node in a new parent (Xmind Command+Enter).
     @discardableResult
     public func insertParent(id: UUID) -> UUID? {
         guard id != document.root.id,
               let node = document.root.find(id),
               let parentNode = document.root.parent(of: id),
               let index = parentNode.children.firstIndex(where: { $0.id == id }) else { return nil }
-        let newParent = MindNode(text: "新主題")
+        let newParent = MindNode(text: "")
         mutate { doc in
             var wrapper = newParent
             wrapper.children = [node]
@@ -1263,8 +1292,9 @@ public final class MindMapViewModel: ObservableObject {
             }
         }
         selection = newParent.id
+        editingID = newParent.id
         flash(newParent.id)
-        notify("已插入父主題")
+        notify("已插入父主題，直接輸入文字")
         return newParent.id
     }
 

@@ -194,12 +194,7 @@ struct MapCanvasView: View {
                  isSearchHit: vm.searchResults.contains(item.node.id),
                  colorTag: item.node.colorTag,
                  onCancelEdit: { text in
-                     // Esc on a brand-new empty node discards it.
-                     if text.trimmingCharacters(in: .whitespaces).isEmpty && item.node.text.isEmpty {
-                         vm.delete(id: item.node.id)
-                         vm.notify("已捨棄空白主題")
-                     }
-                     vm.stopEditing()
+                     vm.cancelNodeEditing(id: item.node.id, draft: text)
                  },
                  onCommitEdit: { text in
                      guard text.trimmingCharacters(in: .whitespacesAndNewlines)

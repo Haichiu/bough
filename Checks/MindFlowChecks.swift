@@ -2238,6 +2238,94 @@ do {
     }
 }
 
+// MARK: - T-032: XMind topic-before and parent-topic creation
+
+do {
+    try await MainActor.run {
+        let ids: (MindDocument) -> Set<UUID> = { document in
+            document.root.descendantIDs().union([document.root.id])
+        }
+
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+
+        // Shift+Enter inserts one empty sibling immediately before the selection.
+        vm.newDocument()
+        let left = vm.addChild(to: nil)!
+        let target = vm.addChild(to: nil)!
+        let right = vm.addChild(to: nil)!
+        let leaf = vm.addChild(to: target)!
+        vm.editingID = nil
+        vm.selection = target
+        let beforeSibling = vm.document
+        let beforeSiblingIDs = ids(beforeSibling)
+        let beforeSiblingCount = beforeSiblingIDs.count
+        let inserted = vm.addSiblingBefore(of: target)!
+        let afterSibling = vm.document
+        check(vm.document.root.children.map(\.id) == [left, inserted, target, right],
+              "addSiblingBefore inserts immediately before the selected sibling")
+        check(ids(afterSibling) == beforeSiblingIDs.union([inserted])
+              && ids(afterSibling).count == beforeSiblingCount + 1,
+              "addSiblingBefore adds exactly one UUID and preserves every existing UUID")
+        check(vm.document.root.find(target)?.children.map(\.id) == [leaf],
+              "addSiblingBefore preserves the selected subtree")
+        check(vm.document.root.find(inserted)?.text == ""
+              && vm.selection == inserted && vm.editingID == inserted,
+              "addSiblingBefore selects an empty node and enters editing")
+        vm.undo()
+        check(vm.document == beforeSibling, "undo fully restores addSiblingBefore")
+        vm.redo()
+        check(vm.document == afterSibling, "redo fully restores addSiblingBefore")
+        vm.cancelNodeEditing(id: inserted, draft: "")
+        check(vm.document == beforeSibling, "Esc discards only the newly-created empty leaf")
+
+        // Command+Enter wraps only the selection, leaving its siblings in place.
+        vm.newDocument()
+        let first = vm.addChild(to: nil)!
+        let wrapped = vm.addChild(to: nil)!
+        let last = vm.addChild(to: nil)!
+        let descendant = vm.addChild(to: wrapped)!
+        vm.editingID = nil
+        vm.selection = wrapped
+        let beforeParent = vm.document
+        let beforeParentIDs = ids(beforeParent)
+        let beforeParentCount = beforeParentIDs.count
+        let parent = vm.insertParent(id: wrapped)!
+        let afterParent = vm.document
+        check(vm.document.root.children.map(\.id) == [first, parent, last],
+              "insertParent replaces only the selected sibling slot")
+        check(vm.document.root.find(parent)?.children.map(\.id) == [wrapped]
+              && vm.document.root.find(wrapped)?.children.map(\.id) == [descendant],
+              "insertParent wraps only the selection and preserves its subtree")
+        check(ids(afterParent) == beforeParentIDs.union([parent])
+              && ids(afterParent).count == beforeParentCount + 1,
+              "insertParent adds exactly one UUID and preserves every existing UUID")
+        check(vm.document.root.find(parent)?.text == ""
+              && vm.selection == parent && vm.editingID == parent,
+              "insertParent selects an empty parent and enters editing")
+        vm.undo()
+        check(vm.document == beforeParent, "undo fully restores insertParent")
+        vm.redo()
+        check(vm.document == afterParent, "redo fully restores insertParent")
+        vm.cancelNodeEditing(id: parent, draft: "")
+        check(vm.document.root.find(parent)?.children.map(\.id) == [wrapped]
+              && vm.document.root.find(wrapped)?.children.map(\.id) == [descendant],
+              "Esc on an empty wrapper preserves the original subtree")
+
+        // The central topic has neither a sibling nor a parent; both commands are no-ops.
+        vm.newDocument()
+        vm.editingID = nil
+        let rootID = vm.document.root.id
+        let beforeRoot = vm.document
+        let beforeRootDirty = vm.dirty
+        check(vm.addSiblingBefore(of: rootID) == nil, "addSiblingBefore rejects the root")
+        check(vm.insertParent(id: rootID) == nil, "insertParent rejects the root")
+        check(vm.document == beforeRoot && vm.dirty == beforeRootDirty
+              && vm.selection == rootID && vm.editingID == nil,
+              "root creation guards leave document and UI state unchanged")
+    }
+}
+
 // Canvas fit. Measured from a real window: the content occupied 765pt of a 672pt-tall
 // window, so the bottom of every opened map was cut off.
 do {

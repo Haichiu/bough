@@ -9,8 +9,8 @@ extension Notification.Name {
 }
 
 /// Local event monitor implementing XMind-style shortcuts:
-/// Tab = add child, Return = add sibling, Delete = delete,
-/// arrows = navigate, Space = toggle collapse, Esc = deselect,
+/// Tab = child, Return = sibling after, Shift+Return = sibling before,
+/// Command+Return = parent, Space = edit, Delete = delete, arrows = navigate,
 /// Option+Cmd+Up/Down = reorder sibling, two-finger scroll = pan, Cmd+scroll = zoom.
 @MainActor
 public final class KeyboardMonitor {
@@ -85,6 +85,13 @@ public final class KeyboardMonitor {
 
         // Option+Cmd+Up/Down: move the selected node among its siblings.
         if flags.contains(.command) {
+            // Xmind editor.addParentTopic is Command+Enter on macOS. Do not let extra
+            // Shift/Option/Control modifiers silently trigger a different command.
+            let commandOnly = flags.subtracting([.command, .numericPad, .function]).isEmpty
+            if commandOnly, chars == "\r" || chars == "\u{3}" {
+                if let selection = vm.selection { vm.insertParent(id: selection) }
+                return nil
+            }
             // Standard zoom shortcuts.
             switch chars {
             case "+", "=":
@@ -164,14 +171,17 @@ public final class KeyboardMonitor {
             vm.addChild(to: vm.selection ?? vm.document.root.id)
             return nil
         case "\r", "\u{3}":
-            // Xmind parity: Enter is editor.addTopic, a new sibling. The central topic has
-            // no sibling, so there it means a new main topic. addSibling already drops
-            // straight into editing, which is the rapid-entry loop. Editing an existing
-            // node is Space (editor.showEditBox), not Enter.
-            if let selection = vm.selection, selection != vm.document.root.id {
-                vm.addSibling(of: selection)
+            if flags.contains(.shift) {
+                // Xmind editor.addTopicBefore. The central topic has no sibling.
+                if let selection = vm.selection { vm.addSiblingBefore(of: selection) }
             } else {
-                vm.addChild(to: vm.document.root.id)
+                // Xmind editor.addTopic. The central topic has no sibling, so plain Enter
+                // there creates a new main topic. Space (editor.showEditBox) edits.
+                if let selection = vm.selection, selection != vm.document.root.id {
+                    vm.addSibling(of: selection)
+                } else {
+                    vm.addChild(to: vm.document.root.id)
+                }
             }
             return nil
         case "\u{7F}", "\u{8}":
