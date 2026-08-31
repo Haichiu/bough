@@ -1,9 +1,152 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import CryptoKit
 import MindFlowKit
 
 setvbuf(stdout, nil, _IONBF, 0)
+
+struct TabDirectoryEvidence: Equatable {
+    let digest: String
+    let files: [String: Data]
+    let modificationDates: [String: Date]
+    let rootTitles: [String: String]
+    let nodeCounts: [String: Int]
+}
+
+enum TabStoreCheckFailure: Error {
+    case write
+    case exchange
+}
+
+func assertTestDirectory(_ directory: URL, label: String) {
+    var isDirectory: ObjCBool = false
+    precondition(FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory)
+                 && isDirectory.boolValue,
+                 "\(label) must be an existing directory: \(directory.path)")
+}
+
+func freshTabStoreRoot(_ label: String) -> URL {
+    let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
+        .appendingPathComponent("mindflow-tabstore-\(label)-\(UUID().uuidString)", isDirectory: true)
+    try! FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    assertTestDirectory(root, label: "fresh \(label) root")
+    return root
+}
+
+func tabNodeCount(_ node: MindNode) -> Int {
+    1 + node.children.reduce(0) { $0 + tabNodeCount($1) }
+}
+
+func encodedTabDocument(_ document: MindDocument) -> Data {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    return try! encoder.encode(document)
+}
+
+func writeTabFixture(_ id: UUID, document: MindDocument, to live: URL, date: Date) {
+    assertTestDirectory(live, label: "fixture live directory")
+    let url = live.appendingPathComponent("\(id.uuidString).mindmap")
+    try! encodedTabDocument(document).write(to: url, options: .atomic)
+    try! FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
+}
+
+struct TabFixture {
+    let live: URL
+    let singleID: UUID
+    let multiID: UUID
+    let staleID: UUID
+    let single: MindDocument
+    let multi: MindDocument
+    let stale: MindDocument
+
+    var entries: [TabStore.Entry] {
+        [TabStore.Entry(id: singleID, document: single),
+         TabStore.Entry(id: multiID, document: multi)]
+    }
+}
+
+func makeTabFixture(in root: URL) -> TabFixture {
+    assertTestDirectory(root, label: "fixture root")
+    let live = root.appendingPathComponent("tabs", isDirectory: true)
+    try! FileManager.default.createDirectory(at: live, withIntermediateDirectories: false)
+    assertTestDirectory(live, label: "fixture live")
+
+    let singleID = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    let multiID = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+    let staleID = UUID(uuidString: "33333333-3333-4333-8333-333333333333")!
+    let single = MindDocument(title: "Single document", root: MindNode(text: "單節點真實根標題"))
+    let multi = MindDocument(
+        title: "Multi document",
+        root: MindNode(text: "多節點真實根標題", children: [
+            MindNode(text: "分支一", children: [MindNode(text: "葉節點")]),
+            MindNode(text: "分支二")
+        ]))
+    let stale = MindDocument(title: "Stale document", root: MindNode(text: "保留中的 stale 檔案"))
+    let base = Date(timeIntervalSince1970: 1_700_000_000)
+    writeTabFixture(singleID, document: single, to: live, date: base)
+    writeTabFixture(multiID, document: multi, to: live, date: base.addingTimeInterval(1))
+    writeTabFixture(staleID, document: stale, to: live, date: base.addingTimeInterval(2))
+    return TabFixture(live: live, singleID: singleID, multiID: multiID, staleID: staleID,
+                      single: single, multi: multi, stale: stale)
+}
+
+func tabDirectoryEvidence(_ directory: URL, label: String) -> TabDirectoryEvidence {
+    assertTestDirectory(directory, label: label)
+    let urls = try! FileManager.default.contentsOfDirectory(
+        at: directory, includingPropertiesForKeys: [.contentModificationDateKey], options: [])
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    var files: [String: Data] = [:]
+    var dates: [String: Date] = [:]
+    var rootTitles: [String: String] = [:]
+    var nodeCounts: [String: Int] = [:]
+    let decoder = JSONDecoder()
+    for url in urls {
+        let name = url.lastPathComponent
+        files[name] = try! Data(contentsOf: url)
+        let values = try! url.resourceValues(forKeys: [.contentModificationDateKey])
+        guard let date = values.contentModificationDate else {
+            preconditionFailure("missing modification date for \(url.path)")
+        }
+        dates[name] = date
+        if let document = try? decoder.decode(MindDocument.self, from: files[name]!) {
+            rootTitles[name] = document.root.text
+            nodeCounts[name] = tabNodeCount(document.root)
+        }
+    }
+    var digestInput = Data()
+    for name in files.keys.sorted() {
+        digestInput.append(contentsOf: name.utf8)
+        digestInput.append(0)
+        digestInput.append(files[name]!)
+        digestInput.append(0)
+    }
+    let digest = SHA256.hash(data: digestInput).map { String(format: "%02x", $0) }.joined()
+    print("TabStore evidence \(label): digest=\(digest) files=\(files.keys.sorted()) rootTitles=\(rootTitles) nodeCounts=\(nodeCounts)")
+    return TabDirectoryEvidence(digest: digest, files: files, modificationDates: dates,
+                                rootTitles: rootTitles, nodeCounts: nodeCounts)
+}
+
+func tabTransactionDirectories(_ root: URL) -> [URL] {
+    assertTestDirectory(root, label: "transaction-count root")
+    return (try! FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil,
+                                                          options: []))
+        .filter { url in
+            guard url.lastPathComponent.hasPrefix(TabStore.transactionDirectoryPrefix) else { return false }
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        }
+}
+
+func assertTabEvidencePreserved(_ before: TabDirectoryEvidence, _ after: TabDirectoryEvidence,
+                                label: String) {
+    check(before.files == after.files, "\(label) preserves exact filename and bytes set")
+    check(before.digest == after.digest, "\(label) preserves the filename-plus-bytes digest")
+    check(before.modificationDates == after.modificationDates, "\(label) preserves every file mtime")
+    check(before.rootTitles == after.rootTitles && before.nodeCounts == after.nodeCounts,
+          "\(label) preserves root titles and node counts")
+}
 
 var failures = 0
 
@@ -2994,6 +3137,336 @@ do {
     check(SiblingInsertion.hint(point: outside, draggedID: s2.id,
                                 layouts: layouts, siblings: siblings) == nil,
           "six screen points outside the gap center do not enter the map-local reorder band")
+}
+
+// MARK: - TabStore: transactional autosave
+// Every fixture is rooted under /tmp and every evidence helper asserts that its
+// directory exists before reading names, bytes, mtimes, or semantic summaries.
+do {
+    let root = freshTabStoreRoot("input-guards")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "input guards before")
+    let duplicate = TabStore(directory: fixture.live).save([fixture.entries[0], fixture.entries[0]])
+    check(!duplicate.succeeded, "duplicate tab IDs are rejected before staging")
+    let afterDuplicate = tabDirectoryEvidence(fixture.live, label: "input guards after duplicate")
+    assertTabEvidencePreserved(before, afterDuplicate, label: "duplicate-ID rejection")
+
+    let tooMany = (0...TabStore.maximumEntries).map { _ in
+        TabStore.Entry(id: UUID(), document: fixture.single)
+    }
+    let overCeiling = TabStore(directory: fixture.live).save(tooMany)
+    check(!overCeiling.succeeded, "snapshots above the 20-tab restore ceiling are rejected")
+    let afterCeiling = tabDirectoryEvidence(fixture.live, label: "input guards after ceiling")
+    assertTabEvidencePreserved(before, afterCeiling, label: "restore-ceiling rejection")
+    check(tabTransactionDirectories(root).isEmpty,
+          "input rejection does not create transaction siblings")
+}
+
+do {
+    let root = freshTabStoreRoot("write-failure")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let staleName = "\(fixture.staleID.uuidString).mindmap"
+    let before = tabDirectoryEvidence(fixture.live, label: "write failure before")
+    check(before.files.keys.contains(staleName), "failure fixture records a stale slot")
+
+    var writeCount = 0
+    var exchangeCalled = false
+    let dependencies = TabStore.Dependencies(
+        writeData: { data, url in
+            writeCount += 1
+            if writeCount == 2 { throw TabStoreCheckFailure.write }
+            try data.write(to: url, options: .atomic)
+        },
+        exchangeDirectories: { _, _ in
+            exchangeCalled = true
+            throw TabStoreCheckFailure.exchange
+        })
+    let store = TabStore(directory: fixture.live, dependencies: dependencies)
+    let outcome = store.save(fixture.entries)
+    if case .failed(let error) = outcome {
+        print("TabStore second-write failure: \(error)")
+    }
+    check(!outcome.succeeded, "second staging write failure returns a failed outcome")
+    check(writeCount == 2 && !exchangeCalled,
+          "second write failure prevents any directory exchange")
+    let after = tabDirectoryEvidence(fixture.live, label: "write failure after")
+    assertTabEvidencePreserved(before, after, label: "second-write failure")
+    check(tabTransactionDirectories(root).count >= 1,
+          "failed staging is retained as transaction evidence")
+
+    // The same injected store proves ViewModel timestamp/status behavior without
+    // constructing a model from the user's Application Support directory.
+    writeCount = 0
+    let timestamp = Date(timeIntervalSince1970: 1_700_000_100)
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: store)
+        vm.sessions = fixture.entries.map { EditorSession(id: $0.id, document: $0.document) }
+        vm.activeIndex = 0
+        vm.document = fixture.single
+        vm.lastSavedAt = timestamp
+        let vmOutcome = vm.autosaveAllSessions()
+        check(!vmOutcome.succeeded, "ViewModel exposes autosave failure")
+        check(vm.lastSavedAt == timestamp,
+              "failed autosave leaves lastSavedAt unchanged")
+        check(vm.statusMessage == "自動保存失敗，已保留舊版本",
+              "failed autosave exposes old-version-retained status")
+    }
+    let afterViewModel = tabDirectoryEvidence(fixture.live, label: "write failure after ViewModel")
+    assertTabEvidencePreserved(before, afterViewModel, label: "ViewModel write failure")
+}
+
+do {
+    let root = freshTabStoreRoot("exchange-failure")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "exchange failure before")
+    var exchangeCalled = false
+    let production = TabStore.Dependencies.production
+    let dependencies = TabStore.Dependencies(
+        writeData: production.writeData,
+        exchangeDirectories: { _, _ in
+            exchangeCalled = true
+            throw TabStoreCheckFailure.exchange
+        })
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(fixture.entries)
+    if case .failed(let error) = outcome {
+        print("TabStore exchange failure: \(error)")
+    }
+    check(!outcome.succeeded, "directory exchange failure returns a failed outcome")
+    check(exchangeCalled, "exchange failure seam was exercised")
+    let after = tabDirectoryEvidence(fixture.live, label: "exchange failure after")
+    assertTabEvidencePreserved(before, after, label: "exchange failure")
+    check(tabTransactionDirectories(root).count >= 1,
+          "exchange failure retains staging without leaving a live-path gap")
+}
+
+do {
+    let root = freshTabStoreRoot("success")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let firstID = UUID(uuidString: "44444444-4444-4444-8444-444444444444")!
+    let secondID = UUID(uuidString: "55555555-5555-4555-8555-555555555555")!
+    let first = MindDocument(title: "New single", root: MindNode(text: "成功單節點根標題"))
+    let second = MindDocument(
+        title: "New multi", root: MindNode(text: "成功多節點根標題", children: [
+            MindNode(text: "新分支一"),
+            MindNode(text: "新分支二", children: [MindNode(text: "新葉節點")])
+        ]))
+    let entries = [TabStore.Entry(id: firstID, document: first),
+                   TabStore.Entry(id: secondID, document: second)]
+    let outcome = TabStore(directory: fixture.live).save(entries)
+    if case .committed(let warning) = outcome, let warning {
+        print("unexpected success warning: \(warning)")
+    }
+    check(outcome.succeeded, "validated snapshot commits successfully")
+    let after = tabDirectoryEvidence(fixture.live, label: "success after")
+    let expectedNames = Set(entries.map { "\($0.id.uuidString).mindmap" })
+    check(Set(after.files.keys) == expectedNames,
+          "successful commit has exactly the new UUID filename set")
+    check(!after.files.keys.contains("\(fixture.staleID.uuidString).mindmap"),
+          "stale slot is removed only after successful commit")
+    let decoder = JSONDecoder()
+    for entry in entries {
+        let name = "\(entry.id.uuidString).mindmap"
+        if let data = after.files[name], let decoded = try? decoder.decode(MindDocument.self, from: data) {
+            check(decoded == entry.document, "committed \(name) decodes to the full input document")
+            check(after.rootTitles[name] == entry.document.root.text
+                      && after.nodeCounts[name] == tabNodeCount(entry.document.root),
+                  "committed \(name) preserves root title and node count")
+        } else {
+            check(false, "committed \(name) decodes to the full input document")
+            check(false, "committed \(name) preserves root title and node count")
+        }
+    }
+    print("TabStore success semantic evidence: rootTitles=\(after.rootTitles) nodeCounts=\(after.nodeCounts)")
+
+    // Mirror FileIO.loadTabs' mtime-newest ordering against the committed files
+    // while using this isolated live directory, not the user's tabs directory.
+    let firstName = "\(firstID.uuidString).mindmap"
+    let secondName = "\(secondID.uuidString).mindmap"
+    let orderBase = Date(timeIntervalSince1970: 1_800_000_000)
+    try! FileManager.default.setAttributes([.modificationDate: orderBase],
+                                           ofItemAtPath: fixture.live.appendingPathComponent(firstName).path)
+    try! FileManager.default.setAttributes([.modificationDate: orderBase.addingTimeInterval(1)],
+                                           ofItemAtPath: fixture.live.appendingPathComponent(secondName).path)
+    let orderingEvidence = tabDirectoryEvidence(fixture.live, label: "success ordering")
+    let orderedNames = orderingEvidence.modificationDates.keys.sorted {
+        orderingEvidence.modificationDates[$0]! > orderingEvidence.modificationDates[$1]!
+    }
+    check(orderedNames == [secondName, firstName],
+          "committed UUID filenames retain mtime-newest load ordering semantics")
+
+    let timestamp = Date(timeIntervalSince1970: 1_700_000_200)
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: TabStore(directory: fixture.live))
+        vm.sessions = entries.map { EditorSession(id: $0.id, document: $0.document) }
+        vm.activeIndex = 0
+        vm.document = first
+        vm.lastSavedAt = timestamp
+        let vmOutcome = vm.autosaveAllSessions()
+        check(vmOutcome.succeeded, "successful ViewModel autosave returns committed outcome")
+        if let saved = vm.lastSavedAt {
+            check(saved > timestamp, "successful autosave advances lastSavedAt")
+        } else {
+            check(false, "successful autosave advances lastSavedAt")
+        }
+    }
+}
+
+do {
+    let root = freshTabStoreRoot("precommit-corrupt")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "corrupt staging before")
+    let production = TabStore.Dependencies.production
+    var writeCount = 0
+    var exchangeCalled = false
+    let dependencies = TabStore.Dependencies(
+        writeData: { data, url in
+            writeCount += 1
+            if writeCount == 2 {
+                try Data("corrupt staging".utf8).write(to: url, options: .atomic)
+            } else {
+                try production.writeData(data, url)
+            }
+        },
+        exchangeDirectories: { _, _ in
+            exchangeCalled = true
+            throw TabStoreCheckFailure.exchange
+        })
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(fixture.entries)
+    switch outcome {
+    case .failed(let error):
+        print("TabStore corrupt-staging outcome: \(error)")
+        if case .validationFailed(_, let reason) = error {
+            check(reason.contains("cannot decode"),
+                  "corrupt staging is refused by precommit validation")
+        } else {
+            check(false, "corrupt staging is refused by precommit validation")
+        }
+    case .committed:
+        check(false, "corrupt staging is refused by precommit validation")
+    }
+    check(!exchangeCalled && writeCount == 2,
+          "precommit validation refuses exchange after corrupt staging")
+    let after = tabDirectoryEvidence(fixture.live, label: "corrupt staging after")
+    assertTabEvidencePreserved(before, after, label: "corrupt-staging rejection")
+}
+
+do {
+    let root = freshTabStoreRoot("rollback")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "rollback before")
+    let newID = UUID(uuidString: "66666666-6666-4666-8666-666666666666")!
+    let newDocument = MindDocument(title: "Rollback candidate", root: MindNode(text: "不應留下的新根"))
+    let entries = [TabStore.Entry(id: newID, document: newDocument)]
+    let production = TabStore.Dependencies.production
+    var exchangeCalls = 0
+    let dependencies = TabStore.Dependencies(
+        writeData: production.writeData,
+        exchangeDirectories: { live, staging in
+            exchangeCalls += 1
+            try production.exchangeDirectories(live, staging)
+            if exchangeCalls == 1 {
+                try Data("corrupt post-exchange".utf8).write(
+                    to: live.appendingPathComponent("\(newID.uuidString).mindmap"), options: .atomic)
+            }
+        })
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(entries)
+    if case .failed(let error) = outcome {
+        print("TabStore post-exchange rollback outcome: \(error)")
+    }
+    check(!outcome.succeeded, "post-exchange validation failure returns failure")
+    check(exchangeCalls == 2, "post-exchange validation failure performs atomic rollback")
+    if case .failed(.postCommitValidationFailed) = outcome {
+        check(true, "post-exchange failure is typed separately from precommit failure")
+    } else {
+        check(false, "post-exchange failure is typed separately from precommit failure")
+    }
+    let after = tabDirectoryEvidence(fixture.live, label: "rollback after")
+    assertTabEvidencePreserved(before, after, label: "post-exchange rollback")
+    let corruptData = Data("corrupt post-exchange".utf8)
+    let retainedEvidence = tabTransactionDirectories(root).contains {
+        (try? Data(contentsOf: $0.appendingPathComponent("\(newID.uuidString).mindmap"))) == corruptData
+    }
+    check(retainedEvidence, "rollback preserves both old live and failed new snapshot evidence")
+}
+
+do {
+    let root = freshTabStoreRoot("rollback-failure")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "rollback failure before")
+    let newID = UUID(uuidString: "77777777-7777-4777-8777-777777777777")!
+    let newDocument = MindDocument(title: "Severe rollback candidate", root: MindNode(text: "失敗後保留的新根"))
+    let production = TabStore.Dependencies.production
+    var exchangeCalls = 0
+    let dependencies = TabStore.Dependencies(
+        writeData: production.writeData,
+        exchangeDirectories: { live, staging in
+            exchangeCalls += 1
+            if exchangeCalls == 2 { throw TabStoreCheckFailure.exchange }
+            try production.exchangeDirectories(live, staging)
+            try Data("corrupt rollback".utf8).write(
+                to: live.appendingPathComponent("\(newID.uuidString).mindmap"), options: .atomic)
+        })
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save([
+        TabStore.Entry(id: newID, document: newDocument)
+    ])
+    check(!outcome.succeeded, "rollback exchange failure returns failure")
+    if case .failed(.rollbackFailed) = outcome {
+        check(true, "rollback exchange failure returns a distinct severe outcome")
+    } else {
+        check(false, "rollback exchange failure returns a distinct severe outcome")
+    }
+    check(exchangeCalls == 2, "rollback failure seam reaches the second exchange")
+    assertTestDirectory(fixture.live, label: "live after rollback failure")
+    let transactionDirectories = tabTransactionDirectories(root)
+    check(!transactionDirectories.isEmpty,
+          "rollback failure preserves a staging directory alongside live")
+    let oldName = "\(fixture.singleID.uuidString).mindmap"
+    let oldData = before.files[oldName]!
+    let oldSnapshotRetained = transactionDirectories.contains {
+        (try? Data(contentsOf: $0.appendingPathComponent(oldName))) == oldData
+    }
+    check(oldSnapshotRetained, "rollback failure preserves the old live snapshot evidence")
+    let corruptData = Data("corrupt rollback".utf8)
+    let corruptLive = (try? Data(contentsOf:
+        fixture.live.appendingPathComponent("\(newID.uuidString).mindmap"))) == corruptData
+    check(corruptLive, "rollback failure preserves the failed new live path")
+}
+
+do {
+    let root = freshTabStoreRoot("retention")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    for _ in 0..<5 {
+        let transaction = root.appendingPathComponent(
+            "\(TabStore.transactionDirectoryPrefix)\(UUID().uuidString)", isDirectory: true)
+        try! FileManager.default.createDirectory(at: transaction, withIntermediateDirectories: false)
+        assertTestDirectory(transaction, label: "seeded transaction")
+    }
+    let beforeCount = tabTransactionDirectories(root).count
+    var countAtExchange = 0
+    let production = TabStore.Dependencies.production
+    let dependencies = TabStore.Dependencies(
+        writeData: production.writeData,
+        exchangeDirectories: { live, staging in
+            countAtExchange = tabTransactionDirectories(root).count
+            try production.exchangeDirectories(live, staging)
+        })
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(fixture.entries)
+    let afterCount = tabTransactionDirectories(root).count
+    check(beforeCount > TabStore.maximumRetainedTransactions,
+          "retention fixture starts above the transaction sibling bound")
+    check(outcome.succeeded, "retention pruning follows a successful validated commit")
+    check(countAtExchange > TabStore.maximumRetainedTransactions,
+          "transaction pruning does not run before exchange and validation")
+    check(afterCount <= TabStore.maximumRetainedTransactions,
+          "successful commit retains at most three transaction siblings")
 }
 
 if failures == 0 {

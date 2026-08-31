@@ -10,23 +10,10 @@ public enum FileIO {
         return base
     }
 
-    static func autosaveTabs(_ entries: [(id: UUID, document: MindDocument)]) {
-        let directory = tabsDirectory
-        let keep = Set(entries.map { $0.id.uuidString })
-        if let existing = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-            // Cap deletions per pass so a huge backlog can never wedge the app.
-            var removed = 0
-            for url in existing where url.pathExtension == "mindmap" {
-                if !keep.contains(url.deletingPathExtension().lastPathComponent) && removed < 2000 {
-                    try? FileManager.default.removeItem(at: url)
-                    removed += 1
-                }
-            }
-        }
-        for entry in entries {
-            // Background saves must never surface a modal dialog.
-            _ = writeQuiet(entry.document, to: directory.appendingPathComponent("\(entry.id.uuidString).mindmap"))
-        }
+    @discardableResult
+    static func autosaveTabs(_ entries: [(id: UUID, document: MindDocument)]) -> TabStore.SaveOutcome {
+        let store = TabStore(directory: tabsDirectory)
+        return store.save(entries.map { TabStore.Entry(id: $0.id, document: $0.document) })
     }
 
     /// Number of live autosave slots (used by regression checks).
@@ -48,7 +35,7 @@ public enum FileIO {
             return lDate > rDate
         }
         var result: [(id: UUID, document: MindDocument)] = []
-        for url in sorted.prefix(20) {
+        for url in sorted.prefix(TabStore.maximumEntries) {
             guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
                   let doc = load(from: url) else { continue }
             result.append((id: id, document: doc))

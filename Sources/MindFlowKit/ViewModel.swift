@@ -28,6 +28,7 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var recentlyAddedID: UUID?
     @Published public var statusMessage: String?
     private var statusTask: Task<Void, Never>?
+    private let autosaveStore: TabStore?
 
     /// Shows a short transient confirmation for non-obvious actions.
     public func notify(_ message: String) {
@@ -163,18 +164,45 @@ public final class MindMapViewModel: ObservableObject {
         }
     }
 
-    /// Writes every open tab to per-tab autosave slots.
-    public func autosaveAllSessions() {
+    /// Writes every open tab as one verified transactional snapshot.
+    @discardableResult
+    public func autosaveAllSessions() -> TabStore.SaveOutcome {
         var snapshot = sessions
         if snapshot.indices.contains(activeIndex) {
             snapshot[activeIndex].document = document
             snapshot[activeIndex].filePath = filePath
         }
-        FileIO.autosaveTabs(snapshot.map { ($0.id, $0.document) })
-        lastSavedAt = Date()
+        let outcome: TabStore.SaveOutcome
+        if let autosaveStore {
+            outcome = autosaveStore.save(snapshot.map {
+                TabStore.Entry(id: $0.id, document: $0.document)
+            })
+        } else {
+            outcome = FileIO.autosaveTabs(snapshot.map { ($0.id, $0.document) })
+        }
+        switch outcome {
+        case .committed(let warning):
+            lastSavedAt = Date()
+            if let warning {
+                NSLog("MindFlow autosave committed with warning: \(warning)")
+            }
+        case .failed(let error):
+            notify("自動保存失敗，已保留舊版本")
+            NSLog("MindFlow autosave failed: \(error)")
+        }
+        return outcome
+    }
+
+    public init(tabStore: TabStore) {
+        self.autosaveStore = tabStore
+        let first = MindDocument.new()
+        self.document = first
+        self.selection = first.root.id
+        self.sessions = [EditorSession(document: first)]
     }
 
     public init() {
+        self.autosaveStore = nil
         let restored = FileIO.loadTabs()
         var initialSessions: [EditorSession]
         if restored.isEmpty {
