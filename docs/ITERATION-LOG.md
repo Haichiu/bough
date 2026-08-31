@@ -57,3 +57,4 @@ Owner 裁定迭代 50 輪。本檔是唯一進度來源；唤醒後先讀這裡�
 
 - **狀態訊號縮放不變**：指示器 / 選取 / 重掛 / search / batch / hover 的 lineWidth **與外推 padding** 全在被縮放的內容樹裡。fit 0.25 時指示器只剩 0.75 邏輯 px，契約「看到=排序」在大地圖縮小檢視時失效 —— **而地圖越大越需要排序**
 - TabStore（staging+commit）、import bytes/node/depth 上限、icon、其餘視覺項
+- **symlink 檢查名不副實**：現行以 `fileExists` 判定「是否為真實目錄」，但它會跟隨 symlink。排入後續資安路徑票，**不混進 TabStore 這輪**
