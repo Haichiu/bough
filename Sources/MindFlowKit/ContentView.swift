@@ -113,9 +113,9 @@ public struct ContentView: View {
                     Button("魚骨圖") { vm.setDirection(.fishbone) }
                     Button("括號圖") { vm.setDirection(.bracket) }
                     Divider()
-                    Button("整理") { vm.resetAllOffsets() }
+                    Button("回到自動排列") { vm.resetAllOffsets() }
                         .disabled(vm.document.offsets.isEmpty)
-                        .help("清除手動位置並回到自動排版（可復原）")
+                        .help("清除手動位置並回到自動排列（可復原）")
                 } label: {
                     Label("版面", systemImage: "arrow.triangle.branch")
                 }

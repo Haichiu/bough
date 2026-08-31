@@ -170,7 +170,7 @@ struct MindFlowApp: App {
                 Button("括號圖") { vm.setDirection(.bracket) }
                     .keyboardShortcut("4", modifiers: [.command, .option])
                 Divider()
-                Button("整理") { vm.resetAllOffsets() }
+                Button("回到自動排列") { vm.resetAllOffsets() }
                     .disabled(vm.document.offsets.isEmpty)
             }
             CommandMenu("尋找") {

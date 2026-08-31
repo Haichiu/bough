@@ -62,7 +62,7 @@ struct NodeView: View {
         .scaleEffect(freshScale)
         .opacity(freshOpacity)
         .opacity(dimmed ? 0.15 : 1)
-        .opacity(isDragging ? 0.85 : 1)
+        .opacity(isDragging ? 0.6 : 1)
         .offset(x: dragOffset?.width ?? 0, y: dragOffset?.height ?? 0)
         .overlay(alignment: .trailing) { collapsedBadge }
         .overlay(alignment: .leading) { markedBadge }
@@ -122,6 +122,12 @@ struct NodeView: View {
         return RoundedRectangle(cornerRadius: radius, style: .continuous)
             .fill(style.fill)
             .overlay {
+                if isDropTarget {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Color(hex: 0xC8DFDB).opacity(0.2))
+                }
+            }
+            .overlay {
                 if let stroke = style.stroke {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .stroke(stroke, lineWidth: style.strokeWidth)
@@ -180,11 +186,14 @@ struct NodeView: View {
                 .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
                 .padding(-4)
         }
-        if isSelected || isDropTarget || isHovered {
+        if isDropTarget {
             RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(isDropTarget ? Color.green
-                            : (isSelected ? Color.accentColor : Color.secondary.opacity(0.45)),
-                        lineWidth: isDropTarget ? 3 : (isSelected ? 2 : 1.5))
+                .stroke(Color(hex: 0x3368A0), lineWidth: 2.5)
+                .padding(-3)
+        } else if isSelected || isHovered {
+            RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
+                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.45),
+                        lineWidth: isSelected ? 2 : 1.5)
                 .padding(-4)
         }
     }

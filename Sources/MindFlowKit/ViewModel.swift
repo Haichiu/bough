@@ -624,7 +624,7 @@ public final class MindMapViewModel: ObservableObject {
     public func resetAllOffsets() {
         guard !document.offsets.isEmpty else { return }
         mutate { $0.offsets = [:] }
-        notify("已重設所有手動位置")
+        notify("已回到自動排列")
     }
 
     // MARK: - Branch focus

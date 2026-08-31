@@ -5,6 +5,7 @@ struct ReparentDrag: Equatable {
     let id: UUID
     let source: CGPoint
     let current: CGPoint
+    let draggedIDs: Set<UUID>
     var translation: CGSize = .zero
 }
 
@@ -28,8 +29,8 @@ public enum SiblingInsertion {
         let halfBand = LayoutEngine.vGap / 2
         for sibling in siblings where sibling.id != draggedID {
             guard let layout = layouts[sibling.id], layout.side == draggedSide else { continue }
-            let minX = layout.frame.minX - 16
-            let maxX = layout.frame.maxX + 44
+            let minX = layout.frame.minX
+            let maxX = layout.frame.maxX
             guard point.x >= minX, point.x <= maxX else { continue }
             for (lineY, index) in [
                 (layout.frame.minY - halfBand, siblings.firstIndex(where: { $0.id == sibling.id }) ?? 0),
@@ -71,7 +72,8 @@ struct MapCanvasView: View {
             let theme = Theme.named(vm.document.themeName)
             let bounds = LayoutEngine.contentBounds(of: layouts).insetBy(dx: -180, dy: -140)
             let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
-            let renderedLayouts = layoutsDuringDrag(layouts)
+            let draggedIDs: Set<UUID> = drag?.draggedIDs ?? []
+            let renderedLayouts = layoutsDuringDrag(layouts, draggedIDs: draggedIDs)
             let items = nodeItems(layouts: renderedLayouts)
             let dropTarget = drag.flatMap { hitTest(point: $0.current, draggedID: $0.id, layouts: layouts) }
             let insertionHint = drag.flatMap { state in
@@ -86,9 +88,9 @@ struct MapCanvasView: View {
                 self.backgroundLayer(layouts: layouts, bounds: bounds,
                                  geoSize: geo.size, origin: origin)
 
-                mapContent(items: items, layouts: renderedLayouts, theme: theme, bounds: bounds,
+                mapContent(items: items, layouts: renderedLayouts, gestureLayouts: layouts, theme: theme, bounds: bounds,
                            origin: origin, geoSize: geo.size, dropTarget: dropTarget,
-                           insertionHint: insertionHint, focusIDs: focusIDs)
+                           insertionHint: insertionHint, draggedIDs: draggedIDs, focusIDs: focusIDs)
             }
             // The map container is deliberately larger than the viewport, and a ZStack takes
             // the size of its largest child, so this stack grew to the container's size.
@@ -208,8 +210,8 @@ struct MapCanvasView: View {
         return items.filter { viewport.intersects($0.layout.frame) }
     }
 
-    private func nodeView(item: NodeItem, theme: Theme, dropTarget: UUID?, origin: CGPoint,
-                          layouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect,
+    private func nodeView(item: NodeItem, theme: Theme, dropTarget: UUID?, draggedIDs: Set<UUID>, origin: CGPoint,
+                          gestureLayouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect,
                           isSearchHit: Bool, dimmed: Bool = false, colorTag: String? = nil,
                           onToggleCollapse: (() -> Void)? = nil) -> some View {
         NodeView(node: item.node,
@@ -221,7 +223,7 @@ struct MapCanvasView: View {
                  isDropTarget: dropTarget == item.node.id,
                  onToggleCollapse: onToggleCollapse,
                  isFresh: vm.recentlyAddedID == item.node.id,
-                 isDragging: drag?.id == item.node.id,
+                 isDragging: draggedIDs.contains(item.node.id),
                  dragOffset: nil,
                  isSearchHit: vm.searchResults.contains(item.node.id),
                  colorTag: item.node.colorTag,
@@ -329,8 +331,8 @@ struct MapCanvasView: View {
         // Double-tap gesture removed (v25.8): it forced a ~300ms delay on every
         // single tap while SwiftUI waited to disambiguate single vs double.
         // Editing entry works via "click selected node again" pattern below.
-        .gesture(nodePointerGesture(item: item, origin: origin, layouts: layouts,
-                                    geoSize: geoSize, bounds: bounds))
+        .highPriorityGesture(nodePointerGesture(item: item, origin: origin, layouts: gestureLayouts,
+                                              geoSize: geoSize, bounds: bounds))
     }
 
     // MARK: - Gestures
@@ -451,11 +453,17 @@ struct MapCanvasView: View {
 
     private func dragChanged(_ value: DragGesture.Value, item: NodeItem,
                              layouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect) {
-        // Keep coordinates in map space; the drawing layer applies origin.
-        let current = CGPoint(x: item.layout.center.x + value.translation.width / scale,
-                              y: item.layout.center.y + value.translation.height / scale)
-        drag = ReparentDrag(id: item.node.id, source: item.layout.center, current: current,
-                            translation: value.translation)
+        // The displayed item is translated while a drag is active. Keep the
+        // gesture’s origin on the pre-drag layout so each event applies the
+        // pointer translation exactly once.
+        guard let source = layouts[item.node.id]?.center else { return }
+        // DragGesture is attached inside the scaled map, so its translation is
+        // already in the map’s local coordinate space.
+        let current = CGPoint(x: source.x + value.translation.width,
+                              y: source.y + value.translation.height)
+        let draggedIDs = item.node.descendantIDs().union([item.node.id])
+        drag = ReparentDrag(id: item.node.id, source: source, current: current,
+                            draggedIDs: draggedIDs, translation: value.translation)
         autoScrollToward(current, geoSize: geoSize, bounds: bounds)
     }
 
@@ -465,22 +473,36 @@ struct MapCanvasView: View {
         // reorders, and anything else records a free position.
         if let target = hitTest(point: dragState.current, draggedID: dragState.id, layouts: layouts) {
             vm.move(id: dragState.id, toParent: target)
-        } else if let hint = SiblingInsertion.hint(
-            point: dragState.current, draggedID: dragState.id, layouts: layouts,
-            siblings: vm.document.root.parent(of: dragState.id)?.children ?? []) {
-            vm.moveSibling(id: dragState.id, toIndex: hint.targetIndex)
-        } else if dragState.id == vm.document.root.id {
-            // Moving the central topic moves the whole map. Content-fit recentring
-            // cancels a uniform offset, so the whole-map move is expressed as pan.
-            pan = CGSize(width: pan.width + dragState.translation.width,
-                         height: pan.height + dragState.translation.height)
-            lastPan = pan
         } else {
-            vm.moveOffset(
-                id: dragState.id,
-                dx: dragState.translation.width / scale,
-                dy: dragState.translation.height / scale
-            )
+            // Descendants move with their dragged ancestor. Treating a release on
+            // one of those rendered frames as a free move would mutate an invalid
+            // cycle attempt, so fail closed before the blank-canvas path.
+            let renderedLayouts = layoutsDuringDrag(layouts, draggedIDs: dragState.draggedIDs)
+            let cycleDrop = dragState.draggedIDs.contains { id in
+                guard id != dragState.id else { return false }
+                return layouts[id]?.frame.contains(dragState.current) == true
+                    || renderedLayouts[id]?.frame.contains(dragState.current) == true
+            }
+            if cycleDrop {
+                return
+            }
+            if let hint = SiblingInsertion.hint(
+                point: dragState.current, draggedID: dragState.id, layouts: layouts,
+                siblings: vm.document.root.parent(of: dragState.id)?.children ?? []) {
+                vm.moveSibling(id: dragState.id, toIndex: hint.targetIndex)
+            } else if dragState.id == vm.document.root.id {
+                // Moving the central topic moves the whole map. Content-fit recentring
+                // cancels a uniform offset, so the whole-map move is expressed as pan.
+                pan = CGSize(width: pan.width + dragState.translation.width,
+                             height: pan.height + dragState.translation.height)
+                lastPan = pan
+            } else {
+                vm.moveOffset(
+                    id: dragState.id,
+                    dx: dragState.translation.width,
+                    dy: dragState.translation.height
+                )
+            }
         }
     }
 
@@ -491,7 +513,9 @@ struct MapCanvasView: View {
                 path.move(to: CGPoint(x: hint.minX + origin.x, y: hint.y + origin.y))
                 path.addLine(to: CGPoint(x: hint.maxX + origin.x, y: hint.y + origin.y))
             }
-            .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            .stroke(Color(hex: 0x3368A0), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .transition(.asymmetric(insertion: .opacity, removal: .identity))
+            .animation(reduceMotion ? nil : .easeIn(duration: 0.08), value: hint)
             .allowsHitTesting(false)
         }
     }
@@ -499,13 +523,12 @@ struct MapCanvasView: View {
     // MARK: - Helpers
 
     /// Keeps the dragged branch and every connector visually together before drop.
-    private func layoutsDuringDrag(_ layouts: [UUID: NodeLayout]) -> [UUID: NodeLayout] {
-        guard let drag, let node = vm.document.root.find(drag.id) else { return layouts }
-        let ids = node.descendantIDs().union([node.id])
-        let dx = drag.translation.width / scale
-        let dy = drag.translation.height / scale
+    private func layoutsDuringDrag(_ layouts: [UUID: NodeLayout], draggedIDs: Set<UUID>) -> [UUID: NodeLayout] {
+        guard let drag else { return layouts }
+        let dx = drag.translation.width
+        let dy = drag.translation.height
         var rendered = layouts
-        for id in ids {
+        for id in draggedIDs {
             guard let layout = rendered[id] else { continue }
             rendered[id] = NodeLayout(
                 id: layout.id,
@@ -536,9 +559,10 @@ struct MapCanvasView: View {
 
     /// The scaled, pannable map layer. Kept as its own view-building method
     /// so `body` stays within the type-checker complexity budget.
-    private func mapContent(items: [NodeItem], layouts: [UUID: NodeLayout], theme: Theme,
+    private func mapContent(items: [NodeItem], layouts: [UUID: NodeLayout],
+                            gestureLayouts: [UUID: NodeLayout], theme: Theme,
                             bounds: CGRect, origin: CGPoint, geoSize: CGSize, dropTarget: UUID?,
-                            insertionHint: ReorderHint?, focusIDs: Set<UUID>) -> some View {
+                            insertionHint: ReorderHint?, draggedIDs: Set<UUID>, focusIDs: Set<UUID>) -> some View {
         ZStack {
             connectionsCanvas(items: items, layouts: layouts, theme: theme,
                               origin: origin, focusIDs: focusIDs)
@@ -547,8 +571,8 @@ struct MapCanvasView: View {
             dragIndicator(origin: origin)
             reorderIndicator(insertionHint, origin: origin)
             ForEach(items) { item in
-                nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
-                         layouts: layouts, geoSize: geoSize, bounds: bounds,
+                nodeView(item: item, theme: theme, dropTarget: dropTarget, draggedIDs: draggedIDs,
+                         origin: origin, gestureLayouts: gestureLayouts, geoSize: geoSize, bounds: bounds,
                          isSearchHit: vm.searchResults.contains(item.node.id),
                          dimmed: !focusIDs.isEmpty && !focusIDs.contains(item.node.id),
                          colorTag: item.node.colorTag,
