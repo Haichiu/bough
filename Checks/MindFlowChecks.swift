@@ -2461,6 +2461,34 @@ do {
               && vm.selection == vm.document.root.id
               && vm.focusBranchID == nil && vm.batchSelection.isEmpty,
               "Command+R selects and returns to the central topic")
+
+        // T-035 follow-up: Cmd-Z is dispatched through the same shared seam as other core shortcuts.
+        vm.newDocument()
+        vm.editingID = nil
+        let beforeUndo = vm.document
+        let insertedForUndo = vm.addChild(to: nil)
+        check(insertedForUndo != nil
+              && KeyboardMonitor.performCoreShortcut(characters: "z", modifiers: [.command], vm: vm)
+              && vm.document == beforeUndo,
+              "Command+Z through core dispatch restores a real mutation exactly")
+
+        let beforeRedoPassThrough = vm.document
+        check(!KeyboardMonitor.performCoreShortcut(
+                  characters: "z", modifiers: [.shift, .command], vm: vm)
+              && vm.document == beforeRedoPassThrough,
+              "Shift+Command+Z passes through without mutation")
+
+        vm.newDocument()
+        vm.editingID = nil
+        _ = vm.addChild(to: nil)
+        vm.enterPresentation()
+        let duringCmdZPresentation = vm.document
+        check(vm.presentationActive
+              && KeyboardMonitor.performCoreShortcut(
+                  characters: "z", modifiers: [.command], vm: vm)
+              && vm.document == duringCmdZPresentation,
+              "Command+Z in presentation is consumed without mutation")
+        vm.exitPresentation()
     }
 }
 

@@ -51,7 +51,7 @@ public final class KeyboardMonitor {
         let isCoreShortcut =
             (modifiers == [.option] && isVerticalArrow)
             || (modifiers == [.option, .command] && (isVerticalArrow || ["/", "f", "p"].contains(key)))
-            || (modifiers == [.command] && (isArrow || ["d", "r"].contains(key)))
+            || (modifiers == [.command] && (isArrow || ["d", "r", "z"].contains(key)))
             || (modifiers == [.shift, .command] && key == "m")
 
         // Presentation owns the keyboard and trims its temporary undo history on exit.
@@ -94,6 +94,7 @@ public final class KeyboardMonitor {
                 }
                 return true
             }
+            if key == "z" { vm.undo(); return true }
             if key == "d" {
                 if let selection = vm.selection { vm.duplicate(id: selection) }
                 return true
@@ -158,13 +159,6 @@ public final class KeyboardMonitor {
 
         // Remaining Command shortcuts.
         if flags.contains(.command) {
-            // Keep undo on the same explicit path as the other document mutations;
-            // SwiftUI CommandMenu key equivalents are not delivered consistently
-            // while a canvas node has just finished a pointer drag.
-            if flags == [.command], chars.lowercased() == "z" {
-                vm.undo()
-                return nil
-            }
             // Xmind editor.addParentTopic is Command+Enter on macOS. Do not let extra
             // Shift/Option/Control modifiers silently trigger a different command.
             let commandOnly = flags.subtracting([.command, .numericPad, .function]).isEmpty
