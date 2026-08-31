@@ -2694,6 +2694,43 @@ do {
     check(lightCs.contains { accent.chroma - $0 >= 0.004999 },
           "at least one out-of-sRGB branch uses the 0.005 chroma step")
 
+    func isQuantized8(_ rgb: Palette.RGB) -> Bool {
+        let q = rgb.quantized8
+        return rgb == q
+    }
+    check(light.branchRGB.allSatisfy(isQuantized8) && dark.branchRGB.allSatisfy(isQuantized8),
+          "production branch samples are final sRGB 8-bit values")
+
+    let seamSample = Palette.RGB(red: 0.4807315, green: 0.326676734873, blue: 0.574070932030)
+    let seamQuantized = seamSample.quantized8
+    check(seamSample.hex == seamQuantized.hex
+          && seamSample.relativeLuminance == seamQuantized.relativeLuminance
+          && seamSample.contrastRatio(with: dark.canvasRGB)
+             == seamQuantized.contrastRatio(with: dark.canvasRGB),
+          "Color, hex, and contrast all consume the quantized8 final value")
+
+    func unquantizedContrast(_ first: Palette.RGB, _ second: Palette.RGB) -> Double {
+        func luminance(_ rgb: Palette.RGB) -> Double {
+            func toLinear(_ value: Double) -> Double {
+                value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * toLinear(rgb.red)
+                + 0.7152 * toLinear(rgb.green)
+                + 0.0722 * toLinear(rgb.blue)
+        }
+        let firstLum = luminance(first)
+        let secondLum = luminance(second)
+        let lighter = max(firstLum, secondLum)
+        let darker = min(firstLum, secondLum)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+    let oldBoundaryFloat = unquantizedContrast(seamSample, dark.canvasRGB)
+    let oldBoundaryQuantized = seamQuantized.contrastRatio(with: dark.canvasRGB)
+    print("T-036 old 3.0 boundary float " + String(format: "%.6f", oldBoundaryFloat)
+          + " quantized8 " + String(format: "%.6f", oldBoundaryQuantized))
+    check(oldBoundaryFloat >= 3.0 && oldBoundaryQuantized < 3.0,
+          "old unquantized 3.0 check is exposed as a quantized8 false PASS")
+
     func checkResolvedOKLCh(_ palette: Palette, label: String) {
         let actual = palette.branchRGB.map(\.oklch)
         let effectiveChroma = actual.map(\.chroma)
@@ -2705,10 +2742,10 @@ do {
             let prefix = label + " branch " + String(index)
             check(circularHueDistance(sample.hue, targetHue) <= 1.0,
                   prefix + " actual OKLCh hue stays within 1 degree of its target")
-            check(abs(sample.lightness - palette.branchOKLCh[index].lightness) <= 0.0001,
-                  prefix + " actual OKLCh lightness is not changed by channel repair")
-            check(abs(sample.chroma - palette.branchOKLCh[index].chroma) <= 0.0001,
-                  prefix + " actual OKLCh chroma matches C-only gamut mapping")
+            check(abs(sample.lightness - palette.branchOKLCh[index].lightness) <= 0.003,
+                  prefix + " actual OKLCh lightness stays within 8-bit quantization tolerance")
+            check(abs(sample.chroma - palette.branchOKLCh[index].chroma) <= 0.003,
+                  prefix + " actual OKLCh chroma stays within 8-bit quantization tolerance")
         }
     }
     checkResolvedOKLCh(light, label: "light")
@@ -2779,12 +2816,12 @@ do {
     print("T-036 dark secondary text " + range(darkSecondary))
     check(darkPrimary.allSatisfy { $0 >= 4.5 }, "dark primary text contrast is at least 4.5:1")
     check(darkSecondary.allSatisfy { $0 >= 4.5 }, "dark secondary text contrast is at least 4.5:1")
-    check(darkBranchCanvas.allSatisfy { $0 >= 3.0 }, "dark branch lines contrast with the dark canvas at least 3:1")
+    check(darkBranchCanvas.allSatisfy { $0 >= 3.1 }, "quantized dark branch lines contrast with the dark canvas at least 3.1:1")
     check(darkBranchCream.allSatisfy { $0 >= 4.5 }, "dark branch cream text contrast is at least 4.5:1")
 
     let darkCanvasLum = dark.canvasRGB.relativeLuminance
     let creamLum = dark.creamTextRGB.relativeLuminance
-    let lower = 3.0 * (darkCanvasLum + 0.05) - 0.05
+    let lower = 3.1 * (darkCanvasLum + 0.05) - 0.05
     let upper = (creamLum + 0.05) / 4.5 - 0.05
     let darkBranchLuminances = dark.branchRGB.map(\.relativeLuminance)
     print("T-036 dark branch feasible window "

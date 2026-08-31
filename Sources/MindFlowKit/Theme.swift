@@ -33,27 +33,39 @@ public struct Palette {
                       blue: Double(hex & 0xFF) / 255)
         }
 
+        /// The one final-value seam used by colors, hex serialization, and contrast.
+        /// It deliberately rounds channels without clamping them.
+        public var quantized8: RGB {
+            RGB(red: (red * 255).rounded() / 255,
+                green: (green * 255).rounded() / 255,
+                blue: (blue * 255).rounded() / 255)
+        }
+
         /// Lowercase is convenient for stable SVG diagnostics.
         public var hex: String {
-            String(format: "#%02x%02x%02x",
-                   Int((red * 255).rounded()),
-                   Int((green * 255).rounded()),
-                   Int((blue * 255).rounded()))
+            let q = quantized8
+            return String(format: "#%02x%02x%02x",
+                          Int((q.red * 255).rounded()),
+                          Int((q.green * 255).rounded()),
+                          Int((q.blue * 255).rounded()))
         }
 
         public var color: Color {
-            Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
+            let q = quantized8
+            return Color(.sRGB, red: q.red, green: q.green, blue: q.blue, opacity: 1)
         }
 
         fileprivate var nsColor: NSColor {
-            NSColor(srgbRed: CGFloat(red), green: CGFloat(green), blue: CGFloat(blue), alpha: 1)
+            let q = quantized8
+            return NSColor(srgbRed: CGFloat(q.red), green: CGFloat(q.green), blue: CGFloat(q.blue), alpha: 1)
         }
 
-        /// WCAG relative luminance for this sRGB value.
+        /// WCAG relative luminance for this final sRGB value.
         public var relativeLuminance: Double {
-            let r = Palette.toLinear(red)
-            let g = Palette.toLinear(green)
-            let b = Palette.toLinear(blue)
+            let q = quantized8
+            let r = Palette.toLinear(q.red)
+            let g = Palette.toLinear(q.green)
+            let b = Palette.toLinear(q.blue)
             return 0.2126 * r + 0.7152 * g + 0.0722 * b
         }
 
@@ -213,14 +225,14 @@ public struct Palette {
         return (0..<6).map { index in
             let hue = normalizedHue(base.hue + Double(index) * 60)
             var sample = gamutMapped(lightness: base.lightness, chroma: base.chroma, hue: hue)
-            if dark && sample.rgb.contrastRatio(with: darkCanvasRGBValue) < 3.0 {
-                // Raise L only for the branches that miss the dark-canvas 3:1 floor.
+            if dark && sample.rgb.contrastRatio(with: darkCanvasRGBValue) < 3.1 {
+                // Raise L only for the branches that miss the final 8-bit dark-canvas 3.1:1 floor.
                 var low = base.lightness
                 var high = 1.0
                 for _ in 0..<32 {
                     let middle = (low + high) / 2
                     let probe = gamutMapped(lightness: middle, chroma: base.chroma, hue: hue)
-                    if probe.rgb.contrastRatio(with: darkCanvasRGBValue) >= 3.0 {
+                    if probe.rgb.contrastRatio(with: darkCanvasRGBValue) >= 3.1 {
                         high = middle
                     } else {
                         low = middle
@@ -241,7 +253,7 @@ public struct Palette {
         }
         let rgb = RGB(red: fromLinear(linear.0),
                       green: fromLinear(linear.1),
-                      blue: fromLinear(linear.2))
+                      blue: fromLinear(linear.2)).quantized8
         return Sample(oklch: OKLCh(lightness: lightness, chroma: mappedChroma, hue: hue), rgb: rgb)
     }
 
