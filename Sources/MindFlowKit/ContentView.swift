@@ -3,6 +3,7 @@ import SwiftUI
 
 public struct ContentView: View {
     @EnvironmentObject private var vm: MindMapViewModel
+    private let palette = Palette.screen
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var searchFocused: Bool
     @FocusState private var outlineFocused: Bool
@@ -118,14 +119,6 @@ public struct ContentView: View {
                         .help("清除手動位置並回到自動排列（可復原）")
                 } label: {
                     Label("版面", systemImage: "arrow.triangle.branch")
-                }
-
-                Menu {
-                    ForEach(Theme.all) { theme in
-                        Button(theme.name) { vm.setTheme(theme.id) }
-                    }
-                } label: {
-                    Label("主題", systemImage: "paintpalette")
                 }
 
                 Button {
@@ -285,7 +278,7 @@ public struct ContentView: View {
                                 .font(.callout)
                                 .lineLimit(1)
                             if vm.sessions[index].dirty || (isActive && vm.dirty) {
-                                Circle().fill(Color.orange).frame(width: 6, height: 6)
+                                Circle().fill(palette.statusHighlight).frame(width: 6, height: 6)
                             }
                         }
                         .padding(.horizontal, 10)
@@ -294,7 +287,7 @@ public struct ContentView: View {
                     }
                     .buttonStyle(.plain)
                     .background(
-                        Capsule().fill(isActive ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
+                        Capsule().fill(isActive ? palette.accent.opacity(0.18) : palette.textSecondary.opacity(0.08))
                     )
                     .opacity(draggingTab == index ? 0.55 : 1)
                     .offset(x: draggingTab == index ? tabDragX : 0)
@@ -435,7 +428,7 @@ public struct ContentView: View {
                     .fill(tag.color)
                     .frame(width: 16, height: 16)
                     .overlay(Circle().stroke(
-                        vm.document.root.find(id)?.colorTag == tag.key ? Color.primary : Color.clear,
+                        vm.document.root.find(id)?.colorTag == tag.key ? palette.textPrimary : Color.clear,
                         lineWidth: 2))
                     .onTapGesture { vm.setColorTag(id: id, tag: tag.key) }
                     .help(tag.name)
@@ -495,7 +488,7 @@ public struct ContentView: View {
                 }
                 .font(.body)
                 .frame(maxHeight: .infinity)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(palette.textSecondary.opacity(0.3)))
                 .overlay(alignment: .topLeading) {
                     if noteDraft.isEmpty {
                         Text("備註…").foregroundStyle(.secondary).padding(6).allowsHitTesting(false)
@@ -621,7 +614,7 @@ public struct ContentView: View {
             if row.marked {
                 Image(systemName: "star.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(Color(hex: 0xF5C542))
+                    .foregroundStyle(palette.statusHighlight)
             }
             if !row.note.isEmpty {
                 Image(systemName: "note.text")
@@ -678,7 +671,7 @@ public struct ContentView: View {
                 }
                 Text(row.text.isEmpty ? "（空白）" : row.text)
                     .font(row.isRoot ? .body.bold() : .body)
-                    .foregroundStyle(row.text.isEmpty ? Color.secondary : Color.primary)
+                    .foregroundStyle(row.text.isEmpty ? palette.textSecondary : palette.textPrimary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -690,7 +683,7 @@ public struct ContentView: View {
         .opacity(outlineDimmed(row, focusSet: focusSet))
         .background(
             vm.selection == row.id
-                ? Color.accentColor.opacity(0.16)
+                ? palette.accent.opacity(0.16)
                 : Color.clear
         )
         .cornerRadius(5)

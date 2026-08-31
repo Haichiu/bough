@@ -1576,7 +1576,4 @@ public final class MindMapViewModel: ObservableObject {
         notify("已匯入 FreeMind ✓")
     }
 
-    public func setTheme(_ id: String) {
-        mutate { $0.themeName = id }
-    }
 }

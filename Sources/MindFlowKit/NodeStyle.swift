@@ -32,13 +32,14 @@ public struct NodeStyle {
     public static let maxNodeWidth: CGFloat = 340
     public static let maxNodeHeight: CGFloat = 120
 
-    public static func of(depth: Int, branchColor: Color = .accentColor) -> NodeStyle {
+    public static func of(depth: Int, palette: Palette = .screen, branchColor: Color? = nil) -> NodeStyle {
+        let branch = branchColor ?? palette.accent
         switch depth {
         case 0:
             return NodeStyle(font: .systemFont(ofSize: 18, weight: .semibold),
                              cornerRadius: 14,
-                             textColor: Theme.rootForeground,
-                             fillBase: Theme.rootBackground, fillOpacity: 1,
+                             textColor: palette.creamText,
+                             fillBase: palette.accent, fillOpacity: 1,
                              strokeBase: nil, strokeOpacity: 0, strokeWidth: 0,
                              horizontalInset: 24, verticalInset: 13,
                              lineLimit: 3, maxTextWidth: 280,
@@ -46,20 +47,20 @@ public struct NodeStyle {
         case 1:
             return NodeStyle(font: .systemFont(ofSize: 15, weight: .medium),
                              cornerRadius: 11,
-                             textColor: .white,
-                             fillBase: branchColor, fillOpacity: 1,
+                             textColor: palette.creamText,
+                             fillBase: branch, fillOpacity: 1,
                              strokeBase: nil, strokeOpacity: 0, strokeWidth: 0,
                              horizontalInset: 18, verticalInset: 10,
                              lineLimit: 3, maxTextWidth: 260,
                              minSize: CGSize(width: 76, height: 38))
         default:
-            // A tinted wash keyed to the branch colour reads as belonging to that
-            // branch, where the old white box plus 1.5pt outline read as a form field.
+            // Deeper nodes use the shared card surface and identify their branch
+            // with the same derived colour as the connector.
             return NodeStyle(font: .systemFont(ofSize: 13),
                              cornerRadius: 9,
-                             textColor: .primary,
-                             fillBase: branchColor, fillOpacity: 0.12,
-                             strokeBase: branchColor, strokeOpacity: 0.38, strokeWidth: 1,
+                             textColor: palette.textPrimary,
+                             fillBase: palette.card, fillOpacity: 1,
+                             strokeBase: branch, strokeOpacity: 1, strokeWidth: 1,
                              horizontalInset: 14, verticalInset: 8,
                              lineLimit: 4, maxTextWidth: 250,
                              minSize: CGSize(width: 64, height: 32))

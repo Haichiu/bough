@@ -400,21 +400,19 @@ do {
                  children: [MindNode(text: "L2")]),
     ]))
     let svgRich = MapExporter.svg(rich)
-    // The root fill is declared in calibrated RGB. Converted to sRGB — which is what SVG
-    // means by a hex colour — it is #3c4c62. The old exporter hardcoded #2e3b4f, the same
-    // numbers read as device RGB, so every export came out a shade darker than the screen.
-    check(svgRich.contains("fill=\"#3c4c62\""), "svg root fill matches the on-screen colour")
-    check(!svgRich.contains("#2e3b4f"), "the hand-computed root literal is gone for good")
-    check(svgRich.contains("stroke=\"none\"") || svgRich.contains("stroke=\"#2e3b4f\""), "root rect has stroke attr")
+    // SVG is explicitly Palette.light, independent of the current system appearance.
+    check(svgRich.contains("fill=\"#3368a0\""), "svg root fill uses Palette A accent")
+    check(!svgRich.contains("#2e3b4f"), "the obsolete root literal is gone for good")
+    check(svgRich.contains("stroke=\"none\""), "root rect has no stroke")
     check(svgRich.contains(">★</text>"), "svg draws star for marked nodes")
     check(svgRich.contains("#f5c542"), "svg star is gold")
     check(svgRich.contains("備註：有備註"), "svg embeds note as tooltip title")
     check(svgRich.contains("<a href=\"https://example.com\">"), "svg wraps linked node in anchor")
     // Red color tag is defined as Color(hex: 0xE05252) in Theme.colorTags.
     check(svgRich.lowercased().contains("#e05252"), "svg renders color-tag bar")
-    // v3.9: appearance now comes from NodeStyle, so assert the new visual language.
-    check(svgRich.contains("fill-opacity=\"0.12\""), "svg deep nodes use the branch-tinted wash")
-    check(svgRich.contains("stroke-opacity=\"0.38\""), "svg deep nodes keep a hairline branch outline")
+    // v3.9: appearance now comes from NodeStyle, so assert the Palette A hierarchy.
+    check(svgRich.contains("fill=\"#ffffff\" fill-opacity=\"1.0\""), "svg deep nodes use the Palette card")
+    check(svgRich.contains("stroke=\"#3368a0\" stroke-opacity=\"1.0\""), "svg deep nodes use the branch stroke")
     check(svgRich.contains("rx=\"14.0\""), "svg root radius comes from NodeStyle, not a literal 9")
     check(svgRich.contains("font-size=\"18.0\""), "svg root font size matches the screen, not a literal 17")
 
@@ -1645,8 +1643,8 @@ do {
         check(vm.zenMode == true, "zen mode toggles on")
         vm.toggleZen()
         check(vm.zenMode == false, "zen mode toggles off")
-        vm.setTheme("candy")
-        check(vm.document.themeName == "candy", "setTheme applies")
+        check(Theme.named("candy").branchRGB == Palette.light.branchRGB,
+              "legacy theme IDs use the single Palette A")
     }
 }
 
@@ -1964,8 +1962,8 @@ do {
         _ = vm.addChild(to: parent)
         check(vm.document.root.find(parent)?.children.count == 1, "child created")
 
-        vm.setTheme("candy")
-        check(vm.document.themeName == "candy", "theme persists")
+        check(Theme.named(vm.document.themeName).branchRGB == Palette.light.branchRGB,
+              "legacy theme metadata renders with Palette A")
 
         let noteNode = vm.addChild(to: nil)!
         vm.rename(id: noteNode, to: "note-test-node")
@@ -2644,6 +2642,252 @@ do {
     let huge = CGSize(width: 40000, height: 40000)
     check(CanvasFit.scale(content: huge, viewport: viewport) == CanvasFit.zoomRange.lowerBound,
           "content past the zoom floor stops at the floor")
+}
+
+// MARK: - T-036: Palette A
+
+do {
+    let light = Palette.light
+    let dark = Palette.dark
+    let accent = Palette.accentOKLCh
+
+    func circularHueDistance(_ a: Double, _ b: Double) -> Double {
+        let raw = abs(a - b).truncatingRemainder(dividingBy: 360)
+        return min(raw, 360 - raw)
+    }
+
+    func range(_ values: [Double]) -> String {
+        guard let minimum = values.min(), let maximum = values.max() else { return "empty" }
+        return String(format: "min=%.4f max=%.4f", minimum, maximum)
+    }
+
+    func checkWindow(_ actual: Double, lower: Double, upper: Double, _ label: String) {
+        check(actual >= lower && actual <= upper,
+              label + String(format: ": window [%.4f, %.4f], actual %.4f", lower, upper, actual))
+    }
+
+    func svgAttribute(_ name: String, _ value: String) -> String {
+        name + "=\"" + value + "\""
+    }
+
+    let lightBranchHex = light.branchRGB.map(\.hex)
+    let expectedLightBranchHex = ["#3368a0", "#7a5291", "#984955", "#8a5a08", "#4e722c", "#067572"]
+    print("T-036 light branch hex " + lightBranchHex.joined(separator: ","))
+    print("T-036 dark branch hex " + dark.branchRGB.map(\.hex).joined(separator: ","))
+    check(light.branchRGB.count == 6, "Palette A derives six branch colours")
+    check(lightBranchHex == expectedLightBranchHex, "OKLCh branch diagnostics match the derived Palette A colours")
+    check(light.branchRGB.first?.hex == light.accentRGB.hex,
+          "the first branch is the accent within sRGB rounding")
+
+    let lightHues = light.branchOKLCh.map(\.hue)
+    check(zip(lightHues, lightHues.dropFirst()).allSatisfy {
+        circularHueDistance($0.0, $0.1) >= 59.5 && circularHueDistance($0.0, $0.1) <= 60.5
+    }, "adjacent branch hues rotate by 60 degrees")
+    let lightLs = light.branchOKLCh.map(\.lightness)
+    let lightCs = light.branchOKLCh.map(\.chroma)
+    check((lightLs.max() ?? 0) - (lightLs.min() ?? 0) <= 0.000001,
+          "light branch OKLCh lightness is fixed")
+    check(lightLs.allSatisfy { abs($0 - accent.lightness) <= 0.000001 },
+          "gamut mapping never changes OKLCh lightness")
+    check(lightCs.allSatisfy { $0 <= accent.chroma + 0.000001 },
+          "gamut mapping only lowers OKLCh chroma")
+    check(lightCs.contains { accent.chroma - $0 >= 0.004999 },
+          "at least one out-of-sRGB branch uses the 0.005 chroma step")
+
+    func checkResolvedOKLCh(_ palette: Palette, label: String) {
+        let actual = palette.branchRGB.map(\.oklch)
+        let effectiveChroma = actual.map(\.chroma)
+        print(label + " effective OKLCh C " + range(effectiveChroma))
+        check(effectiveChroma.min() ?? 0 >= 0.02,
+              label + " effective C range keeps hue stability explicit (minimum >= 0.02)")
+        for (index, sample) in actual.enumerated() {
+            let targetHue = accent.hue + Double(index) * 60
+            let prefix = label + " branch " + String(index)
+            check(circularHueDistance(sample.hue, targetHue) <= 1.0,
+                  prefix + " actual OKLCh hue stays within 1 degree of its target")
+            check(abs(sample.lightness - palette.branchOKLCh[index].lightness) <= 0.0001,
+                  prefix + " actual OKLCh lightness is not changed by channel repair")
+            check(abs(sample.chroma - palette.branchOKLCh[index].chroma) <= 0.0001,
+                  prefix + " actual OKLCh chroma matches C-only gamut mapping")
+        }
+    }
+    checkResolvedOKLCh(light, label: "light")
+    checkResolvedOKLCh(dark, label: "dark")
+
+    func linearRGB(_ coordinate: Palette.OKLCh) -> (Double, Double, Double) {
+        let radians = coordinate.hue * Double.pi / 180
+        let a = coordinate.chroma * cos(radians)
+        let b = coordinate.chroma * sin(radians)
+        let l = pow(coordinate.lightness + 0.3963377774 * a + 0.2158037573 * b, 3)
+        let m = pow(coordinate.lightness - 0.1055613458 * a - 0.0638541728 * b, 3)
+        let s = pow(coordinate.lightness - 0.0894841775 * a - 1.2914855480 * b, 3)
+        return (4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+    }
+
+    func gammaEncode(_ value: Double) -> Double {
+        value <= 0.0031308 ? 12.92 * value : 1.055 * pow(value, 1 / 2.4) - 0.055
+    }
+
+    // Negative control: the tempting RGB-channel clamp leaves the out-of-gamut branch
+    // with the wrong OKLCh lightness. A production clamp mutation must trip the invariant
+    // above instead of being accepted as a valid palette.
+    let rgbClampMutation = (0..<6).map { index in
+        let coordinate = Palette.OKLCh(lightness: accent.lightness,
+                                       chroma: accent.chroma,
+                                       hue: accent.hue + Double(index) * 60)
+        let linear = linearRGB(coordinate)
+        return Palette.RGB(red: gammaEncode(min(max(linear.0, 0), 1)),
+                           green: gammaEncode(min(max(linear.1, 0), 1)),
+                           blue: gammaEncode(min(max(linear.2, 0), 1)))
+    }
+    let clampLightnessDrift = rgbClampMutation.enumerated().map {
+        abs($0.element.oklch.lightness - light.branchOKLCh[$0.offset].lightness)
+    }
+    print("T-036 RGB-clamp mutation OKLCh L drift " + range(clampLightnessDrift))
+    check(clampLightnessDrift.max() ?? 0 > 0.001,
+          "RGB-channel clamp mutation is caught by the fixed-lightness invariant")
+
+    let lightBranchCream = light.branchRGB.map { $0.contrastRatio(with: light.creamTextRGB) }
+    let lightBranchCanvas = light.branchRGB.map { $0.contrastRatio(with: light.canvasRGB) }
+    let lightBranchCard = light.branchRGB.map { $0.contrastRatio(with: light.cardRGB) }
+    let darkBranchCanvas = dark.branchRGB.map { $0.contrastRatio(with: dark.canvasRGB) }
+    let darkBranchCream = dark.branchRGB.map { $0.contrastRatio(with: dark.creamTextRGB) }
+    print("T-036 light branch/cream " + range(lightBranchCream))
+    print("T-036 light branch/canvas " + range(lightBranchCanvas))
+    print("T-036 light branch/card " + range(lightBranchCard))
+    print("T-036 dark branch/canvas " + range(darkBranchCanvas))
+    print("T-036 dark cream/branch " + range(darkBranchCream))
+    check(lightBranchCream.allSatisfy { $0 >= 4.5 }, "light branch text contrast is at least 4.5:1")
+    check(lightBranchCanvas.allSatisfy { $0 >= 3.0 }, "light branch lines contrast with the canvas at least 3:1")
+    check(lightBranchCard.allSatisfy { $0 >= 3.0 }, "light branch lines contrast with cards at least 3:1")
+    check(light.accentRGB.contrastRatio(with: light.creamTextRGB) >= 4.5,
+          "light root cream text contrast is at least 4.5:1")
+    check(light.textPrimaryRGB.contrastRatio(with: light.cardRGB) >= 4.5,
+          "light primary text contrast with cards is at least 4.5:1")
+    check(light.textSecondaryRGB.contrastRatio(with: light.canvasRGB) >= 4.5,
+          "light secondary text contrast with the canvas is at least 4.5:1")
+    check(light.textSecondaryRGB.contrastRatio(with: light.cardRGB) >= 4.5,
+          "light secondary text contrast with cards is at least 4.5:1")
+
+    let darkPrimary = [dark.textPrimaryRGB.contrastRatio(with: dark.canvasRGB),
+                       dark.textPrimaryRGB.contrastRatio(with: dark.cardRGB)]
+    let darkSecondary = [dark.textSecondaryRGB.contrastRatio(with: dark.canvasRGB),
+                         dark.textSecondaryRGB.contrastRatio(with: dark.cardRGB)]
+    print("T-036 dark primary text " + range(darkPrimary))
+    print("T-036 dark secondary text " + range(darkSecondary))
+    check(darkPrimary.allSatisfy { $0 >= 4.5 }, "dark primary text contrast is at least 4.5:1")
+    check(darkSecondary.allSatisfy { $0 >= 4.5 }, "dark secondary text contrast is at least 4.5:1")
+    check(darkBranchCanvas.allSatisfy { $0 >= 3.0 }, "dark branch lines contrast with the dark canvas at least 3:1")
+    check(darkBranchCream.allSatisfy { $0 >= 4.5 }, "dark branch cream text contrast is at least 4.5:1")
+
+    let darkCanvasLum = dark.canvasRGB.relativeLuminance
+    let creamLum = dark.creamTextRGB.relativeLuminance
+    let lower = 3.0 * (darkCanvasLum + 0.05) - 0.05
+    let upper = (creamLum + 0.05) / 4.5 - 0.05
+    let darkBranchLuminances = dark.branchRGB.map(\.relativeLuminance)
+    print("T-036 dark branch feasible window "
+          + String(format: "[%.4f, %.4f] actual ", lower, upper)
+          + range(darkBranchLuminances))
+    check(lower <= upper, "dark branch contrast constraints have a feasible luminance window")
+    for (index, luminance) in darkBranchLuminances.enumerated() {
+        checkWindow(luminance, lower: lower, upper: upper,
+                    "dark branch " + String(index) + " stays in the feasible contrast window")
+    }
+
+    func hsl(_ rgb: Palette.RGB) -> (hue: Double, saturation: Double, lightness: Double) {
+        let red = rgb.red
+        let green = rgb.green
+        let blue = rgb.blue
+        let maximum = max(red, green, blue)
+        let minimum = min(red, green, blue)
+        let delta = maximum - minimum
+        let lightness = (maximum + minimum) / 2
+        guard delta > 0 else { return (0, 0, lightness) }
+        let saturation = delta / (1 - abs(2 * lightness - 1))
+        var hue: Double
+        if maximum == red {
+            hue = ((green - blue) / delta).truncatingRemainder(dividingBy: 6)
+        } else if maximum == green {
+            hue = (blue - red) / delta + 2
+        } else {
+            hue = (red - green) / delta + 4
+        }
+        hue /= 6
+        if hue < 0 { hue += 1 }
+        return (hue, saturation, lightness)
+    }
+
+    func rgbFromHSL(hue: Double, saturation: Double, lightness: Double) -> Palette.RGB {
+        let chroma = (1 - abs(2 * lightness - 1)) * saturation
+        let sector = (hue * 6).truncatingRemainder(dividingBy: 2)
+        let x = chroma * (1 - abs(sector - 1))
+        let match = lightness - chroma / 2
+        let components: (Double, Double, Double)
+        switch Int(floor(hue * 6)) % 6 {
+        case 0: components = (chroma, x, 0)
+        case 1: components = (x, chroma, 0)
+        case 2: components = (0, chroma, x)
+        case 3: components = (0, x, chroma)
+        case 4: components = (x, 0, chroma)
+        default: components = (chroma, 0, x)
+        }
+        return Palette.RGB(red: components.0 + match,
+                           green: components.1 + match,
+                           blue: components.2 + match)
+    }
+
+    let accentHSL = hsl(light.accentRGB)
+    let hslBranches = (0..<6).map { index in
+        rgbFromHSL(hue: (accentHSL.hue + Double(index) / 6).truncatingRemainder(dividingBy: 1),
+                   saturation: accentHSL.saturation, lightness: accentHSL.lightness)
+    }
+    let hslContrasts = hslBranches.map { $0.contrastRatio(with: light.creamTextRGB) }
+    print("T-036 HSL negative-control branch/cream " + range(hslContrasts))
+    check(hslContrasts.min() ?? 10 < 4.5,
+          "equal-S/L HSL hue rotation is rejected by the contrast threshold")
+
+    let lowContrast = Palette.RGB(hex: 0x777777).contrastRatio(with: Palette.RGB(hex: 0xFFFFFF))
+    print("T-036 explicit low-contrast negative-control ratio " + String(format: "%.4f", lowContrast))
+    check(lowContrast < 4.5, "the contrast checker rejects an explicit low-contrast text pair")
+
+    let legacyIDs = ["ocean", "candy", "forest", "mono", "unknown"]
+    let legacyPalettes = legacyIDs.map { Theme.named($0) }
+    check(legacyPalettes.allSatisfy { $0.appearance == .screen },
+          "legacy theme IDs resolve through the dynamic screen Palette")
+    check(legacyPalettes.dropFirst().allSatisfy { $0.branchRGB == legacyPalettes[0].branchRGB },
+          "all legacy theme IDs render the same Palette A")
+    check(MindDocument.new().themeName == "ocean", "new documents retain the legacy ocean metadata default")
+    let legacyDocument = MindDocument(title: "Legacy", themeName: "forest", root: MindNode(text: "Root"))
+    if let legacyData = try? JSONEncoder().encode(legacyDocument),
+       let decodedLegacy = try? JSONDecoder().decode(MindDocument.self, from: legacyData),
+       let legacyJSON = String(data: legacyData, encoding: .utf8) {
+        check(decodedLegacy.themeName == "forest" && decodedLegacy == legacyDocument,
+              "legacy themeName survives Codable round-trip")
+        check(legacyJSON.contains("\"themeName\":\"forest\""),
+              "encoded documents retain the legacy themeName field")
+    } else {
+        check(false, "legacy themeName survives Codable round-trip")
+        check(false, "encoded documents retain the legacy themeName field")
+    }
+
+    let exportRoot = MindNode(text: "Root", children: [MindNode(text: "Branch", children: [MindNode(text: "Deep")])])
+    let exportDocument = MindDocument(title: "Palette", themeName: "forest", root: exportRoot)
+    let oceanExport = MindDocument(title: "Palette", themeName: "ocean", root: exportRoot)
+    let svg = MapExporter.svg(exportDocument)
+    let staticPalette = StaticMapView.exportPalette
+    check(staticPalette.appearance == .light, "StaticMapView export seam is explicitly light")
+    check(staticPalette.canvasRGB == light.canvasRGB && staticPalette.branchRGB == light.branchRGB,
+          "StaticMapView resolves the same Palette.light values")
+    check(svg.contains(svgAttribute("fill", light.canvasRGB.hex)), "SVG background uses Palette.light canvas")
+    check(svg.contains(svgAttribute("fill", light.accentRGB.hex)), "SVG root and depth-one fill use Palette.light")
+    check(svg.contains(svgAttribute("fill", light.cardRGB.hex)), "SVG deep fill uses Palette.light card")
+    check(svg.contains(svgAttribute("stroke", light.branchRGB[0].hex)), "SVG deep stroke uses the derived branch colour")
+    check(svg.contains(svgAttribute("fill", light.creamTextRGB.hex)), "SVG root/depth-one text uses cream")
+    check(svg.contains(svgAttribute("fill", light.textPrimaryRGB.hex)), "SVG deep text uses Palette.light primary text")
+    check(MapExporter.svg(exportDocument) == MapExporter.svg(oceanExport),
+          "a legacy non-ocean document exports identically to Palette A")
 }
 
 if failures == 0 {

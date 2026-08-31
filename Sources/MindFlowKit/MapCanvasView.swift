@@ -99,8 +99,8 @@ struct MapCanvasView: View {
             // pushed the lower nodes off the bottom of the window. Pinning the stack to the
             // viewport puts the centring back where it belongs.
             .frame(width: geo.size.width, height: geo.size.height)
-            .overlay(alignment: .bottomTrailing) { zoomControls }
-            .overlay { dropHighlightBorder }
+            .overlay(alignment: .bottomTrailing) { zoomControls(palette: theme) }
+            .overlay { dropHighlightBorder(palette: theme) }
             .animation(reduceMotion ? nil : .spring(response: 0.3), value: vm.statusMessage)
             .onAppear {
                 canvasSize = geo.size
@@ -115,15 +115,15 @@ struct MapCanvasView: View {
             .onReceive(NotificationCenter.default.publisher(for: .mindFlowFit)) { _ in
                 fitToView(bounds: bounds, geo: geo.size)
             }
-            .overlay(alignment: .center) { emptyStateHint(items: items) }
+            .overlay(alignment: .center) { emptyStateHint(items: items, palette: theme) }
             .onHover { hovering in vm.isCursorOverCanvas = hovering }
-            .overlay(alignment: .bottom) { statusToast }
+            .overlay(alignment: .bottom) { statusToast(palette: theme) }
             .overlay {
                 if let rect = lassoRect {
                     Rectangle()
-                        .fill(Color.accentColor.opacity(0.08))
+                        .fill(theme.accent.opacity(0.08))
                         .overlay(
-                            Rectangle().stroke(Color.accentColor,
+                            Rectangle().stroke(theme.accent,
                                                style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])))
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
@@ -149,7 +149,7 @@ struct MapCanvasView: View {
                 lastPan = .zero
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(Palette.screen.canvasBackground)
     }
 
     // MARK: - Layers
@@ -169,20 +169,20 @@ struct MapCanvasView: View {
     }
 
     private func connectionsCanvas(items: [NodeItem], layouts: [UUID: NodeLayout],
-                                   theme: Theme, origin: CGPoint,
+                                   theme: Palette, origin: CGPoint,
                                    focusIDs: Set<UUID>) -> some View {
         MapConnectionsView(items: items, layouts: layouts, theme: theme,
                            origin: origin, direction: vm.direction, focusIDs: focusIDs)
     }
 
     @ViewBuilder
-    private func dragIndicator(origin: CGPoint) -> some View {
+    private func dragIndicator(origin: CGPoint, palette: Palette) -> some View {
         if let dragState = drag {
             Path { path in
                 path.move(to: CGPoint(x: dragState.source.x + origin.x, y: dragState.source.y + origin.y))
                 path.addLine(to: CGPoint(x: dragState.current.x + origin.x, y: dragState.current.y + origin.y))
             }
-            .stroke(Color.secondary, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            .stroke(palette.textSecondary, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
             .allowsHitTesting(false)
         }
     }
@@ -210,12 +210,13 @@ struct MapCanvasView: View {
         return items.filter { viewport.intersects($0.layout.frame) }
     }
 
-    private func nodeView(item: NodeItem, theme: Theme, dropTarget: UUID?, draggedIDs: Set<UUID>, origin: CGPoint,
+    private func nodeView(item: NodeItem, theme: Palette, dropTarget: UUID?, draggedIDs: Set<UUID>, origin: CGPoint,
                           gestureLayouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect,
                           isSearchHit: Bool, dimmed: Bool = false, colorTag: String? = nil,
                           onToggleCollapse: (() -> Void)? = nil) -> some View {
         NodeView(node: item.node,
                  layout: item.layout,
+                 palette: theme,
                  branchColor: theme.color(forIndex: item.layout.colorIndex),
                  isSelected: vm.selection == item.node.id,
                  isBatchMember: vm.batchSelection.contains(item.node.id),
@@ -507,13 +508,13 @@ struct MapCanvasView: View {
     }
 
     @ViewBuilder
-    private func reorderIndicator(_ hint: ReorderHint?, origin: CGPoint) -> some View {
+    private func reorderIndicator(_ hint: ReorderHint?, origin: CGPoint, palette: Palette) -> some View {
         if let hint {
             Path { path in
                 path.move(to: CGPoint(x: hint.minX + origin.x, y: hint.y + origin.y))
                 path.addLine(to: CGPoint(x: hint.maxX + origin.x, y: hint.y + origin.y))
             }
-            .stroke(Color(hex: 0x3368A0), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .stroke(palette.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
             .transition(.asymmetric(insertion: .opacity, removal: .identity))
             .animation(reduceMotion ? nil : .easeIn(duration: 0.08), value: hint)
             .allowsHitTesting(false)
@@ -552,24 +553,24 @@ struct MapCanvasView: View {
     }
 
     /// Glows around the canvas while text is being dragged over it.
-    private var dropHighlightBorder: some View {
+    private func dropHighlightBorder(palette: Palette) -> some View {
         RoundedRectangle(cornerRadius: 14)
-            .stroke(Color.accentColor.opacity(textDropActive ? 0.6 : 0), lineWidth: 3)
+            .stroke(palette.accent.opacity(textDropActive ? 0.6 : 0), lineWidth: 3)
     }
 
     /// The scaled, pannable map layer. Kept as its own view-building method
     /// so `body` stays within the type-checker complexity budget.
     private func mapContent(items: [NodeItem], layouts: [UUID: NodeLayout],
-                            gestureLayouts: [UUID: NodeLayout], theme: Theme,
+                            gestureLayouts: [UUID: NodeLayout], theme: Palette,
                             bounds: CGRect, origin: CGPoint, geoSize: CGSize, dropTarget: UUID?,
                             insertionHint: ReorderHint?, draggedIDs: Set<UUID>, focusIDs: Set<UUID>) -> some View {
         ZStack {
             connectionsCanvas(items: items, layouts: layouts, theme: theme,
                               origin: origin, focusIDs: focusIDs)
-            linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs)
-            summariesCanvas(layouts: layouts, origin: origin)
-            dragIndicator(origin: origin)
-            reorderIndicator(insertionHint, origin: origin)
+            linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs, palette: theme)
+            summariesCanvas(layouts: layouts, origin: origin, palette: theme)
+            dragIndicator(origin: origin, palette: theme)
+            reorderIndicator(insertionHint, origin: origin, palette: theme)
             ForEach(items) { item in
                 nodeView(item: item, theme: theme, dropTarget: dropTarget, draggedIDs: draggedIDs,
                          origin: origin, gestureLayouts: gestureLayouts, geoSize: geoSize, bounds: bounds,
@@ -589,14 +590,14 @@ struct MapCanvasView: View {
         NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
     }
 
-    private func summariesCanvas(layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
+    private func summariesCanvas(layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette) -> some View {
         ForEach(vm.document.summaries) { summary in
-            summaryView(summary: summary, layouts: layouts, origin: origin)
+            summaryView(summary: summary, layouts: layouts, origin: origin, palette: palette)
         }
     }
 
     @ViewBuilder
-    private func summaryView(summary: MindSummary, layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
+    private func summaryView(summary: MindSummary, layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette) -> some View {
         if let parentNode = vm.document.root.find(summary.parentID),
            let geo = SummaryGeometry.bracket(for: summary, parentNode: parentNode,
                                              layouts: layouts, origin: origin) {
@@ -607,7 +608,7 @@ struct MapCanvasView: View {
                 p.addLine(to: geo.spineB)
                 p.addLine(to: geo.tickB)
             }
-            .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.8),
+            .stroke(isSelected ? palette.accent : palette.textSecondary.opacity(0.8),
                     style: StrokeStyle(lineWidth: 2, lineCap: .round))
             .allowsHitTesting(false)
             Text(summary.text.isEmpty ? "概要…" : summary.text)
@@ -615,7 +616,7 @@ struct MapCanvasView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(isSelected ? Color.accentColor : Color.clear))
+                .overlay(Capsule().stroke(isSelected ? palette.accent : Color.clear))
                 .position(geo.textAnchor)
                 .fixedSize()
                 .onTapGesture {
@@ -699,14 +700,14 @@ struct CanvasTextDropDelegate: DropDelegate {
     }
 
     @ViewBuilder
-    private var statusToast: some View {
+    private func statusToast(palette: Palette) -> some View {
         if let message = vm.statusMessage {
             Text(message)
                 .font(.callout)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(Color.secondary.opacity(0.15)))
+                .overlay(Capsule().stroke(palette.textSecondary.opacity(0.15)))
                 .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
                 .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 .padding(.bottom, 20)
@@ -716,18 +717,18 @@ struct CanvasTextDropDelegate: DropDelegate {
     /// Dashed associative curves between arbitrary nodes, with a tap-to-select handle.
     @ViewBuilder
     private func linksCanvas(layouts: [UUID: NodeLayout], origin: CGPoint,
-                             focusIDs: Set<UUID>) -> some View {
+                             focusIDs: Set<UUID>, palette: Palette) -> some View {
         ForEach(vm.document.links) { link in
             if let fromLayout = layouts[link.from], let toLayout = layouts[link.to],
                focusIDs.isEmpty || (focusIDs.contains(link.from) && focusIDs.contains(link.to)) {
-                self.linkCanvas(link: link, fromLayout: fromLayout, toLayout: toLayout, origin: origin)
+                self.linkCanvas(link: link, fromLayout: fromLayout, toLayout: toLayout, origin: origin, palette: palette)
             }
         }
     }
 
     /// One associative line: dashed curve, tap-to-select handle, optional label.
     private func linkCanvas(link: MindLink, fromLayout: NodeLayout, toLayout: NodeLayout,
-                            origin: CGPoint) -> some View {
+                            origin: CGPoint, palette: Palette) -> some View {
         let p0 = CGPoint(x: fromLayout.center.x + origin.x, y: fromLayout.center.y + origin.y)
         let p1 = CGPoint(x: toLayout.center.x + origin.x, y: toLayout.center.y + origin.y)
         let mid = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
@@ -744,12 +745,12 @@ struct CanvasTextDropDelegate: DropDelegate {
                 path.move(to: p0)
                 path.addQuadCurve(to: p1, control: control)
             }
-            .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.65),
+            .stroke(isSelected ? palette.accent : palette.textSecondary.opacity(0.65),
                     style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1.5, dash: [6, 4]))
             .allowsHitTesting(false)
             Circle()
-                .fill(isSelected ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
-                .overlay(Circle().stroke(isSelected ? Color.accentColor : Color.secondary, lineWidth: 1.5))
+                .fill(isSelected ? palette.accent : palette.card)
+                .overlay(Circle().stroke(isSelected ? palette.accent : palette.textSecondary, lineWidth: 1.5))
                 .frame(width: 13, height: 13)
                 .position(curveMid)
                 .contentShape(Circle())
@@ -763,7 +764,7 @@ struct CanvasTextDropDelegate: DropDelegate {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(Color.secondary.opacity(0.35)))
+                    .overlay(Capsule().stroke(palette.textSecondary.opacity(0.35)))
                     .position(x: curveMid.x, y: curveMid.y - 18)
                     .fixedSize()
                     .accessibilityLabel("關聯線標籤 \(link.label)")
@@ -822,17 +823,17 @@ struct CanvasTextDropDelegate: DropDelegate {
     }
 
     @ViewBuilder
-    private func emptyStateHint(items: [NodeItem]) -> some View {
+    private func emptyStateHint(items: [NodeItem], palette: Palette) -> some View {
         if items.count <= 1 {
             Text("按 Tab 加入你的第一個主題")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(palette.textSecondary)
                 .padding(.top, 140)
                 .allowsHitTesting(false)
         }
     }
 
-    private var zoomControls: some View {
+    private func zoomControls(palette: Palette) -> some View {
         HStack(spacing: 10) {
             Button("−") { zoom(by: 0.85) }
             Text("\(Int((scale * 100).rounded()))%")
@@ -847,7 +848,7 @@ struct CanvasTextDropDelegate: DropDelegate {
             if let level = vm.activeCollapseLevel {
                 Text("第 \(level) 層")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(palette.textSecondary)
             }
             Button("全圖") { NotificationCenter.default.post(name: .mindFlowFit, object: nil) }
                 .font(.caption)

@@ -4,7 +4,7 @@ import SwiftUI
 struct MapConnectionsView: View {
     let items: [NodeItem]
     let layouts: [UUID: NodeLayout]
-    let theme: Theme
+    let theme: Palette
     let origin: CGPoint
     var direction: MapDirection = .logicRight
     var visibleIDs: Set<UUID> = []
@@ -50,7 +50,7 @@ struct MapConnectionsView: View {
 
     /// Spine + ribs + diagonal chains for the fishbone layout.
     private func drawFishbone(context: inout GraphicsContext, items: [NodeItem],
-                                     layouts: [UUID: NodeLayout], theme: Theme, origin: CGPoint) {
+                                     layouts: [UUID: NodeLayout], theme: Palette, origin: CGPoint) {
         guard let rootItem = items.first(where: { $0.layout.depth == 0 }) else { return }
         let spineY = rootItem.layout.center.y + origin.y
         let startX = rootItem.layout.frame.maxX + origin.x
@@ -92,15 +92,22 @@ struct MapConnectionsView: View {
 }
 
 /// Gesture-free rendering of the whole map, used for PNG export.
-struct StaticMapView: View {
+public struct StaticMapView: View {
+    public static let exportPalette = Palette.light
+
     let document: MindDocument
     var transparentBackground = false
 
-    var body: some View {
+    public init(document: MindDocument, transparentBackground: Bool = false) {
+        self.document = document
+        self.transparentBackground = transparentBackground
+    }
+
+    public var body: some View {
         let direction = MapDirection(rawValue: document.directionName) ?? .logicRight
         let layouts = LayoutEngine.layout(root: document.root, direction: direction,
                                           offsets: document.offsets)
-        let theme = Theme.named(document.themeName)
+        let theme = Self.exportPalette
         let bounds = LayoutEngine.contentBounds(of: layouts).insetBy(dx: -80, dy: -60)
         let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
         var items: [NodeItem] = []
@@ -115,10 +122,11 @@ struct StaticMapView: View {
         return ZStack {
             MapConnectionsView(items: items, layouts: layouts, theme: theme,
                                origin: origin, direction: direction)
-            summaryBrackets(layouts: layouts, origin: origin)
+            summaryBrackets(layouts: layouts, origin: origin, palette: theme)
             ForEach(items) { item in
                 NodeView(node: item.node,
                          layout: item.layout,
+                         palette: theme,
                          branchColor: theme.color(forIndex: item.layout.colorIndex),
                          isSelected: false,
                          isEditing: false,
@@ -132,12 +140,12 @@ struct StaticMapView: View {
             }
         }
         .frame(width: bounds.width, height: bounds.height)
-        .background(transparentBackground ? Color.clear : Color(nsColor: .textBackgroundColor))
+        .background(transparentBackground ? Color.clear : theme.canvasBackground)
     }
 
     /// Summary brackets share the same geometry as canvas + SVG rendering.
     @ViewBuilder
-    private func summaryBrackets(layouts: [UUID: NodeLayout], origin: CGPoint) -> some View {
+    private func summaryBrackets(layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette) -> some View {
         ForEach(document.summaries) { summary in
             if let parentNode = document.root.find(summary.parentID),
                let geo = SummaryGeometry.bracket(for: summary, parentNode: parentNode,
@@ -148,11 +156,11 @@ struct StaticMapView: View {
                     p.addLine(to: geo.spineB)
                     p.addLine(to: geo.tickB)
                 }
-                .stroke(Color.secondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(palette.textSecondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 if !summary.text.isEmpty {
                     Text(summary.text)
                         .font(.caption.bold())
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(palette.textSecondary)
                         .position(geo.textAnchor)
                 }
             }

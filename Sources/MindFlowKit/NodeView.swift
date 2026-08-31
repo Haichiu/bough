@@ -3,6 +3,7 @@ import SwiftUI
 struct NodeView: View {
     let node: MindNode
     let layout: NodeLayout
+    let palette: Palette
     let branchColor: Color
     let isSelected: Bool
     var isBatchMember: Bool = false
@@ -118,13 +119,13 @@ struct NodeView: View {
 
     @ViewBuilder
     private func background(depth: Int, radius: CGFloat) -> some View {
-        let style = NodeStyle.of(depth: depth, branchColor: branchColor)
+        let style = NodeStyle.of(depth: depth, palette: palette, branchColor: branchColor)
         return RoundedRectangle(cornerRadius: radius, style: .continuous)
             .fill(style.fill)
             .overlay {
                 if isDropTarget {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(Color(hex: 0xC8DFDB).opacity(0.2))
+                        .fill(palette.secondarySurface.opacity(0.2))
                 }
             }
             .overlay {
@@ -142,7 +143,7 @@ struct NodeView: View {
                 if editText.isEmpty {
                     Text("輸入文字…")
                         .font(Font(LayoutEngine.font(for: depth)))
-                        .foregroundStyle(Color.secondary.opacity(0.6))
+                        .foregroundStyle(palette.textSecondary.opacity(0.6))
                         .allowsHitTesting(false)
                 }
                 TextField("", text: $editText)
@@ -162,7 +163,7 @@ struct NodeView: View {
                 }
             }
         } else {
-            let style = NodeStyle.of(depth: depth, branchColor: branchColor)
+            let style = NodeStyle.of(depth: depth, palette: palette, branchColor: branchColor)
             Text(node.text.isEmpty ? " " : node.text)
                 .font(Font(style.font))
                 .foregroundStyle(style.textColor)
@@ -178,21 +179,21 @@ struct NodeView: View {
     private func selectionRing(radius: CGFloat) -> some View {
         if isSearchHit && !isSelected && !isDropTarget {
             RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(Color(hex: 0xF5C542), lineWidth: 2)
+                .stroke(palette.statusHighlight, lineWidth: 2)
                 .padding(-4)
         }
         if isBatchMember {
             RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                .stroke(palette.accent, style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
                 .padding(-4)
         }
         if isDropTarget {
             RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(Color(hex: 0x3368A0), lineWidth: 2.5)
+                .stroke(palette.accent, lineWidth: 2.5)
                 .padding(-3)
         } else if isSelected || isHovered {
             RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.45),
+                .stroke(isSelected ? palette.accent : palette.textSecondary.opacity(0.45),
                         lineWidth: isSelected ? 2 : 1.5)
                 .padding(-4)
         }
@@ -214,7 +215,7 @@ struct NodeView: View {
         if !node.note.isEmpty && !isEditing {
             Image(systemName: "note.text")
                 .font(.system(size: 9))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(palette.textSecondary)
                 .offset(x: -9, y: -9)
         }
     }
@@ -224,7 +225,7 @@ struct NodeView: View {
         if node.marked && !isEditing {
             Image(systemName: "star.fill")
                 .font(.system(size: 9))
-                .foregroundStyle(Color(hex: 0xF5C542))
+                .foregroundStyle(palette.statusHighlight)
                 .offset(x: -10)
         }
     }
@@ -238,7 +239,7 @@ struct NodeView: View {
         if hasURL {
             Image(systemName: "link.circle.fill")
                 .font(.system(size: 9))
-                .foregroundStyle(Color(hex: 0x4A90D9))
+                .foregroundStyle(palette.accent)
                 .offset(x: -6, y: -6)
         }
     }
@@ -248,11 +249,11 @@ struct NodeView: View {
         if node.collapsed && !node.children.isEmpty {
             Text("+\(hiddenCount)")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(palette.creamText)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(branchColor))
-                .overlay(Capsule().stroke(Color.white.opacity(0.8), lineWidth: 1))
+                .overlay(Capsule().stroke(palette.creamText.opacity(0.8), lineWidth: 1))
                 .offset(x: 10)
                 .onTapGesture { onToggleCollapse?() }
                 .help("收合中（共 \(hiddenCount) 個主題）：\n" + node.hiddenTopicPreview().joined(separator: "\n"))

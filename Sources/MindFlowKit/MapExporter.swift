@@ -80,7 +80,7 @@ public enum MapExporter {
     /// losslessly for print, slides, and web embedding.
     public static func svg(_ document: MindDocument, transparent: Bool = false) -> String {
         let direction = MapDirection(rawValue: document.directionName) ?? .logicRight
-        let theme = Theme.named(document.themeName)
+        let palette = Palette.light
         let layouts = LayoutEngine.layout(root: document.root, direction: direction)
 
         var bounds = CGRect.null
@@ -89,18 +89,9 @@ public enum MapExporter {
         bounds = bounds.insetBy(dx: -pad, dy: -pad)
         let width = max(bounds.width, 1), height = max(bounds.height, 1)
 
-        // Several NodeStyle colours are appearance-dependent (the root fill, and .primary
-        // for deeper text). The SVG canvas is always white, so resolve everything against
-        // the light appearance: otherwise exporting while in dark mode produced white text
-        // on a pale wash, and the same document exported to different colours depending on
-        // a system setting.
+        // SVG is a document export, so it is intentionally stable in light Palette A.
         func hex(_ color: Color) -> String {
-            var ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
-            if let light = NSAppearance(named: .aqua) {
-                light.performAsCurrentDrawingAppearance {
-                    ns = NSColor(color).usingColorSpace(.sRGB) ?? ns
-                }
-            }
+            let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
             return String(format: "#%02x%02x%02x", Int(round(ns.redComponent * 255)), Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
         }
         func esc(_ s: String) -> String {
@@ -115,7 +106,7 @@ public enum MapExporter {
         }
         var parts: [String] = []
         if !transparent {
-            parts.append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>")
+            parts.append("<rect width=\"100%\" height=\"100%\" fill=\"\(palette.canvasRGB.hex)\"/>")
         }
         parts.append("<title>\(esc(document.title))</title>")
 
@@ -128,7 +119,7 @@ public enum MapExporter {
                 let toLeft = cl.side == .left
                 let from = CGPoint(x: toLeft ? pl.frame.minX : pl.frame.maxX, y: pl.frame.midY)
                 let to = CGPoint(x: toLeft ? cl.frame.maxX : cl.frame.minX, y: cl.frame.midY)
-                let color = hex(theme.color(forIndex: cl.colorIndex))
+                let color = hex(palette.color(forIndex: cl.colorIndex))
                 let w: CGFloat = cl.depth == 1 ? 3.5 : 2.5
                 if direction == .bracket {
                     let midX = from.x + (to.x - from.x) / 2
@@ -140,7 +131,7 @@ public enum MapExporter {
                 if !childLinkLabel(child).isEmpty {
                     let lx = 0.25 * from.x + 0.5 * ((from.x + to.x) / 2) + 0.25 * to.x
                     let ly = 0.25 * from.y + 0.5 * ((from.y + to.y) / 2) + 0.25 * to.y - 14
-                    parts.append("<text x=\"\(lx)\" y=\"\(ly)\" font-size=\"11\" fill=\"#666666\" text-anchor=\"middle\">\(esc(childLinkLabel(child)))</text>")
+                    parts.append("<text x=\"\(lx)\" y=\"\(ly)\" font-size=\"11\" fill=\"\(hex(palette.textSecondary))\" text-anchor=\"middle\">\(esc(childLinkLabel(child)))</text>")
                 }
                 connect(child)
             }
@@ -152,18 +143,17 @@ public enum MapExporter {
             guard let parentNode = document.root.find(s.parentID),
                   let g = SummaryGeometry.bracket(for: s, parentNode: parentNode, layouts: layouts, origin: .zero)
             else { continue }
-            parts.append("<path d=\"M \(g.tickA.x) \(g.tickA.y) L \(g.spineA.x) \(g.spineA.y) L \(g.spineB.x) \(g.spineB.y) L \(g.tickB.x) \(g.tickB.y)\" fill=\"none\" stroke=\"#888888\" stroke-width=\"1.5\"/>")
+            parts.append("<path d=\"M \(g.tickA.x) \(g.tickA.y) L \(g.spineA.x) \(g.spineA.y) L \(g.spineB.x) \(g.spineB.y) L \(g.tickB.x) \(g.tickB.y)\" fill=\"none\" stroke=\"\(hex(palette.textSecondary))\" stroke-width=\"1.5\"/>")
             let label = s.text.isEmpty ? "概要" : s.text
-            parts.append("<text x=\"\(g.textAnchor.x)\" y=\"\(g.textAnchor.y)\" font-size=\"12\" font-weight=\"bold\" fill=\"#666666\" text-anchor=\"middle\">\(esc(label))</text>")
+            parts.append("<text x=\"\(g.textAnchor.x)\" y=\"\(g.textAnchor.y)\" font-size=\"12\" font-weight=\"bold\" fill=\"\(hex(palette.textSecondary))\" text-anchor=\"middle\">\(esc(label))</text>")
         }
 
-        // Nodes. Appearance comes from NodeStyle, the same value the canvas draws with
-        // and LayoutEngine measures with, so exports cannot drift from the screen the way
-        // they had: 12pt text against the screen's 13pt, rx 9 at every depth, no wrapping.
+        // Nodes use the same NodeStyle geometry as the screen, with Palette.light paint.
+        // LayoutEngine remains colour-independent, so its sizing cache is unchanged.
         for l in layouts.values.sorted(by: { $0.depth < $1.depth }) {
             guard let node = document.root.find(l.id) else { continue }
             let f = l.frame
-            let style = NodeStyle.of(depth: l.depth, branchColor: theme.color(forIndex: l.colorIndex))
+            let style = NodeStyle.of(depth: l.depth, palette: palette, branchColor: palette.color(forIndex: l.colorIndex))
             let strokeAttrs = style.strokeBase.map {
                 "stroke=\"\(hex($0))\" stroke-opacity=\"\(style.strokeOpacity)\" stroke-width=\"\(style.strokeWidth)\""
             } ?? "stroke=\"none\""
@@ -185,7 +175,7 @@ public enum MapExporter {
                 parts.append("<image href=\"\(esc(imageDataURL))\" x=\"\(f.minX + 7)\" y=\"\(f.minY + 6)\" width=\"\(max(f.width - 14, 1))\" height=\"\(max(imgH - 10, 1))\" preserveAspectRatio=\"xMidYMid meet\"/>")
             }
             if node.marked {
-                parts.append("<text x=\"\(f.minX + 6)\" y=\"\(f.minY + 14)\" font-size=\"10\" fill=\"#f5c542\">★</text>")
+                parts.append("<text x=\"\(f.minX + 6)\" y=\"\(f.minY + 14)\" font-size=\"10\" fill=\"\(hex(palette.statusHighlight))\">★</text>")
             }
             let lines = style.wrappedLines(for: node.text)
             let lineHeight = style.lineHeight
