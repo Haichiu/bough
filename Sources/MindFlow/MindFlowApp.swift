@@ -169,6 +169,9 @@ struct MindFlowApp: App {
                     .keyboardShortcut("3", modifiers: [.command, .option])
                 Button("括號圖") { vm.setDirection(.bracket) }
                     .keyboardShortcut("4", modifiers: [.command, .option])
+                Divider()
+                Button("整理") { vm.resetAllOffsets() }
+                    .disabled(vm.document.offsets.isEmpty)
             }
             CommandMenu("尋找") {
                 Button("搜尋主題…") { vm.showSearch = true }

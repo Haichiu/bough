@@ -113,8 +113,9 @@ public struct ContentView: View {
                     Button("魚骨圖") { vm.setDirection(.fishbone) }
                     Button("括號圖") { vm.setDirection(.bracket) }
                     Divider()
-                    Button("重設手動位置") { vm.resetAllOffsets() }
+                    Button("整理") { vm.resetAllOffsets() }
                         .disabled(vm.document.offsets.isEmpty)
+                        .help("清除手動位置並回到自動排版（可復原）")
                 } label: {
                     Label("版面", systemImage: "arrow.triangle.branch")
                 }
@@ -942,13 +943,12 @@ public struct ContentView: View {
                     ("空白鍵", "編輯選中主題"),
                     ("⌘/ / ⌘⌥/", "收合分支 / 全部收合或展開"),
                     ("⌥↑↓ / ⌥⌘↑↓", "兄弟移一格 / 移到頭尾"),
-                    ("拖曳節點", "重新掛接或排序"),
+                    ("拖曳節點", "放到節點上重掛；對準插入線排序；空白處移動"),
                     ("⌘F / ⌘G", "搜尋 / 下一個結果"),
                     ("⌘D", "複製整棵子樹"),
                     ("⌘L", "切換星星標記"),
                     ("⌘+ / ⌘- / ⌘0", "縮放"),
                     ("⌘方向鍵", "微調節點位置"),
-                    ("⌥拖曳", "自由放置節點"),
                     ("⌘⇧T", "重新開啟關閉的分頁"),
                     ("⌃Tab", "切換分頁"),
                     ("⌘S", "另存新檔（平常自動保存）"),

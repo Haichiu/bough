@@ -163,14 +163,24 @@ public enum LayoutEngine {
                               innerX: -rootSize.width / 2 - gap, centerY: 0)
             }
         }
-        // Manual nudges win over auto layout.
+        // Manual placement is inherited: moving a branch moves its whole subtree.
         if !offsets.isEmpty {
-            for (key, offset) in offsets {
-                guard let id = UUID(uuidString: key), let layout = result[id] else { continue }
-                result[id] = NodeLayout(id: layout.id,
-                                        frame: layout.frame.offsetBy(dx: offset.x, dy: offset.y),
-                                        depth: layout.depth, colorIndex: layout.colorIndex, side: layout.side)
+            let offsetsByID = offsets.reduce(into: [UUID: CGPoint]()) { values, entry in
+                if let id = UUID(uuidString: entry.key) { values[id] = entry.value }
             }
+            func applyOffsets(_ node: MindNode, inherited: CGPoint) {
+                let local = offsetsByID[node.id] ?? .zero
+                let total = CGPoint(x: inherited.x + local.x, y: inherited.y + local.y)
+                if let layout = result[node.id] {
+                    result[node.id] = NodeLayout(
+                        id: layout.id,
+                        frame: layout.frame.offsetBy(dx: total.x, dy: total.y),
+                        depth: layout.depth, colorIndex: layout.colorIndex, side: layout.side
+                    )
+                }
+                for child in node.children { applyOffsets(child, inherited: total) }
+            }
+            applyOffsets(root, inherited: .zero)
         }
         return result
     }

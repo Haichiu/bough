@@ -202,12 +202,12 @@ public final class MindMapViewModel: ObservableObject {
             ]),
             node("按 Return 可以加一個隔壁的主題", marked: true),
             node("連點兩下直接改文字", colorTag: "blue"),
-            node("拖曳節點可以重新掛接或排序", note: "拖到其他節點上＝變成它的子主題"),
+            node("拖曳節點可重掛、排序或自由移動", note: "節點上＝重掛；插入線上＝排序；空白處＝自由放置"),
             node("更多小技巧", children: [
                 node("⌘F 搜尋主題", colorTag: "green"),
                 node("⌘D 複製整棵子樹"),
                 node("⌘L 加上星星標記", marked: true),
-                node("⌥拖曳 自由放置節點位置"),
+                node("⌥↑↓ 調整兄弟順序"),
                 node("不用按儲存，全部自動保存"),
             ]),
         ])
@@ -395,7 +395,6 @@ public final class MindMapViewModel: ObservableObject {
     public func move(id: UUID, toParent parentID: UUID) {
         guard id != document.root.id,
               id != parentID,
-              !document.root.isAncestor(of: parentID) || parentID != id,
               let node = document.root.find(id),
               let currentParent = document.root.parent(of: id),
               currentParent.id != parentID,
@@ -594,11 +593,20 @@ public final class MindMapViewModel: ObservableObject {
 
     // MARK: - Manual position nudges
 
-    /// Shifts a node's manual offset (used by ⌥-drag and ⌘-arrow keys).
+    /// Applies a keyboard nudge. Rapid repeats coalesce into one undo step.
     public func nudgeOffset(id: UUID, dx: CGFloat, dy: CGFloat) {
-        guard document.root.contains(id), id != document.root.id else { return }
+        adjustOffset(id: id, dx: dx, dy: dy, coalesce: true)
+    }
+
+    /// Places a node after one pointer drag. Each drag is its own undo step.
+    public func moveOffset(id: UUID, dx: CGFloat, dy: CGFloat) {
+        adjustOffset(id: id, dx: dx, dy: dy, coalesce: false)
+    }
+
+    private func adjustOffset(id: UUID, dx: CGFloat, dy: CGFloat, coalesce: Bool) {
+        guard document.root.contains(id), dx != 0 || dy != 0 else { return }
         let key = id.uuidString
-        mutate("offset:\(key)") { doc in
+        mutate(coalesce ? "offset:\(key)" : nil) { doc in
             var current = doc.offsets[key] ?? .zero
             current.x += dx
             current.y += dy

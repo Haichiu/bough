@@ -11,7 +11,7 @@ extension Notification.Name {
 /// Local event monitor implementing XMind-style shortcuts:
 /// Tab = child, Return = sibling after, Shift+Return = sibling before,
 /// Command+Return = parent, Space = edit, Delete = delete, arrows = navigate,
-/// Option+Cmd+Up/Down = reorder sibling, two-finger scroll = pan, Cmd+scroll = zoom.
+/// Option+Up/Down = reorder one step, Option+Cmd+Up/Down = move to edge, scroll = pan.
 @MainActor
 public final class KeyboardMonitor {
     public static let shared = KeyboardMonitor()

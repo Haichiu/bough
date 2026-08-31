@@ -2464,6 +2464,132 @@ do {
     }
 }
 
+// MARK: - T-035: free canvas invariants
+
+do {
+    // A node offset is inherited by its entire subtree; unrelated branches stay automatic.
+    let leaf = MindNode(text: "Leaf")
+    let parent = MindNode(text: "Parent", children: [leaf])
+    let sibling = MindNode(text: "Sibling")
+    let root = MindNode(text: "Root", children: [parent, sibling])
+    let plain = LayoutEngine.layout(root: root)
+    let shifted = LayoutEngine.layout(
+        root: root,
+        offsets: [root.id.uuidString: CGPoint(x: 10, y: -4),
+                  parent.id.uuidString: CGPoint(x: 25, y: 8)]
+    )
+    check(shifted[root.id]!.frame.origin == plain[root.id]!.frame.offsetBy(dx: 10, dy: -4).origin,
+          "moving the root shifts the root")
+    check(shifted[parent.id]!.frame.origin == plain[parent.id]!.frame.offsetBy(dx: 35, dy: 4).origin
+          && shifted[leaf.id]!.frame.origin == plain[leaf.id]!.frame.offsetBy(dx: 35, dy: 4).origin,
+          "a parent offset shifts its whole subtree by the inherited total")
+    check(shifted[sibling.id]!.frame.origin == plain[sibling.id]!.frame.offsetBy(dx: 10, dy: -4).origin,
+          "an untouched branch keeps automatic layout plus only its inherited root offset")
+}
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+
+        // Old builds rejected this call, which is the root-drag negative control.
+        vm.newDocument()
+        let child = vm.addChild(to: nil)!
+        vm.editingID = nil
+        let rootID = vm.document.root.id
+        vm.moveOffset(id: rootID, dx: 18, dy: -11)
+        check(vm.document.offsets[rootID.uuidString] == CGPoint(x: 18, y: -11),
+              "the central topic accepts a manual offset")
+        let rootLayouts = LayoutEngine.layout(root: vm.document.root, offsets: vm.document.offsets)
+        let rootPlain = LayoutEngine.layout(root: vm.document.root)
+        check(rootLayouts[rootID]!.frame.origin == rootPlain[rootID]!.frame.offsetBy(dx: 18, dy: -11).origin
+              && rootLayouts[child]!.frame.origin == rootPlain[child]!.frame.offsetBy(dx: 18, dy: -11).origin,
+              "moving the central topic shifts the full map")
+
+        // Reparenting into one's own descendant is fail-closed and leaves the exact tree intact.
+        vm.newDocument()
+        let ancestor = vm.addChild(to: nil)!
+        let descendant = vm.addChild(to: ancestor)!
+        vm.editingID = nil
+        let beforeCycle = vm.document
+        vm.move(id: ancestor, toParent: descendant)
+        check(vm.document == beforeCycle,
+              "reparenting a node into its descendant is rejected without mutation")
+
+        // Blank drops preserve the parent and each pointer drag is a separate undo step.
+        let parentBeforeBlankDrop = vm.document.root.parent(of: descendant)?.id
+        vm.moveOffset(id: descendant, dx: 12, dy: -6)
+        let afterFirstBlankDrop = vm.document
+        vm.moveOffset(id: descendant, dx: 8, dy: 3)
+        check(vm.document.root.parent(of: descendant)?.id == parentBeforeBlankDrop
+              && vm.document.offsets[descendant.uuidString] == CGPoint(x: 20, y: -3),
+              "dropping on blank canvas moves without reparenting")
+        vm.undo()
+        check(vm.document == afterFirstBlankDrop,
+              "each blank-canvas drag is an independent undo transaction")
+
+        // A valid targeted drop is also a complete undo transaction.
+        let peer = vm.addChild(to: nil)!
+        vm.editingID = nil
+        let beforeMove = vm.document
+        vm.move(id: descendant, toParent: peer)
+        check(vm.document.root.parent(of: descendant)?.id == peer
+              && vm.document.offsets[descendant.uuidString] == CGPoint(x: 12, y: -6),
+              "dropping onto a node reparents without adding a free-move offset")
+        vm.undo()
+        check(vm.document == beforeMove, "undo restores the complete tree after reparenting")
+
+        // Removing pointer-based sibling reordering does not remove ordering capability.
+        vm.selection = peer
+        let orderBefore = vm.document.root.children.map(\.id)
+        check(KeyboardMonitor.performCoreShortcut(
+                  characters: "\u{F700}", modifiers: [.option], vm: vm)
+              && vm.document.root.children.map(\.id) != orderBefore,
+              "sibling ordering remains reachable through Alt+Up")
+        vm.undo()
+
+        vm.nudgeOffset(id: ancestor, dx: 41, dy: 17)
+        let arranged = vm.document
+        vm.resetAllOffsets()
+        check(vm.document.offsets.isEmpty, "Arrange clears every manual position")
+        vm.undo()
+        check(vm.document == arranged, "undo after Arrange restores every manual position")
+
+        // Offsets are part of the document contract, not transient view state.
+        if let data = try? JSONEncoder().encode(vm.document),
+           let decoded = try? JSONDecoder().decode(MindDocument.self, from: data) {
+            check(decoded.offsets == vm.document.offsets,
+                  "manual positions survive a document encode/decode round trip")
+        } else {
+            check(false, "manual positions survive a document encode/decode round trip")
+        }
+    }
+}
+
+// The insertion line is the reorder contract: visible segment and gap band only.
+do {
+    let s1 = MindNode(text: "S1")
+    let s2 = MindNode(text: "S2")
+    let s3 = MindNode(text: "S3")
+    let root = MindNode(text: "R", children: [s1, s2, s3])
+    let layouts = LayoutEngine.layout(root: root)
+    let siblings = root.children
+    let gap = layouts[s3.id]!.frame.minY - layouts[s2.id]!.frame.maxY
+    let lineY = layouts[s2.id]!.frame.maxY + gap / 2
+    let inGap = SiblingInsertion.hint(
+        point: CGPoint(x: layouts[s2.id]!.frame.midX, y: lineY),
+        draggedID: s2.id, layouts: layouts, siblings: siblings)
+    check(inGap?.targetIndex == 2, "dropping in a sibling gap reorders after the sibling above")
+    check(SiblingInsertion.hint(
+              point: CGPoint(x: layouts[s2.id]!.frame.maxX + 200, y: lineY),
+              draggedID: s2.id, layouts: layouts, siblings: siblings) == nil,
+          "the same gap line far from the visible segment stays a free move")
+    check(SiblingInsertion.hint(
+              point: CGPoint(x: layouts[s2.id]!.frame.midX, y: lineY + gap),
+              draggedID: s2.id, layouts: layouts, siblings: siblings) == nil,
+          "a release outside the gap band does not reorder")
+}
+
 // Canvas fit. Measured from a real window: the content occupied 765pt of a 672pt-tall
 // window, so the bottom of every opened map was cut off.
 do {

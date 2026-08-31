@@ -8,13 +8,39 @@ struct ReparentDrag: Equatable {
     var translation: CGSize = .zero
 }
 
-struct ReorderHint: Equatable {
-    let targetID: UUID
-    let after: Bool
-    let y: CGFloat
-    let minX: CGFloat
-    let maxX: CGFloat
-    let targetIndex: Int
+/// One visible insertion line between siblings. Its segment and gap band are the
+/// whole reorder contract: a release inside reorders, a release outside moves freely.
+public struct ReorderHint: Equatable {
+    public let y: CGFloat
+    public let minX: CGFloat
+    public let maxX: CGFloat
+    public let targetIndex: Int
+}
+
+public enum SiblingInsertion {
+    /// Resolves the sibling insertion slot for a drop point, if any. The canvas
+    /// draws the indicator from this same function, so the promise the user sees
+    /// is exactly what a release will do. Node reparenting takes priority and is
+    /// decided by the caller before this runs.
+    public static func hint(point: CGPoint, draggedID: UUID, layouts: [UUID: NodeLayout],
+                            siblings: [MindNode]) -> ReorderHint? {
+        guard let draggedSide = layouts[draggedID]?.side else { return nil }
+        let halfBand = LayoutEngine.vGap / 2
+        for sibling in siblings where sibling.id != draggedID {
+            guard let layout = layouts[sibling.id], layout.side == draggedSide else { continue }
+            let minX = layout.frame.minX - 16
+            let maxX = layout.frame.maxX + 44
+            guard point.x >= minX, point.x <= maxX else { continue }
+            for (lineY, index) in [
+                (layout.frame.minY - halfBand, siblings.firstIndex(where: { $0.id == sibling.id }) ?? 0),
+                (layout.frame.maxY + halfBand,
+                 (siblings.firstIndex(where: { $0.id == sibling.id }) ?? -1) + 1),
+            ] where abs(point.y - lineY) <= halfBand {
+                return ReorderHint(y: lineY, minX: minX, maxX: maxX, targetIndex: index)
+            }
+        }
+        return nil
+    }
 }
 
 struct NodeItem: Identifiable {
@@ -31,9 +57,7 @@ struct MapCanvasView: View {
     @State private var scale: CGFloat = 1
     @State private var lastZoom: CGFloat = 1
     @State private var drag: ReparentDrag?
-    @State private var reorderHint: ReorderHint?
     @State private var canvasSize: CGSize = .zero
-    @State private var freeMoveID: UUID?
     @State private var textDropActive = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -47,16 +71,24 @@ struct MapCanvasView: View {
             let theme = Theme.named(vm.document.themeName)
             let bounds = LayoutEngine.contentBounds(of: layouts).insetBy(dx: -180, dy: -140)
             let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
-            let items = nodeItems(layouts: layouts)
+            let renderedLayouts = layoutsDuringDrag(layouts)
+            let items = nodeItems(layouts: renderedLayouts)
             let dropTarget = drag.flatMap { hitTest(point: $0.current, draggedID: $0.id, layouts: layouts) }
+            let insertionHint = drag.flatMap { state in
+                dropTarget == nil
+                    ? SiblingInsertion.hint(point: state.current, draggedID: state.id, layouts: layouts,
+                                            siblings: vm.document.root.parent(of: state.id)?.children ?? [])
+                    : nil
+            }
             let focusIDs = vm.focusSet()
 
             ZStack {
                 self.backgroundLayer(layouts: layouts, bounds: bounds,
                                  geoSize: geo.size, origin: origin)
 
-                mapContent(items: items, layouts: layouts, theme: theme, bounds: bounds,
-                           origin: origin, geoSize: geo.size, dropTarget: dropTarget, focusIDs: focusIDs)
+                mapContent(items: items, layouts: renderedLayouts, theme: theme, bounds: bounds,
+                           origin: origin, geoSize: geo.size, dropTarget: dropTarget,
+                           insertionHint: insertionHint, focusIDs: focusIDs)
             }
             // The map container is deliberately larger than the viewport, and a ZStack takes
             // the size of its largest child, so this stack grew to the container's size.
@@ -190,7 +222,7 @@ struct MapCanvasView: View {
                  onToggleCollapse: onToggleCollapse,
                  isFresh: vm.recentlyAddedID == item.node.id,
                  isDragging: drag?.id == item.node.id,
-                 dragOffset: drag?.id == item.node.id ? drag?.translation : nil,
+                 dragOffset: nil,
                  isSearchHit: vm.searchResults.contains(item.node.id),
                  colorTag: item.node.colorTag,
                  onCancelEdit: { text in
@@ -393,8 +425,6 @@ struct MapCanvasView: View {
             .onEnded { _ in
                 defer {
                     drag = nil
-                    reorderHint = nil
-                    freeMoveID = nil
                     pointerMoved = false
                 }
                 guard pointerMoved else {
@@ -421,60 +451,42 @@ struct MapCanvasView: View {
 
     private func dragChanged(_ value: DragGesture.Value, item: NodeItem,
                              layouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect) {
-        // Hold Option while dragging for free placement.
-        if NSEvent.modifierFlags.contains(.option) {
-            freeMoveID = item.node.id
-        }
         // Keep coordinates in map space; the drawing layer applies origin.
         let current = CGPoint(x: item.layout.center.x + value.translation.width / scale,
                               y: item.layout.center.y + value.translation.height / scale)
         drag = ReparentDrag(id: item.node.id, source: item.layout.center, current: current,
                             translation: value.translation)
-        if freeMoveID == nil {
-            reorderHint = reorderHint(at: current, draggedID: item.node.id, layouts: layouts)
-            autoScrollToward(current, geoSize: geoSize, bounds: bounds)
-        }
+        autoScrollToward(current, geoSize: geoSize, bounds: bounds)
     }
 
     private func dragEnded(layouts: [UUID: NodeLayout]) {
         guard let dragState = drag else { return }
-        if freeMoveID == dragState.id {
-            vm.nudgeOffset(id: dragState.id,
-                           dx: dragState.translation.width / scale,
-                           dy: dragState.translation.height / scale)
-        } else if let target = hitTest(point: dragState.current, draggedID: dragState.id, layouts: layouts) {
+        // Priority: a node under the cursor reparents, a visible insertion line
+        // reorders, and anything else records a free position.
+        if let target = hitTest(point: dragState.current, draggedID: dragState.id, layouts: layouts) {
             vm.move(id: dragState.id, toParent: target)
-        } else if let hint = reorderHint {
+        } else if let hint = SiblingInsertion.hint(
+            point: dragState.current, draggedID: dragState.id, layouts: layouts,
+            siblings: vm.document.root.parent(of: dragState.id)?.children ?? []) {
             vm.moveSibling(id: dragState.id, toIndex: hint.targetIndex)
+        } else if dragState.id == vm.document.root.id {
+            // Moving the central topic moves the whole map. Content-fit recentring
+            // cancels a uniform offset, so the whole-map move is expressed as pan.
+            pan = CGSize(width: pan.width + dragState.translation.width,
+                         height: pan.height + dragState.translation.height)
+            lastPan = pan
+        } else {
+            vm.moveOffset(
+                id: dragState.id,
+                dx: dragState.translation.width / scale,
+                dy: dragState.translation.height / scale
+            )
         }
-    }
-
-    /// While dragging over a sibling's row (but not onto a node), suggest a reordering slot.
-    private func reorderHint(at point: CGPoint, draggedID: UUID, layouts: [UUID: NodeLayout]) -> ReorderHint? {
-        guard hitTest(point: point, draggedID: draggedID, layouts: layouts) == nil,
-              let parent = vm.document.root.parent(of: draggedID),
-              let draggedSide = layouts[draggedID]?.side else { return nil }
-        for sibling in parent.children where sibling.id != draggedID {
-            guard let layout = layouts[sibling.id],
-                  layout.side == draggedSide,
-                  point.y >= layout.frame.minY - LayoutEngine.vGap / 2,
-                  point.y <= layout.frame.maxY + LayoutEngine.vGap / 2 else { continue }
-            let after = point.x > layout.frame.midX
-            let fullIndex = parent.children.firstIndex(where: { $0.id == sibling.id }) ?? 0
-            return ReorderHint(targetID: sibling.id,
-                               after: after,
-                               y: after ? layout.frame.maxY + LayoutEngine.vGap / 2
-                                        : layout.frame.minY - LayoutEngine.vGap / 2,
-                               minX: layout.frame.minX - 16,
-                               maxX: layout.frame.maxX + 44,
-                               targetIndex: after ? fullIndex + 1 : fullIndex)
-        }
-        return nil
     }
 
     @ViewBuilder
-    private func reorderIndicator(origin: CGPoint) -> some View {
-        if let hint = reorderHint {
+    private func reorderIndicator(_ hint: ReorderHint?, origin: CGPoint) -> some View {
+        if let hint {
             Path { path in
                 path.move(to: CGPoint(x: hint.minX + origin.x, y: hint.y + origin.y))
                 path.addLine(to: CGPoint(x: hint.maxX + origin.x, y: hint.y + origin.y))
@@ -485,6 +497,24 @@ struct MapCanvasView: View {
     }
 
     // MARK: - Helpers
+
+    /// Keeps the dragged branch and every connector visually together before drop.
+    private func layoutsDuringDrag(_ layouts: [UUID: NodeLayout]) -> [UUID: NodeLayout] {
+        guard let drag, let node = vm.document.root.find(drag.id) else { return layouts }
+        let ids = node.descendantIDs().union([node.id])
+        let dx = drag.translation.width / scale
+        let dy = drag.translation.height / scale
+        var rendered = layouts
+        for id in ids {
+            guard let layout = rendered[id] else { continue }
+            rendered[id] = NodeLayout(
+                id: layout.id,
+                frame: layout.frame.offsetBy(dx: dx, dy: dy),
+                depth: layout.depth, colorIndex: layout.colorIndex, side: layout.side
+            )
+        }
+        return rendered
+    }
 
     private func nodeItems(layouts: [UUID: NodeLayout]) -> [NodeItem] {
         var items: [NodeItem] = []
@@ -508,14 +538,14 @@ struct MapCanvasView: View {
     /// so `body` stays within the type-checker complexity budget.
     private func mapContent(items: [NodeItem], layouts: [UUID: NodeLayout], theme: Theme,
                             bounds: CGRect, origin: CGPoint, geoSize: CGSize, dropTarget: UUID?,
-                            focusIDs: Set<UUID>) -> some View {
+                            insertionHint: ReorderHint?, focusIDs: Set<UUID>) -> some View {
         ZStack {
             connectionsCanvas(items: items, layouts: layouts, theme: theme,
                               origin: origin, focusIDs: focusIDs)
             linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs)
             summariesCanvas(layouts: layouts, origin: origin)
             dragIndicator(origin: origin)
-            reorderIndicator(origin: origin)
+            reorderIndicator(insertionHint, origin: origin)
             ForEach(items) { item in
                 nodeView(item: item, theme: theme, dropTarget: dropTarget, origin: origin,
                          layouts: layouts, geoSize: geoSize, bounds: bounds,
@@ -633,7 +663,9 @@ struct CanvasTextDropDelegate: DropDelegate {
         let excluded = vm.document.root.find(draggedID)?.descendantIDs() ?? []
         var best: (UUID, Int)?
         for (id, layout) in layouts where id != draggedID && !excluded.contains(id) {
-            if layout.frame.insetBy(dx: -8, dy: -8).contains(point) {
+            // Visual frames only: an inflated halo would swallow the sibling gap
+            // that the insertion line promises as a reorder zone.
+            if layout.frame.contains(point) {
                 if best == nil || layout.depth > best!.1 {
                     best = (id, layout.depth)
                 }
