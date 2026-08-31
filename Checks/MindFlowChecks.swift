@@ -2927,6 +2927,75 @@ do {
           "a legacy non-ocean document exports identically to Palette A")
 }
 
+// MARK: - T-036: zoom-invariant interaction signals
+// State-signal dimensions are authored in screen points and converted only at
+// the scaled subtree boundary. Content geometry and hit-band math stay local.
+do {
+    let scales: [CGFloat] = [1.0, 0.618, 0.25, 0.15]
+    let signals: [(String, CGFloat)] = [
+        ("insertion line", 3),
+        ("selected line", 2),
+        ("selected outward", 2),
+        ("drop line", 2.5),
+        ("drop outward", 3),
+        ("search line", 2),
+        ("search outward", 4),
+        ("batch line", 2),
+        ("batch outward", 4),
+        ("batch dash", 5),
+        ("batch dash gap", 3),
+        ("hover line", 1.5),
+        ("hover outward", 4),
+        ("selected link line", 2.5),
+        ("selected summary stroke", 1)
+    ]
+    for scale in scales {
+        for (name, screenPoints) in signals {
+            let local = InteractionSignalGeometry.local(screenPoints: screenPoints, scale: scale)
+            let actualScreenPoints = local * scale
+            let label = "signal " + name + " remains "
+                + String(format: "%.1f", Double(screenPoints))
+                + "pt at scale " + String(format: "%.3f", Double(scale))
+            check(abs(actualScreenPoints - screenPoints) <= 0.0001, label)
+        }
+    }
+    check(InteractionSignalGeometry.local(screenPoints: 3, scale: 0) == 3,
+          "invalid zero scale safely preserves the requested signal size")
+    check(InteractionSignalGeometry.local(screenPoints: 3, scale: .nan) == 3,
+          "invalid nonfinite scale safely preserves the requested signal size")
+
+    let oldUnscaledWidth: CGFloat = 3 * 0.25
+    check(oldUnscaledWidth == 0.75 && oldUnscaledWidth != 3,
+          "negative control: an unscaled 3pt line shrinks to 0.75pt at scale .25")
+}
+
+// The reorder activation band intentionally remains map-local. At fit .25,
+// six screen points correspond to 24 map points, well outside the 12pt band.
+do {
+    let s1 = MindNode(text: "Band S1")
+    let s2 = MindNode(text: "Band S2")
+    let s3 = MindNode(text: "Band S3")
+    let root = MindNode(text: "Band root", children: [s1, s2, s3])
+    let layouts = LayoutEngine.layout(root: root)
+    let siblings = root.children
+    let gap = layouts[s3.id]!.frame.minY - layouts[s2.id]!.frame.maxY
+    let lineY = layouts[s2.id]!.frame.maxY + gap / 2
+    let center = CGPoint(x: layouts[s2.id]!.frame.midX, y: lineY)
+    let fit: CGFloat = 0.25
+    let screenDistance: CGFloat = 6
+    let mapDistance = InteractionSignalGeometry.local(screenPoints: screenDistance, scale: fit)
+    let outside = CGPoint(x: center.x, y: center.y + mapDistance)
+
+    check(mapDistance == 24,
+          "six screen points at fit .25 are 24 map-local points")
+    check(SiblingInsertion.hint(point: center, draggedID: s2.id,
+                                layouts: layouts, siblings: siblings) != nil,
+          "sibling-gap center still resolves an insertion hint")
+    check(SiblingInsertion.hint(point: outside, draggedID: s2.id,
+                                layouts: layouts, siblings: siblings) == nil,
+          "six screen points outside the gap center do not enter the map-local reorder band")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

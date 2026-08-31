@@ -4,6 +4,7 @@ struct NodeView: View {
     let node: MindNode
     let layout: NodeLayout
     let palette: Palette
+    let interactionScale: CGFloat
     let branchColor: Color
     let isSelected: Bool
     var isBatchMember: Bool = false
@@ -177,25 +178,34 @@ struct NodeView: View {
 
     @ViewBuilder
     private func selectionRing(radius: CGFloat) -> some View {
+        let stateRadius = radius + InteractionSignalGeometry.local(
+            screenPoints: 3, scale: interactionScale)
         if isSearchHit && !isSelected && !isDropTarget {
-            RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(palette.statusHighlight, lineWidth: 2)
-                .padding(-4)
+            RoundedRectangle(cornerRadius: stateRadius, style: .continuous)
+                .stroke(palette.statusHighlight,
+                        lineWidth: InteractionSignalGeometry.local(screenPoints: 2, scale: interactionScale))
+                .padding(-InteractionSignalGeometry.local(screenPoints: 4, scale: interactionScale))
         }
         if isBatchMember {
-            RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(palette.accent, style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
-                .padding(-4)
+            RoundedRectangle(cornerRadius: stateRadius, style: .continuous)
+                .stroke(palette.accent, style: StrokeStyle(
+                    lineWidth: InteractionSignalGeometry.local(screenPoints: 2, scale: interactionScale),
+                    dash: [InteractionSignalGeometry.local(screenPoints: 5, scale: interactionScale),
+                           InteractionSignalGeometry.local(screenPoints: 3, scale: interactionScale)]))
+                .padding(-InteractionSignalGeometry.local(screenPoints: 4, scale: interactionScale))
         }
         if isDropTarget {
-            RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-                .stroke(palette.accent, lineWidth: 2.5)
-                .padding(-3)
+            RoundedRectangle(cornerRadius: stateRadius, style: .continuous)
+                .stroke(palette.accent,
+                        lineWidth: InteractionSignalGeometry.local(screenPoints: 2.5, scale: interactionScale))
+                .padding(-InteractionSignalGeometry.local(screenPoints: 3, scale: interactionScale))
         } else if isSelected || isHovered {
-            RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
+            RoundedRectangle(cornerRadius: stateRadius, style: .continuous)
                 .stroke(isSelected ? palette.accent : palette.textSecondary.opacity(0.45),
-                        lineWidth: isSelected ? 2 : 1.5)
-                .padding(-4)
+                        lineWidth: InteractionSignalGeometry.local(
+                            screenPoints: isSelected ? 2 : 1.5, scale: interactionScale))
+                .padding(-InteractionSignalGeometry.local(
+                    screenPoints: isSelected ? 2 : 4, scale: interactionScale))
         }
     }
 

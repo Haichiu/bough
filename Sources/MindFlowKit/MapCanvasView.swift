@@ -1,6 +1,16 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Converts a requested screen-space signal size to the local size needed inside
+/// MapCanvasView's scaled subtree. Invalid scales fall back without collapsing the signal.
+public enum InteractionSignalGeometry {
+    public static func local(screenPoints: CGFloat, scale: CGFloat) -> CGFloat {
+        guard screenPoints.isFinite, screenPoints >= 0 else { return 0 }
+        guard scale.isFinite, scale > 0 else { return screenPoints }
+        return screenPoints / scale
+    }
+}
+
 struct ReparentDrag: Equatable {
     let id: UUID
     let source: CGPoint
@@ -176,13 +186,17 @@ struct MapCanvasView: View {
     }
 
     @ViewBuilder
-    private func dragIndicator(origin: CGPoint, palette: Palette) -> some View {
+    private func dragIndicator(origin: CGPoint, palette: Palette, interactionScale: CGFloat) -> some View {
         if let dragState = drag {
             Path { path in
                 path.move(to: CGPoint(x: dragState.source.x + origin.x, y: dragState.source.y + origin.y))
                 path.addLine(to: CGPoint(x: dragState.current.x + origin.x, y: dragState.current.y + origin.y))
             }
-            .stroke(palette.textSecondary, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            .stroke(palette.textSecondary,
+                    style: StrokeStyle(
+                        lineWidth: InteractionSignalGeometry.local(screenPoints: 1.5, scale: interactionScale),
+                        dash: [InteractionSignalGeometry.local(screenPoints: 5, scale: interactionScale),
+                               InteractionSignalGeometry.local(screenPoints: 4, scale: interactionScale)]))
             .allowsHitTesting(false)
         }
     }
@@ -210,13 +224,15 @@ struct MapCanvasView: View {
         return items.filter { viewport.intersects($0.layout.frame) }
     }
 
-    private func nodeView(item: NodeItem, theme: Palette, dropTarget: UUID?, draggedIDs: Set<UUID>, origin: CGPoint,
+    private func nodeView(item: NodeItem, theme: Palette, interactionScale: CGFloat,
+                          dropTarget: UUID?, draggedIDs: Set<UUID>, origin: CGPoint,
                           gestureLayouts: [UUID: NodeLayout], geoSize: CGSize, bounds: CGRect,
                           isSearchHit: Bool, dimmed: Bool = false, colorTag: String? = nil,
                           onToggleCollapse: (() -> Void)? = nil) -> some View {
         NodeView(node: item.node,
                  layout: item.layout,
                  palette: theme,
+                 interactionScale: interactionScale,
                  branchColor: theme.color(forIndex: item.layout.colorIndex),
                  isSelected: vm.selection == item.node.id,
                  isBatchMember: vm.batchSelection.contains(item.node.id),
@@ -508,13 +524,17 @@ struct MapCanvasView: View {
     }
 
     @ViewBuilder
-    private func reorderIndicator(_ hint: ReorderHint?, origin: CGPoint, palette: Palette) -> some View {
+    private func reorderIndicator(_ hint: ReorderHint?, origin: CGPoint, palette: Palette,
+                                  interactionScale: CGFloat) -> some View {
         if let hint {
             Path { path in
                 path.move(to: CGPoint(x: hint.minX + origin.x, y: hint.y + origin.y))
                 path.addLine(to: CGPoint(x: hint.maxX + origin.x, y: hint.y + origin.y))
             }
-            .stroke(palette.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .stroke(palette.accent,
+                    style: StrokeStyle(
+                        lineWidth: InteractionSignalGeometry.local(screenPoints: 3, scale: interactionScale),
+                        lineCap: .round))
             .transition(.asymmetric(insertion: .opacity, removal: .identity))
             .animation(reduceMotion ? nil : .easeIn(duration: 0.08), value: hint)
             .allowsHitTesting(false)
@@ -567,12 +587,16 @@ struct MapCanvasView: View {
         ZStack {
             connectionsCanvas(items: items, layouts: layouts, theme: theme,
                               origin: origin, focusIDs: focusIDs)
-            linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs, palette: theme)
-            summariesCanvas(layouts: layouts, origin: origin, palette: theme)
-            dragIndicator(origin: origin, palette: theme)
-            reorderIndicator(insertionHint, origin: origin, palette: theme)
+            linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs, palette: theme,
+                        interactionScale: scale)
+            summariesCanvas(layouts: layouts, origin: origin, palette: theme,
+                            interactionScale: scale)
+            dragIndicator(origin: origin, palette: theme, interactionScale: scale)
+            reorderIndicator(insertionHint, origin: origin, palette: theme,
+                             interactionScale: scale)
             ForEach(items) { item in
-                nodeView(item: item, theme: theme, dropTarget: dropTarget, draggedIDs: draggedIDs,
+                nodeView(item: item, theme: theme, interactionScale: scale,
+                         dropTarget: dropTarget, draggedIDs: draggedIDs,
                          origin: origin, gestureLayouts: gestureLayouts, geoSize: geoSize, bounds: bounds,
                          isSearchHit: vm.searchResults.contains(item.node.id),
                          dimmed: !focusIDs.isEmpty && !focusIDs.contains(item.node.id),
@@ -590,14 +614,17 @@ struct MapCanvasView: View {
         NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
     }
 
-    private func summariesCanvas(layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette) -> some View {
+    private func summariesCanvas(layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette,
+                                  interactionScale: CGFloat) -> some View {
         ForEach(vm.document.summaries) { summary in
-            summaryView(summary: summary, layouts: layouts, origin: origin, palette: palette)
+            summaryView(summary: summary, layouts: layouts, origin: origin, palette: palette,
+                        interactionScale: interactionScale)
         }
     }
 
     @ViewBuilder
-    private func summaryView(summary: MindSummary, layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette) -> some View {
+    private func summaryView(summary: MindSummary, layouts: [UUID: NodeLayout], origin: CGPoint,
+                             palette: Palette, interactionScale: CGFloat) -> some View {
         if let parentNode = vm.document.root.find(summary.parentID),
            let geo = SummaryGeometry.bracket(for: summary, parentNode: parentNode,
                                              layouts: layouts, origin: origin) {
@@ -616,7 +643,9 @@ struct MapCanvasView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(isSelected ? palette.accent : Color.clear))
+                .overlay(Capsule().stroke(isSelected ? palette.accent : Color.clear,
+                                          lineWidth: InteractionSignalGeometry.local(
+                                              screenPoints: 1, scale: interactionScale)))
                 .position(geo.textAnchor)
                 .fixedSize()
                 .onTapGesture {
@@ -717,18 +746,21 @@ struct CanvasTextDropDelegate: DropDelegate {
     /// Dashed associative curves between arbitrary nodes, with a tap-to-select handle.
     @ViewBuilder
     private func linksCanvas(layouts: [UUID: NodeLayout], origin: CGPoint,
-                             focusIDs: Set<UUID>, palette: Palette) -> some View {
+                             focusIDs: Set<UUID>, palette: Palette,
+                             interactionScale: CGFloat) -> some View {
         ForEach(vm.document.links) { link in
             if let fromLayout = layouts[link.from], let toLayout = layouts[link.to],
                focusIDs.isEmpty || (focusIDs.contains(link.from) && focusIDs.contains(link.to)) {
-                self.linkCanvas(link: link, fromLayout: fromLayout, toLayout: toLayout, origin: origin, palette: palette)
+                self.linkCanvas(link: link, fromLayout: fromLayout, toLayout: toLayout,
+                                origin: origin, palette: palette,
+                                interactionScale: interactionScale)
             }
         }
     }
 
     /// One associative line: dashed curve, tap-to-select handle, optional label.
     private func linkCanvas(link: MindLink, fromLayout: NodeLayout, toLayout: NodeLayout,
-                            origin: CGPoint, palette: Palette) -> some View {
+                            origin: CGPoint, palette: Palette, interactionScale: CGFloat) -> some View {
         let p0 = CGPoint(x: fromLayout.center.x + origin.x, y: fromLayout.center.y + origin.y)
         let p1 = CGPoint(x: toLayout.center.x + origin.x, y: toLayout.center.y + origin.y)
         let mid = CGPoint(x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2)
@@ -746,7 +778,11 @@ struct CanvasTextDropDelegate: DropDelegate {
                 path.addQuadCurve(to: p1, control: control)
             }
             .stroke(isSelected ? palette.accent : palette.textSecondary.opacity(0.65),
-                    style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1.5, dash: [6, 4]))
+                    style: StrokeStyle(
+                        lineWidth: isSelected
+                            ? InteractionSignalGeometry.local(screenPoints: 2.5, scale: interactionScale)
+                            : 1.5,
+                        dash: [6, 4]))
             .allowsHitTesting(false)
             Circle()
                 .fill(isSelected ? palette.accent : palette.card)

@@ -127,6 +127,7 @@ public struct StaticMapView: View {
                 NodeView(node: item.node,
                          layout: item.layout,
                          palette: theme,
+                         interactionScale: 1.0,
                          branchColor: theme.color(forIndex: item.layout.colorIndex),
                          isSelected: false,
                          isEditing: false,
