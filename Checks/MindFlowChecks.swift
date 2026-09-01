@@ -236,6 +236,61 @@ func approxEqual(_ a: CGFloat, _ b: CGFloat, accuracy: CGFloat = 0.5) -> Bool {
     abs(a - b) <= accuracy
 }
 
+func freshInterchangeRoot(_ label: String) -> URL {
+    let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
+        .appendingPathComponent("mindflow-interchange-\(label)-\(UUID().uuidString)", isDirectory: true)
+    try! FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    assertTestDirectory(root, label: "fresh interchange \(label) root")
+    return root
+}
+
+func interchangeChainNode(level: Int, maximum: Int) -> MindNode {
+    let children = level < maximum ? [interchangeChainNode(level: level + 1, maximum: maximum)] : []
+    return MindNode(text: "Level \(level)", children: children)
+}
+
+func interchangeChainDocument(levels: Int) -> MindDocument {
+    MindDocument(title: "Interchange document", root: interchangeChainNode(level: 1, maximum: levels))
+}
+
+func markdownChain(levels: Int) -> String {
+    guard levels > 0 else { return "" }
+    var lines = ["# Level 1"]
+    if levels >= 2 {
+        for level in 2...levels {
+            let indent = String(repeating: "  ", count: level - 2)
+            lines.append("\(indent)- Level \(level)")
+        }
+    }
+    return lines.joined(separator: "\n") + "\n"
+}
+
+func opmlChain(levels: Int) -> String {
+    func outline(_ level: Int) -> String {
+        let node = "<outline text=\"Level \(level)\""
+        guard level < levels else { return node + "/>" }
+        return node + ">\(outline(level + 1))</outline>"
+    }
+    return "<?xml version=\"1.0\"?><opml version=\"2.0\"><head><title>Chain</title></head><body>\(outline(1))</body></opml>"
+}
+
+func freemindChain(levels: Int) -> String {
+    func node(_ level: Int) -> String {
+        let start = "<node TEXT=\"Level \(level)\""
+        guard level < levels else { return start + "/>" }
+        return start + ">\(node(level + 1))</node>"
+    }
+    return "<?xml version=\"1.0\"?><map version=\"1.0.1\">\(node(1))</map>"
+}
+
+func assertInterchangeStructure(_ expected: MindNode, _ actual: MindNode, label: String) {
+    check(expected.text == actual.text, "\(label) preserves node text at each level")
+    check(expected.children.count == actual.children.count, "\(label) preserves child structure at each level")
+    for (expectedChild, actualChild) in zip(expected.children, actual.children) {
+        assertInterchangeStructure(expectedChild, actualChild, label: label)
+    }
+}
+
 // MARK: - Layout engine
 
 do {
@@ -370,12 +425,12 @@ do {
     let doc = MindDocument(title: "T", root: MindNode(text: "Root <A>", note: "n", children: [
         MindNode(text: "B", children: [MindNode(text: "C")]),
     ]))
-    let md = MapExporter.markdown(doc)
+    let md = try! MapExporter.markdown(doc)
     check(md.contains("# Root <A>"), "markdown exports root title")
     check(md.contains("- B"), "markdown exports child")
     check(md.contains("  - C"), "markdown indents grandchildren")
     check(md.contains("> n"), "markdown includes notes")
-    let opml = MapExporter.opml(doc)
+    let opml = try! MapExporter.opml(doc)
     check(opml.contains("&lt;A&gt;"), "opml escapes XML entities")
     check(opml.contains("<outline text=\"B\""), "opml nests children")
     check(opml.contains("_note=\"n\""), "opml carries notes")
@@ -405,7 +460,7 @@ do {
     - 設計
     - 開發
     """
-    let imported = MapImporter.markdown(source)
+    let imported = try? MapImporter.markdown(source)
     check(imported != nil, "markdown import succeeds")
     let doc = imported!
     check(doc.root.text == "專案計畫", "import uses heading as root")
@@ -413,10 +468,10 @@ do {
     check(doc.root.children[0].children.map(\.text) == ["文獻回顧", "訪談"], "import preserves nesting")
     check(doc.root.children[0].children[1].note == "約三位使用者", "import attaches notes")
 
-    let roundTrip = MapImporter.markdown(MapExporter.markdown(doc))
+    let roundTrip = try? MapImporter.markdown(try! MapExporter.markdown(doc))
     check(roundTrip?.root.children.map(\.text) == ["研究", "設計", "開發"], "export/import round-trips")
 
-    check(MapImporter.markdown("")?.root.text == "中心主題", "empty input yields default root")
+    check((try? MapImporter.markdown(""))?.root.text == "中心主題", "empty input yields default root")
 }
 
 // MARK: - v1.4: search
@@ -450,8 +505,8 @@ do {
         MindNode(text: "A", note: "n1"),
         MindNode(text: "B", children: [MindNode(text: "C")]),
     ]))
-    let opml = MapExporter.opml(doc)
-    let back = MapImporter.opml(opml)
+    let opml = try! MapExporter.opml(doc)
+    let back = try? MapImporter.opml(opml)
     check(back?.root.text == "R", "opml import restores root")
 
     // v17.1: FreeMind (.mm) import
@@ -466,7 +521,7 @@ do {
       </node>
     </map>
     """
-    if let fmDoc = MapImporter.freemind(mm) {
+    if let fmDoc = try? MapImporter.freemind(mm) {
         check(fmDoc.root.text == "Root Topic", "freemind import reads TEXT attribute")
         check(fmDoc.root.children.count == 2, "freemind nests children")
         check(fmDoc.root.children[0].collapsed, "freemind maps FOLDED to collapsed")
@@ -476,7 +531,7 @@ do {
     } else {
         check(false, "freemind parses sample map")
     }
-    check(MapImporter.freemind("not xml at all") == nil || MapImporter.freemind("<map></map>") != nil, "freemind handles junk input gracefully")
+    check((try? MapImporter.freemind("not xml at all")) == nil || (try? MapImporter.freemind("<map></map>")) != nil, "freemind handles junk input gracefully")
 
     // v17.2: link labels
     let fromID = UUID(), toID = UUID()
@@ -537,11 +592,11 @@ do {
     check(vm2.document.root.children[1].collapsed == true, "exit restores custom collapsed flag")
 
     // v18.1: FreeMind export + round-trip
-    let mmOut = MapExporter.freemind(presDoc)
+    let mmOut = try! MapExporter.freemind(presDoc)
     check(mmOut.contains("<map version=\"1.0.1\">"), "freemind export has map header")
     check(mmOut.contains("<node TEXT=\"Root\""), "freemind export writes root TEXT")
     check(mmOut.contains("FOLDED=\"true\""), "freemind export preserves collapsed flag")
-    if let reimported = MapImporter.freemind(mmOut) {
+    if let reimported = try? MapImporter.freemind(mmOut) {
         check(reimported.root.text == presDoc.root.text, "freemind roundtrip keeps root")
         check(reimported.root.children.count == presDoc.root.children.count, "freemind roundtrip keeps children")
         check(reimported.root.children[1].collapsed == true, "freemind roundtrip keeps collapse states")
@@ -550,8 +605,8 @@ do {
         check(false, "freemind roundtrip parses")
     }
     let tricky = MindNode(text: "a<b>&c\"d", children: [MindNode(text: "x&y")])
-    let mmTricky = MapExporter.freemind(MindDocument(title: "T", root: tricky))
-    if let back = MapImporter.freemind(mmTricky) {
+    let mmTricky = try! MapExporter.freemind(MindDocument(title: "T", root: tricky))
+    if let back = try? MapImporter.freemind(mmTricky) {
         check(back.root.text == "a<b>&c\"d" && back.root.children[0].text == "x&y", "freemind escapes special chars both ways")
     } else {
         check(false, "tricky freemind roundtrip parses")
@@ -637,10 +692,10 @@ do {
         MindNode(text: "Tagged", note: "重要備註", colorTag: "blue", children: [MindNode(text: "Kid")]),
         MindNode(text: "Plain"),
     ]))
-    let mmOut = MapExporter.freemind(mmDoc)
+    let mmOut = try! MapExporter.freemind(mmDoc)
     check(mmOut.contains("richcontent TYPE=\"NOTE\"") && mmOut.contains("重要備註"), "freemind export carries notes")
     check(mmOut.uppercased().contains("COLOR=\"#4A90D9\""), "freemind export carries color")
-    if let back = MapImporter.freemind(mmOut) {
+    if let back = try? MapImporter.freemind(mmOut) {
         check(back.root.children[0].note == "重要備註", "freemind roundtrip restores notes")
         check(back.root.children[0].colorTag == "blue", "freemind roundtrip restores color tags")
     } else {
@@ -656,7 +711,7 @@ do {
       </node>
     </map>
     """
-    if let f = MapImporter.freemind(foreign) {
+    if let f = try? MapImporter.freemind(foreign) {
         check(f.root.children[0].note == "外部筆記", "freemind import reads foreign richcontent notes")
         // Unknown color maps to no tag (graceful), known hex maps to its tag
         check(f.root.children[0].colorTag == nil, "unknown freemind colors map to no tag")
@@ -865,11 +920,11 @@ do {
                                      startID: sumDoc2.root.children[0].id,
                                      endID: sumDoc2.root.children[1].id,
                                      text: "這兩項是重點")]
-    let mdSum = MapExporter.markdown(sumDoc2)
+    let mdSum = try! MapExporter.markdown(sumDoc2)
     check(mdSum.contains("↳ 概要（含S1）: 這兩項是重點"), "markdown export includes summary text after range")
     // Summaries ending at a later sibling don't leak into earlier positions
     check(!mdSum.contains("↳ 概要（含S3）"), "summary anchored to its own range end")
-    let mdNoSum = MapExporter.markdown(MindDocument(title: "N", root: MindNode(text: "R", children: [MindNode(text: "x")])))
+    let mdNoSum = try! MapExporter.markdown(MindDocument(title: "N", root: MindNode(text: "R", children: [MindNode(text: "x")])))
     check(!mdNoSum.contains("↳ 概要"), "documents without summaries stay clean")
 
 
@@ -1456,7 +1511,7 @@ do {
         MindNode(text: "重要", marked: true),
         MindNode(text: "普通"),
     ]))
-    let md = MapExporter.markdown(doc)
+    let md = try! MapExporter.markdown(doc)
     check(md.contains("- ★ 重要"), "markdown export carries star marker")
     check(md.contains("- 普通\n"), "unmarked nodes stay plain")
 }
@@ -1906,7 +1961,7 @@ do {
     let doc = MindDocument(title: "T", root: MindNode(text: "R", children: [
         MindNode(text: "C", colorTag: "red"),
     ]))
-    let md = MapExporter.markdown(doc)
+    let md = try! MapExporter.markdown(doc)
     check(md.contains("- \u{1F534} C"), "markdown export carries red emoji")
 }
 
@@ -2021,7 +2076,7 @@ do {
         check(vm.document.stats().collapsedCount > 0, "collapseAll marks branches")
 
         vm.expandAll()
-        let md = MapExporter.markdown(vm.document)
+        let md = try! MapExporter.markdown(vm.document)
         check(md.contains("新想法"), "markdown export includes workflow content")
     }
 }
@@ -2063,7 +2118,7 @@ do {
         vm.newDocument()
         let parentID = vm.document.root.id
         let md = "- idea A\n- idea B\n  - sub idea"
-        guard let imported = MapImporter.markdown(md) else {
+        guard let imported = try? MapImporter.markdown(md) else {
             check(false, "paste import succeeds"); return
         }
         var doc = vm.document
@@ -2188,7 +2243,7 @@ do {
         vm.performSearch()
         check(vm.searchResults.contains(noteNode), "search covers notes")
 
-        let md = MapExporter.markdown(vm.document)
+        let md = try! MapExporter.markdown(vm.document)
         check(md.contains("branch"), "markdown export works")
 
         let st = vm.document.stats()
@@ -2272,7 +2327,7 @@ do {
         check(bl.count > 0, "J5: balanced layout works")
         vm.collapseAll()
         vm.expandToLevel(2)
-        let md = MapExporter.markdown(vm.document)
+        let md = try! MapExporter.markdown(vm.document)
         check(md.contains("每週新產出"), "J6: markdown contains content")
         vm.newDocument()
         check(vm.document.root.children.isEmpty, "J7: new doc starts fresh")
@@ -2307,7 +2362,7 @@ do {
 
         // Combo 3: Star + Export Markdown
         vm.toggleMark(id: orig)
-        let md = MapExporter.markdown(vm.document)
+        let md = try! MapExporter.markdown(vm.document)
         check(md.contains("★"), "Combo3: star appears in markdown export")
 
         // Combo 4: Insert Parent + Collapse Parent
@@ -2366,9 +2421,9 @@ do {
         }
 
         // Phase 6: Export
-        let md = MapExporter.markdown(vm.document)
+        let md = try! MapExporter.markdown(vm.document)
         check(md.contains("功能A"), "E2E: markdown contains content")
-        let opml = MapExporter.opml(vm.document)
+        let opml = try! MapExporter.opml(vm.document)
         check(opml.contains("<outline"), "E2E: OPML export valid")
 
         // Phase 7: Stress undo
@@ -3855,6 +3910,300 @@ do {
           "bounded rollback failure evicts only older unrelated siblings")
 }
 
+// MARK: - T-036: bounded interchange import/export
+
+do {
+    let root = freshInterchangeRoot("reader")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appendingPathComponent("payload.txt")
+    let limits = ImportLimits(maxBytes: 8, maxLevels: 4)
+    try! Data("12345678".utf8).write(to: file, options: .atomic)
+    var requestedWindow = 0
+    let dependencies = BoundedInterchangeReader.Dependencies(
+        metadataSize: { _ in 0 },
+        read: { url, window in
+            requestedWindow = window
+            return Data(try Data(contentsOf: url).prefix(window))
+        })
+    let reader = BoundedInterchangeReader(limits: limits, dependencies: dependencies)
+    do {
+        let data = try reader.readData(from: file)
+        check(data.count == 8, "bounded reader accepts exactly N bytes")
+        check(requestedWindow == 9, "bounded reader requests maxBytes plus one")
+    } catch {
+        check(false, "bounded reader accepts exactly N bytes")
+        check(false, "bounded reader requests maxBytes plus one")
+    }
+
+    try! Data("123456789".utf8).write(to: file, options: .atomic)
+    do {
+        _ = try reader.readData(from: file)
+        check(false, "bounded reader rejects N+1 actual bytes")
+    } catch let error as InterchangeError {
+        if case .tooLarge(let limit, let observed) = error {
+            check(limit == 8 && observed == 9, "bounded reader reports N+1 tooLarge")
+        } else {
+            check(false, "bounded reader reports N+1 tooLarge")
+        }
+    } catch {
+        check(false, "bounded reader reports N+1 tooLarge")
+    }
+
+    var preflightRead = false
+    let preflightReader = BoundedInterchangeReader(
+        limits: limits,
+        dependencies: .init(
+            metadataSize: { _ in 9 },
+            read: { _, _ in
+                preflightRead = true
+                return Data()
+            }))
+    do {
+        _ = try preflightReader.readData(from: file)
+        check(false, "metadata preflight rejects an oversized file")
+    } catch let error as InterchangeError {
+        if case .tooLarge(let limit, let observed) = error {
+            check(limit == 8 && observed == 9, "metadata preflight reports its observed size")
+        } else {
+            check(false, "metadata preflight reports its observed size")
+        }
+    } catch {
+        check(false, "metadata preflight reports its observed size")
+    }
+    check(!preflightRead, "metadata preflight avoids an oversized read")
+
+    try! Data([0xff]).write(to: file, options: .atomic)
+    do {
+        _ = try reader.readText(from: file)
+        check(false, "bounded reader rejects invalid UTF-8")
+    } catch let error as InterchangeError {
+        check(error == .invalidUTF8, "bounded reader reports invalid UTF-8 distinctly")
+    } catch {
+        check(false, "bounded reader reports invalid UTF-8 distinctly")
+    }
+
+    let unreadableReader = BoundedInterchangeReader(
+        limits: limits,
+        dependencies: .init(
+            metadataSize: { _ in throw NSError(domain: "reader", code: 1) },
+            read: { _, _ in Data() }))
+    do {
+        _ = try unreadableReader.readData(from: file)
+        check(false, "bounded reader reports unreadable input")
+    } catch let error as InterchangeError {
+        if case .unreadable = error {
+            check(true, "bounded reader reports unreadable input")
+        } else {
+            check(false, "bounded reader reports unreadable input")
+        }
+    } catch {
+        check(false, "bounded reader reports unreadable input")
+    }
+    check(InterchangeError.cancelled.isCancellation, "cancelled input remains distinct")
+}
+
+do {
+    let limits = ImportLimits(maxBytes: 4096, maxLevels: 4)
+    let expected = interchangeChainDocument(levels: limits.maxLevels)
+
+    func expectTooDeep(_ parse: () throws -> MindDocument, label: String) {
+        do {
+            _ = try parse()
+            check(false, label)
+        } catch let error as InterchangeError {
+            if case .tooDeep(let limit, let observedLevel) = error {
+                check(limit == limits.maxLevels && observedLevel == limits.maxLevels + 1, label)
+            } else {
+                check(false, label)
+            }
+        } catch {
+            check(false, label)
+        }
+    }
+
+    func expectTooLarge(_ parse: () throws -> MindDocument, label: String) {
+        do {
+            _ = try parse()
+            check(false, label)
+        } catch let error as InterchangeError {
+            if case .tooLarge(let limit, let observed) = error {
+                check(limit == limits.maxBytes && observed >= limits.maxBytes + 1, label)
+            } else {
+                check(false, label)
+            }
+        } catch {
+            check(false, label)
+        }
+    }
+
+    if let markdown = try? MapImporter.markdown(markdownChain(levels: limits.maxLevels), limits: limits) {
+        check(markdown.root.text == expected.root.text, "Markdown accepts exact configured depth")
+        assertInterchangeStructure(expected.root, markdown.root, label: "Markdown exact-depth round trip")
+    } else {
+        check(false, "Markdown accepts exact configured depth")
+    }
+    if let opml = try? MapImporter.opml(opmlChain(levels: limits.maxLevels), limits: limits) {
+        check(opml.root.text == expected.root.text, "OPML accepts exact configured depth")
+        assertInterchangeStructure(expected.root, opml.root, label: "OPML exact-depth round trip")
+    } else {
+        check(false, "OPML accepts exact configured depth")
+    }
+    if let freemind = try? MapImporter.freemind(freemindChain(levels: limits.maxLevels), limits: limits) {
+        check(freemind.root.text == expected.root.text, "FreeMind accepts exact configured depth")
+        assertInterchangeStructure(expected.root, freemind.root, label: "FreeMind exact-depth round trip")
+    } else {
+        check(false, "FreeMind accepts exact configured depth")
+    }
+
+    expectTooDeep({ try MapImporter.markdown(markdownChain(levels: limits.maxLevels + 1), limits: limits) },
+                  label: "Markdown rejects level 5 with typed tooDeep")
+    expectTooDeep({ try MapImporter.opml(opmlChain(levels: limits.maxLevels + 1), limits: limits) },
+                  label: "OPML rejects level 5 with typed tooDeep")
+    expectTooDeep({ try MapImporter.freemind(freemindChain(levels: limits.maxLevels + 1), limits: limits) },
+                  label: "FreeMind rejects level 5 with typed tooDeep")
+
+    let oversized = Data(repeating: 0x20, count: limits.maxBytes + 1)
+    expectTooLarge({ try MapImporter.markdown(oversized, limits: limits) },
+                   label: "Markdown rejects oversized Data before parsing")
+    expectTooLarge({ try MapImporter.opml(oversized, limits: limits) },
+                   label: "OPML rejects oversized Data before parsing")
+    expectTooLarge({ try MapImporter.freemind(oversized, limits: limits) },
+                   label: "FreeMind rejects oversized Data before parsing")
+}
+
+do {
+    let limits = ImportLimits(maxBytes: 65_536, maxLevels: 4)
+    let document = interchangeChainDocument(levels: limits.maxLevels)
+
+    let markdown = try! MapExporter.markdown(document, limits: limits)
+    let opml = try! MapExporter.opml(document, limits: limits)
+    let freemind = try! MapExporter.freemind(document, limits: limits)
+    let markdownExact = ImportLimits(maxBytes: markdown.utf8.count, maxLevels: limits.maxLevels)
+    let opmlExact = ImportLimits(maxBytes: opml.utf8.count, maxLevels: limits.maxLevels)
+    let freemindExact = ImportLimits(maxBytes: freemind.utf8.count, maxLevels: limits.maxLevels)
+
+    if let back = try? MapImporter.markdown(markdown, limits: markdownExact) {
+        assertInterchangeStructure(document.root, back.root, label: "Markdown exact-byte round trip")
+    } else {
+        check(false, "Markdown exact-byte output reimports")
+    }
+    if let back = try? MapImporter.opml(opml, limits: opmlExact) {
+        assertInterchangeStructure(document.root, back.root, label: "OPML exact-byte round trip")
+    } else {
+        check(false, "OPML exact-byte output reimports")
+    }
+    if let back = try? MapImporter.freemind(freemind, limits: freemindExact) {
+        assertInterchangeStructure(document.root, back.root, label: "FreeMind exact-byte round trip")
+    } else {
+        check(false, "FreeMind exact-byte output reimports")
+    }
+
+    func expectExportTooDeep(_ export: () throws -> String, label: String) {
+        do {
+            _ = try export()
+            check(false, label)
+        } catch let error as InterchangeError {
+            if case .tooDeep(let limit, let observedLevel) = error {
+                check(limit == limits.maxLevels && observedLevel == limits.maxLevels + 1, label)
+            } else {
+                check(false, label)
+            }
+        } catch {
+            check(false, label)
+        }
+    }
+    func expectExportTooLarge(_ export: () throws -> String, label: String) {
+        do {
+            _ = try export()
+            check(false, label)
+        } catch let error as InterchangeError {
+            if case .tooLarge(let limit, let observed) = error {
+                check(limit < 65_536 && observed > limit, label)
+            } else {
+                check(false, label)
+            }
+        } catch {
+            check(false, label)
+        }
+    }
+
+    let deepDocument = interchangeChainDocument(levels: limits.maxLevels + 1)
+    expectExportTooDeep({ try MapExporter.markdown(deepDocument, limits: limits) },
+                        label: "Markdown exporter rejects level 5")
+    expectExportTooDeep({ try MapExporter.opml(deepDocument, limits: limits) },
+                        label: "OPML exporter rejects level 5")
+    expectExportTooDeep({ try MapExporter.freemind(deepDocument, limits: limits) },
+                        label: "FreeMind exporter rejects level 5")
+
+    expectExportTooLarge({
+        try MapExporter.markdown(document,
+                                 limits: ImportLimits(maxBytes: max(1, markdown.utf8.count - 1), maxLevels: 4))
+    }, label: "Markdown exporter stops at the byte budget")
+    expectExportTooLarge({
+        try MapExporter.opml(document,
+                             limits: ImportLimits(maxBytes: max(1, opml.utf8.count - 1), maxLevels: 4))
+    }, label: "OPML exporter stops at the byte budget")
+    expectExportTooLarge({
+        try MapExporter.freemind(document,
+                                 limits: ImportLimits(maxBytes: max(1, freemind.utf8.count - 1), maxLevels: 4))
+    }, label: "FreeMind exporter stops at the byte budget")
+
+    let manyChildren = (0..<2047).map { MindNode(text: "Node \($0)") }
+    let manyDocument = MindDocument(title: "Many", root: MindNode(text: "Many", children: manyChildren))
+    let noNodeCeiling = ImportLimits(maxBytes: 1_048_576, maxLevels: 2)
+    let manyMarkdown = try! MapExporter.markdown(manyDocument, limits: noNodeCeiling)
+    let manyOPML = try! MapExporter.opml(manyDocument, limits: noNodeCeiling)
+    let manyFreeMind = try! MapExporter.freemind(manyDocument, limits: noNodeCeiling)
+    check((try? MapImporter.markdown(manyMarkdown, limits: noNodeCeiling))?.root.children.count == 2047,
+          "Markdown has no invented node-count ceiling")
+    check((try? MapImporter.opml(manyOPML, limits: noNodeCeiling))?.root.children.count == 2047,
+          "OPML has no invented node-count ceiling")
+    check((try? MapImporter.freemind(manyFreeMind, limits: noNodeCeiling))?.root.children.count == 2047,
+          "FreeMind has no invented node-count ceiling")
+}
+
+do {
+    let root = freshInterchangeRoot("viewmodel-rejection")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = TabStore(directory: root.appendingPathComponent("tabs", isDirectory: true))
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: store)
+        let original = MindDocument(title: "State", root: MindNode(text: "保留的根"))
+        vm.document = original
+        let childID = vm.addChild(to: nil)!
+        let beforeDocument = vm.document
+        let beforeSelection = vm.selection
+        let beforePath = URL(fileURLWithPath: "/tmp/mindflow-import-state.mindmap")
+        vm.filePath = beforePath
+        vm.dirty = true
+        let beforeDirty = vm.dirty
+        let timestamp = Date(timeIntervalSince1970: 1_700_100_000)
+        vm.lastSavedAt = timestamp
+
+        vm.insertTextAsNodes(markdownChain(levels: 129), sourceLabel: "Markdown")
+        check(vm.statusMessage?.contains("128") == true, "ViewModel rejects an over-depth import")
+        check(vm.document == beforeDocument, "over-depth import leaves document unchanged")
+        check(vm.selection == beforeSelection && vm.selection == childID,
+              "over-depth import leaves selection unchanged")
+        check(vm.filePath == beforePath, "over-depth import leaves filePath unchanged")
+        check(vm.dirty == beforeDirty, "over-depth import leaves dirty unchanged")
+        check(vm.lastSavedAt == timestamp, "over-depth import leaves timestamp state unchanged")
+        check(vm.statusMessage?.contains("128") == true && vm.statusMessage?.contains("深度") == true,
+              "over-depth status names the 128-level limit")
+
+        let oversizedText = String(repeating: "x", count: ImportLimits.standard.maxBytes + 1)
+        vm.insertTextAsNodes(oversizedText, sourceLabel: "Markdown")
+        check(vm.statusMessage?.contains("8 MiB") == true, "ViewModel rejects an over-byte import")
+        check(vm.document == beforeDocument && vm.selection == beforeSelection && vm.filePath == beforePath
+                  && vm.dirty == beforeDirty && vm.lastSavedAt == timestamp,
+              "over-byte import leaves editor state unchanged")
+        check(vm.statusMessage?.contains("8 MiB") == true,
+              "over-byte status names the 8 MiB limit")
+
+        vm.undo()
+        check(vm.document == original, "rejected imports leave the existing undo stack intact")
+    }
+}
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

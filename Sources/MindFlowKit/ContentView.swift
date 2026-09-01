@@ -756,15 +756,33 @@ public struct ContentView: View {
         return name.isEmpty ? "心智圖" : name
     }
 
+    private func saveInterchange(format: String, suggestedName: String,
+                                 successMessage: String, makeText: () throws -> String) {
+        do {
+            let text = try makeText()
+            if FileIO.saveText(text, suggestedName: suggestedName) != nil {
+                vm.notify(successMessage)
+            }
+        } catch let error as InterchangeError {
+            if !error.isCancellation {
+                vm.notify(error.userMessage(format: format))
+            }
+        } catch {
+            vm.notify("無法匯出\(format)")
+        }
+    }
+
     private func performExport(_ format: MindMapViewModel.ExportFormat) {
         switch format {
         case .markdown:
-            if FileIO.saveText(MapExporter.markdown(vm.document), suggestedName: exportBaseName + ".md") != nil {
-                vm.notify("已匯出 Markdown ✓")
+            saveInterchange(format: "Markdown", suggestedName: exportBaseName + ".md",
+                            successMessage: "已匯出 Markdown ✓") {
+                try MapExporter.markdown(vm.document)
             }
         case .opml:
-            if FileIO.saveText(MapExporter.opml(vm.document), suggestedName: exportBaseName + ".opml") != nil {
-                vm.notify("已匯出 OPML ✓")
+            saveInterchange(format: "OPML", suggestedName: exportBaseName + ".opml",
+                            successMessage: "已匯出 OPML ✓") {
+                try MapExporter.opml(vm.document)
             }
         case .png:
             let renderer = ImageRenderer(content: StaticMapView(document: vm.document))
@@ -833,8 +851,9 @@ public struct ContentView: View {
                 vm.notify("已匯出 SVG ✓")
             }
         case .freemind:
-            if FileIO.saveText(MapExporter.freemind(vm.document), suggestedName: exportBaseName + ".mm") != nil {
-                vm.notify("已匯出 FreeMind ✓")
+            saveInterchange(format: "FreeMind", suggestedName: exportBaseName + ".mm",
+                            successMessage: "已匯出 FreeMind ✓") {
+                try MapExporter.freemind(vm.document)
             }
         case .svgBranch:
             guard let selID = vm.selection,

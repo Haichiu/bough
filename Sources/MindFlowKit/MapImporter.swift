@@ -1,25 +1,131 @@
 import AppKit
 import Foundation
 
-/// Imports indented Markdown outlines (bullets, headings) and OPML files as mind maps.
+/// Imports Markdown, OPML, and FreeMind interchange documents under one shared
+/// byte/depth budget. Native `.mindmap` decoding remains in FileIO.
 public enum MapImporter {
+    /// Parses OPML bytes after checking the byte budget and UTF-8 validity.
+    public static func opml(_ data: Data, limits: ImportLimits = .standard) throws -> MindDocument {
+        try opml(checkedText(data, limits: limits), limits: limits)
+    }
 
-    /// Imports OPML outlines produced by this app and most outlining tools.
-    public static func opml(_ xml: String) -> MindDocument? {
+    /// Parses an OPML string. Root level is 1.
+    public static func opml(_ xml: String, limits: ImportLimits = .standard) throws -> MindDocument {
+        try checkTextSize(xml, limits: limits)
         let parser = XMLParser(data: Data(xml.utf8))
-        let delegate = OPMLParserDelegate()
+        let delegate = OPMLParserDelegate(limits: limits)
         parser.delegate = delegate
-        guard parser.parse(), let root = delegate.root else { return nil }
+        guard parser.parse() else {
+            if let failure = delegate.failure { throw failure }
+            throw InterchangeError.invalidFormat
+        }
+        if let failure = delegate.failure { throw failure }
+        guard let root = delegate.root else { throw InterchangeError.invalidFormat }
         return MindDocument(title: delegate.title ?? root.text, root: root)
     }
 
-    /// Imports FreeMind / XMind `.mm` files so users can migrate their maps.
-    public static func freemind(_ xml: String) -> MindDocument? {
+    /// Parses FreeMind/XMind bytes after checking the byte budget and UTF-8.
+    public static func freemind(_ data: Data, limits: ImportLimits = .standard) throws -> MindDocument {
+        try freemind(checkedText(data, limits: limits), limits: limits)
+    }
+
+    /// Parses a FreeMind/XMind string. Root level is 1.
+    public static func freemind(_ xml: String, limits: ImportLimits = .standard) throws -> MindDocument {
+        try checkTextSize(xml, limits: limits)
         let parser = XMLParser(data: Data(xml.utf8))
-        let delegate = FreeMindParserDelegate()
+        let delegate = FreeMindParserDelegate(limits: limits)
         parser.delegate = delegate
-        guard parser.parse(), let root = delegate.root else { return nil }
+        guard parser.parse() else {
+            if let failure = delegate.failure { throw failure }
+            throw InterchangeError.invalidFormat
+        }
+        if let failure = delegate.failure { throw failure }
+        guard let root = delegate.root else { throw InterchangeError.invalidFormat }
         return MindDocument(title: delegate.title ?? root.text, root: root)
+    }
+
+    /// Parses Markdown bytes after checking the byte budget and UTF-8.
+    public static func markdown(_ data: Data, limits: ImportLimits = .standard) throws -> MindDocument {
+        try markdown(checkedText(data, limits: limits), limits: limits)
+    }
+
+    /// Parses an indented Markdown outline. The synthetic root is level 1;
+    /// the first outline item is level 2.
+    public static func markdown(_ text: String, limits: ImportLimits = .standard) throws -> MindDocument {
+        try checkTextSize(text, limits: limits)
+        let rootNode = TempNode(text: "中心主題")
+        var stack: [(node: TempNode, indent: Int, level: Int)] = [(rootNode, -1, 1)]
+        var last: TempNode?
+
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine).trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { continue }
+
+            if line.hasPrefix("#") {
+                let heading = line.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+                if !heading.isEmpty {
+                    rootNode.text = heading
+                    last = nil
+                }
+                continue
+            }
+
+            if line.hasPrefix(">") {
+                let note = line.dropFirst().trimmingCharacters(in: .whitespaces)
+                if !note.isEmpty { last?.note = note }
+                continue
+            }
+
+            let leading = String(rawLine).prefix(while: { $0 == " " || $0 == "\t" })
+            let indent = leading.reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
+            let bullet = line.drop(while: { $0 == "-" || $0 == "*" || $0 == "+" || $0 == " " })
+            let content = bullet.trimmingCharacters(in: .whitespaces)
+            guard !content.isEmpty else { continue }
+
+            while stack.count > 1, let top = stack.last, top.indent >= indent {
+                stack.removeLast()
+            }
+            let level = stack.last!.level + 1
+            guard level <= limits.maxLevels else {
+                throw InterchangeError.tooDeep(limit: limits.maxLevels, observedLevel: level)
+            }
+            let node = TempNode(text: content)
+            stack.last!.node.children.append(node)
+            stack.append((node, indent, level))
+            last = node
+        }
+
+        func convert(_ temp: TempNode) -> MindNode {
+            MindNode(text: temp.text, note: temp.note,
+                     children: temp.children.map(convert))
+        }
+        return MindDocument(title: rootNode.text, root: convert(rootNode))
+    }
+
+    private static func checkedText(_ data: Data, limits: ImportLimits) throws -> String {
+        guard data.count <= limits.maxBytes else {
+            throw InterchangeError.tooLarge(limit: limits.maxBytes, observed: data.count)
+        }
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw InterchangeError.invalidUTF8
+        }
+        return text
+    }
+
+    private static func checkTextSize(_ text: String, limits: ImportLimits) throws {
+        guard text.utf8.count <= limits.maxBytes else {
+            throw InterchangeError.tooLarge(limit: limits.maxBytes, observed: text.utf8.count)
+        }
+    }
+
+    private final class TempNode {
+        var text: String
+        var note: String = ""
+        var children: [TempNode] = []
+
+        init(text: String) {
+            self.text = text
+        }
     }
 }
 
@@ -28,14 +134,20 @@ private final class FreeMindParserDelegate: NSObject, XMLParserDelegate {
         var text = ""
         var note = ""
         var collapsed = false
-        var colorTag: String? = nil
+        var colorTag: String?
         var children: [Node] = []
     }
 
+    private let limits: ImportLimits
     private var stack: [Node] = []
     private var rootNode: Node?
     private(set) var title: String?
-    private var noteBuffer: String? = nil
+    private var noteBuffer: String?
+    private(set) var failure: InterchangeError?
+
+    init(limits: ImportLimits) {
+        self.limits = limits
+    }
 
     var root: MindNode? {
         rootNode.map(convert)
@@ -46,10 +158,21 @@ private final class FreeMindParserDelegate: NSObject, XMLParserDelegate {
                  colorTag: node.colorTag, children: node.children.map(convert))
     }
 
+    private func rejectTooDeep(_ parser: XMLParser, level: Int) {
+        guard failure == nil else { return }
+        failure = .tooDeep(limit: limits.maxLevels, observedLevel: level)
+        parser.abortParsing()
+    }
+
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                 qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
         switch name.lowercased() {
         case "node":
+            let level = stack.count + 1
+            guard level <= limits.maxLevels else {
+                rejectTooDeep(parser, level: level)
+                return
+            }
             let node = Node()
             // FreeMind stores the label in the TEXT attribute; some exporters use TEXT="" with richcontent.
             func attr(_ key: String) -> String {
@@ -89,10 +212,9 @@ private final class FreeMindParserDelegate: NSObject, XMLParserDelegate {
     }
 
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName qName: String?) {
-        let lower = name.lowercased()
-        switch lower {
+        switch name.lowercased() {
         case "richcontent":
-            // FreeMind wraps notes in <richcontent TYPE="NOTE">…<p>text</p>…</richcontent>
+            // FreeMind wraps notes in <richcontent TYPE="NOTE">…<p>text</p>…</richcontent>.
             if let buffered = noteBuffer?.trimmingCharacters(in: .whitespacesAndNewlines), !buffered.isEmpty,
                let current = stack.last {
                 current.note = current.note.isEmpty ? buffered : current.note + "\n" + buffered
@@ -113,11 +235,17 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
         var children: [Node] = []
     }
 
+    private let limits: ImportLimits
     private var stack: [Node] = []
     private var rootNode: Node?
     private(set) var title: String?
     private var inTitle = false
     private var titleBuffer = ""
+    private(set) var failure: InterchangeError?
+
+    init(limits: ImportLimits) {
+        self.limits = limits
+    }
 
     var root: MindNode? {
         rootNode.map(convert)
@@ -127,10 +255,23 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
         MindNode(text: node.text, note: node.note, children: node.children.map(convert))
     }
 
+    private func rejectTooDeep(_ parser: XMLParser, level: Int) {
+        guard failure == nil else { return }
+        failure = .tooDeep(limit: limits.maxLevels, observedLevel: level)
+        parser.abortParsing()
+    }
+
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                 qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
         switch name.lowercased() {
         case "outline":
+            // OPML permits multiple body outlines; the existing importer treats
+            // later top-level outlines as children of the established root.
+            let level = stack.isEmpty ? (rootNode == nil ? 1 : 2) : stack.count + 1
+            guard level <= limits.maxLevels else {
+                rejectTooDeep(parser, level: level)
+                return
+            }
             let node = Node()
             node.text = attributeDict["text"] ?? ""
             node.note = attributeDict["_note"] ?? ""
@@ -157,7 +298,7 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName qName: String?) {
         switch name.lowercased() {
         case "outline":
-            stack.removeLast()
+            if !stack.isEmpty { stack.removeLast() }
         case "title":
             let trimmed = titleBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
             title = trimmed.isEmpty ? nil : trimmed
@@ -165,61 +306,5 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
         default:
             break
         }
-    }
-}
-
-extension MapImporter {
-    private final class TempNode {
-        var text: String
-        var note: String = ""
-        var children: [TempNode] = []
-        init(text: String) { self.text = text }
-    }
-
-    public static func markdown(_ text: String) -> MindDocument? {
-        let rootNode = TempNode(text: "中心主題")
-        // Path of (node, indent) from root to current position.
-        var stack: [(node: TempNode, indent: Int)] = [(rootNode, -1)]
-        var last: TempNode?
-
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = String(rawLine).trimmingCharacters(in: .whitespaces)
-            if line.isEmpty { continue }
-
-            if line.hasPrefix("#") {
-                let heading = line.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
-                if !heading.isEmpty {
-                    rootNode.text = heading
-                    last = nil
-                }
-                continue
-            }
-
-            if line.hasPrefix(">") {
-                let note = line.dropFirst().trimmingCharacters(in: .whitespaces)
-                if !note.isEmpty { last?.note = note }
-                continue
-            }
-
-            let leading = String(rawLine).prefix(while: { $0 == " " || $0 == "\t" })
-            let indent = leading.reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
-            let bullet = line.drop(while: { $0 == "-" || $0 == "*" || $0 == "+" || $0 == " " })
-            let content = bullet.trimmingCharacters(in: .whitespaces)
-            guard !content.isEmpty else { continue }
-
-            while stack.count > 1, let top = stack.last, top.indent >= indent {
-                stack.removeLast()
-            }
-            let node = TempNode(text: content)
-            stack.last!.node.children.append(node)
-            stack.append((node, indent))
-            last = node
-        }
-
-        func convert(_ temp: TempNode) -> MindNode {
-            MindNode(text: temp.text, note: temp.note,
-                     children: temp.children.map(convert))
-        }
-        return MindDocument(title: rootNode.text, root: convert(rootNode))
     }
 }

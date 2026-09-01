@@ -154,12 +154,14 @@ public enum FileIO {
         }
     }
 
-    static func readText() -> (text: String, url: URL)? {
+    static func readInterchangeText(limits: ImportLimits = .standard) throws -> (text: String, url: URL) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url,
-              let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        guard panel.runModal() == .OK, let url = panel.url else {
+            throw InterchangeError.cancelled
+        }
+        let text = try BoundedInterchangeReader(limits: limits).readText(from: url)
         return (text, url)
     }
 

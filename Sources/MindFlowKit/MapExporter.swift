@@ -15,63 +15,87 @@ public enum MapExporter {
         }
     }
 
-    public static func markdown(_ document: MindDocument) -> String {
-        var lines: [String] = ["# \(document.root.text)"]
+    public static func markdown(_ document: MindDocument, limits: ImportLimits = .standard) throws -> String {
+        try validateDepth(document.root, level: 1, limits: limits)
+        var emitter = BoundedTextEmitter(limits: limits)
+        try emitter.append("# ")
+        try emitter.append(document.root.text)
         if !document.root.note.isEmpty {
-            lines.append("> \(document.root.note)")
+            try emitter.append("\n> ")
+            try emitter.append(document.root.note)
         }
-        func walk(_ node: MindNode, level: Int) {
+
+        func walk(_ node: MindNode, level: Int) throws {
             for child in node.children {
-                let indent = String(repeating: "  ", count: level)
-                let emoji = colorEmoji(child.colorTag)
-                let star = child.marked ? "★ " : ""
-                lines.append("\(indent)- \(emoji)\(star)\(child.text)")
+                let childLevel = level + 1
+                let indent = String(repeating: "  ", count: max(0, childLevel - 2))
+                try emitter.append("\n")
+                try emitter.append(indent)
+                try emitter.append("- ")
+                try emitter.append(colorEmoji(child.colorTag))
+                if child.marked { try emitter.append("★ ") }
+                try emitter.append(child.text)
                 if !child.note.isEmpty {
-                    lines.append("\(indent)  > \(child.note)")
+                    try emitter.append("\n")
+                    try emitter.append(indent)
+                    try emitter.append("  > ")
+                    try emitter.append(child.note)
                 }
-                walk(child, level: level + 1)
+                try walk(child, level: childLevel)
                 // Summaries ending at this child are emitted right after its subtree,
                 // so the annotated content stays visible in text-based exports.
                 for s in document.summaries where s.parentID == node.id && s.endID == child.id {
                     if !s.text.isEmpty {
                         let startIndex = node.children.firstIndex(where: { $0.id == s.startID }) ?? 0
                         let startText = node.children[startIndex].text
-                        lines.append("\(indent)- ↳ 概要（含\(startText)）: \(s.text)")
+                        try emitter.append("\n")
+                        try emitter.append(indent)
+                        try emitter.append("- ↳ 概要（含")
+                        try emitter.append(startText)
+                        try emitter.append("）: ")
+                        try emitter.append(s.text)
                     }
                 }
             }
         }
-        walk(document.root, level: 0)
-        return lines.joined(separator: "\n") + "\n"
+        try walk(document.root, level: 1)
+        try emitter.append("\n")
+        return emitter.output()
     }
 
-    public static func opml(_ document: MindDocument) -> String {
-        func escape(_ string: String) -> String {
-            string.replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-                .replacingOccurrences(of: "\"", with: "&quot;")
-        }
+    public static func opml(_ document: MindDocument, limits: ImportLimits = .standard) throws -> String {
+        try validateDepth(document.root, level: 1, limits: limits)
+        var emitter = BoundedTextEmitter(limits: limits)
+        try emitter.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        try emitter.append("<opml version=\"2.0\">\n")
+        try emitter.append("  <head><title>")
+        try emitter.appendEscapedXML(document.title)
+        try emitter.append("</title></head>\n  <body>\n")
 
-        func outline(_ node: MindNode, depth: Int) -> String {
-            let indent = String(repeating: "  ", count: depth)
-            let note = node.note.isEmpty ? "" : " _note=\"\(escape(node.note))\""
-            if node.children.isEmpty {
-                return "\(indent)<outline text=\"\(escape(node.text))\"\(note)/>"
+        func outline(_ node: MindNode, level: Int, indentation: Int) throws {
+            let indent = String(repeating: "  ", count: indentation)
+            try emitter.append(indent)
+            try emitter.append("<outline text=\"")
+            try emitter.appendEscapedXML(node.text)
+            if !node.note.isEmpty {
+                try emitter.append("\" _note=\"")
+                try emitter.appendEscapedXML(node.note)
             }
-            let inner = node.children.map { outline($0, depth: depth + 1) }.joined(separator: "\n")
-            return "\(indent)<outline text=\"\(escape(node.text))\"\(note)>\n\(inner)\n\(indent)</outline>"
+            if node.children.isEmpty {
+                try emitter.append("\"/>\n")
+                return
+            }
+            try emitter.append("\">\n")
+            for child in node.children {
+                try outline(child, level: level + 1, indentation: indentation + 1)
+            }
+            try emitter.append(indent)
+            try emitter.append("</outline>\n")
         }
 
-        return """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <opml version="2.0">
-          <head><title>\(escape(document.title))</title></head>
-          <body>
-        \(outline(document.root, depth: 2))
-          </body>
-        </opml>
-        """
+        try outline(document.root, level: 1, indentation: 2)
+        try emitter.append("  </body>\n</opml>\n")
+        return emitter.output()
     }
 
     // MARK: - SVG (向量圖)
@@ -198,37 +222,64 @@ public enum MapExporter {
     // MARK: - FreeMind (.mm)
 
     /// Exports as a FreeMind `.mm` map so XMind / FreeMind users can open our maps.
-    public static func freemind(_ document: MindDocument) -> String {
-        func esc(_ s: String) -> String {
-            s.replacingOccurrences(of: "&", with: "&amp;")
-             .replacingOccurrences(of: "<", with: "&lt;")
-             .replacingOccurrences(of: ">", with: "&gt;")
-             .replacingOccurrences(of: "\"", with: "&quot;")
-        }
-        func nodeXML(_ node: MindNode, depth: Int) -> String {
-            let indent = String(repeating: "  ", count: depth)
-            var attrs = ""
-            let folded = node.collapsed && !node.children.isEmpty ? " FOLDED=\"true\"" : ""
+    public static func freemind(_ document: MindDocument, limits: ImportLimits = .standard) throws -> String {
+        try validateDepth(document.root, level: 1, limits: limits)
+        var emitter = BoundedTextEmitter(limits: limits)
+        try emitter.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        try emitter.append("<map version=\"1.0.1\">\n")
+
+        func nodeXML(_ node: MindNode, level: Int, indentation: Int) throws {
+            let indent = String(repeating: "  ", count: indentation)
+            try emitter.append(indent)
+            try emitter.append("<node TEXT=\"")
+            try emitter.appendEscapedXML(node.text)
             if let key = node.colorTag, let color = Theme.colorTag(named: key) {
                 let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.black
-                attrs += String(format: " COLOR=\"#%02x%02x%02x\"", Int(round(ns.redComponent * 255)), Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
+                let hex = String(format: "%02x%02x%02x", Int(round(ns.redComponent * 255)),
+                                 Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
+                try emitter.append("\" COLOR=\"#\(hex)")
             }
-            attrs += folded
-            let noteBlock = node.note.isEmpty ? "" : "\n\(indent)  <richcontent TYPE=\"NOTE\"><html><body><p>\(esc(node.note))</p></body></html></richcontent>"
-            if node.children.isEmpty {
-                if noteBlock.isEmpty {
-                    return "\(indent)<node TEXT=\"\(esc(node.text))\"\(attrs)/>"
+            if node.collapsed && !node.children.isEmpty {
+                try emitter.append("\" FOLDED=\"true")
+            }
+            if node.note.isEmpty && node.children.isEmpty {
+                try emitter.append("\"/>")
+                return
+            }
+            try emitter.append("\">")
+            if !node.note.isEmpty {
+                try emitter.append("\n")
+                try emitter.append(String(repeating: "  ", count: indentation + 1))
+                try emitter.append("<richcontent TYPE=\"NOTE\"><html><body><p>")
+                try emitter.appendEscapedXML(node.note)
+                try emitter.append("</p></body></html></richcontent>")
+            }
+            if !node.children.isEmpty {
+                try emitter.append("\n")
+                for (index, child) in node.children.enumerated() {
+                    if index > 0 { try emitter.append("\n") }
+                    try nodeXML(child, level: level + 1, indentation: indentation + 1)
                 }
-                return "\(indent)<node TEXT=\"\(esc(node.text))\"\(attrs)>\(noteBlock)\n\(indent)</node>"
+                try emitter.append("\n")
+                try emitter.append(indent)
+            } else {
+                try emitter.append("\n")
+                try emitter.append(indent)
             }
-            let inner = node.children.map { nodeXML($0, depth: depth + 1) }.joined(separator: "\n")
-            return "\(indent)<node TEXT=\"\(esc(node.text))\"\(attrs)>\(noteBlock)\n\(inner)\n\(indent)</node>"
+            try emitter.append("</node>")
         }
-        return """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <map version="1.0.1">
-        \(nodeXML(document.root, depth: 1))
-        </map>
-        """
+
+        try nodeXML(document.root, level: 1, indentation: 1)
+        try emitter.append("\n</map>\n")
+        return emitter.output()
+    }
+
+    private static func validateDepth(_ node: MindNode, level: Int, limits: ImportLimits) throws {
+        guard level <= limits.maxLevels else {
+            throw InterchangeError.tooDeep(limit: limits.maxLevels, observedLevel: level)
+        }
+        for child in node.children {
+            try validateDepth(child, level: level + 1, limits: limits)
+        }
     }
 }

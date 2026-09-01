@@ -724,7 +724,14 @@ public final class MindMapViewModel: ObservableObject {
             notify("沒有可加入的文字")
             return
         }
-        guard let imported = MapImporter.markdown(text), !imported.root.children.isEmpty else {
+        let imported: MindDocument
+        do {
+            imported = try MapImporter.markdown(text)
+        } catch {
+            reportInterchangeFailure(error, format: sourceLabel)
+            return
+        }
+        guard !imported.root.children.isEmpty else {
             notify("無法解析\(sourceLabel)內容")
             return
         }
@@ -1394,10 +1401,14 @@ public final class MindMapViewModel: ObservableObject {
 
     /// Copies the whole map as OPML straight to the clipboard.
     public func copyAsOPML() {
-        let opml = MapExporter.opml(document)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(opml, forType: .string)
-        notify("已複製 OPML 到剪貼簿 ✓")
+        do {
+            let opml = try MapExporter.opml(document)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(opml, forType: .string)
+            notify("已複製 OPML 到剪貼簿 ✓")
+        } catch {
+            reportInterchangeFailure(error, format: "OPML")
+        }
     }
 
 
@@ -1531,17 +1542,25 @@ public final class MindMapViewModel: ObservableObject {
     public func copyBranchAsMarkdown(id: UUID) {
         guard let node = document.root.find(id) else { return }
         let branchDoc = MindDocument(title: node.text, root: node)
-        let md = MapExporter.markdown(branchDoc)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(md, forType: .string)
-        notify("已複製分支 Markdown ✓")
+        do {
+            let md = try MapExporter.markdown(branchDoc)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(md, forType: .string)
+            notify("已複製分支 Markdown ✓")
+        } catch {
+            reportInterchangeFailure(error, format: "Markdown")
+        }
     }
 
     public func copyAsMarkdown() {
-        let md = MapExporter.markdown(document)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(md, forType: .string)
-        notify("已複製 Markdown 到剪貼簿 ✓")
+        do {
+            let md = try MapExporter.markdown(document)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(md, forType: .string)
+            notify("已複製 Markdown 到剪貼簿 ✓")
+        } catch {
+            reportInterchangeFailure(error, format: "Markdown")
+        }
     }
 
     /// Opens a .mindmap file (via Finder double-click or drag) into a new tab.
@@ -1555,19 +1574,48 @@ public final class MindMapViewModel: ObservableObject {
         notify("已開啟「\(url.lastPathComponent)」")
     }
 
-    public func importMarkdown() {
-        wrapUpPresentationIfActive(); batchSelection.removeAll()
-        guard let (text, url) = FileIO.readText() else { return }
-        guard var imported = MapImporter.markdown(text) else {
-            notify("讀不出這個檔案，請確認是 Markdown 大綱")
+    private func reportInterchangeFailure(_ error: Error, format: String) {
+        guard let interchangeError = error as? InterchangeError else {
+            notify("無法解析\(format)內容")
             return
         }
-        imported.title = url.deletingPathExtension().lastPathComponent
+        if !interchangeError.isCancellation {
+            notify(interchangeError.userMessage(format: format))
+        }
+    }
+
+    private func applyImported(_ source: MindDocument, title: String?, successMessage: String) {
+        var imported = source
+        if let title { imported.title = title }
+        // Do not change presentation or selection state until parsing succeeded.
+        wrapUpPresentationIfActive()
+        batchSelection.removeAll()
         mutate { $0 = imported }
         filePath = nil
         selection = imported.root.id
         dirty = true
-        notify("已匯入 Markdown ✓")
+        notify(successMessage)
+    }
+
+    @discardableResult
+    private func importMarkdownText(_ text: String, title: String? = nil) -> Bool {
+        do {
+            let imported = try MapImporter.markdown(text)
+            applyImported(imported, title: title, successMessage: "已匯入 Markdown ✓")
+            return true
+        } catch {
+            reportInterchangeFailure(error, format: "Markdown")
+            return false
+        }
+    }
+
+    public func importMarkdown() {
+        do {
+            let (text, url) = try FileIO.readInterchangeText()
+            _ = importMarkdownText(text, title: url.deletingPathExtension().lastPathComponent)
+        } catch {
+            reportInterchangeFailure(error, format: "Markdown")
+        }
     }
 
     public func open() {
@@ -1577,34 +1625,46 @@ public final class MindMapViewModel: ObservableObject {
         notify("已開啟「\(url.lastPathComponent)」")
     }
 
-    public func importOPML() {
-        wrapUpPresentationIfActive(); batchSelection.removeAll()
-        guard let (text, url) = FileIO.readText() else { return }
-        guard var imported = MapImporter.opml(text) else {
-            notify("讀不出這個檔案，請確認是 OPML 格式")
-            return
+    @discardableResult
+    private func importOPMLText(_ text: String, title: String? = nil) -> Bool {
+        do {
+            let imported = try MapImporter.opml(text)
+            applyImported(imported, title: title, successMessage: "已匯入 OPML ✓")
+            return true
+        } catch {
+            reportInterchangeFailure(error, format: "OPML")
+            return false
         }
-        imported.title = url.deletingPathExtension().lastPathComponent
-        mutate { $0 = imported }
-        filePath = nil
-        selection = imported.root.id
-        dirty = true
-        notify("已匯入 OPML ✓")
+    }
+
+    public func importOPML() {
+        do {
+            let (text, url) = try FileIO.readInterchangeText()
+            _ = importOPMLText(text, title: url.deletingPathExtension().lastPathComponent)
+        } catch {
+            reportInterchangeFailure(error, format: "OPML")
+        }
+    }
+
+    @discardableResult
+    private func importFreeMindText(_ text: String, title: String? = nil) -> Bool {
+        do {
+            let imported = try MapImporter.freemind(text)
+            applyImported(imported, title: title, successMessage: "已匯入 FreeMind ✓")
+            return true
+        } catch {
+            reportInterchangeFailure(error, format: "FreeMind")
+            return false
+        }
     }
 
     public func importFreeMind() {
-        wrapUpPresentationIfActive(); batchSelection.removeAll()
-        guard let (text, url) = FileIO.readText() else { return }
-        guard var imported = MapImporter.freemind(text) else {
-            notify("讀不出這個檔案，請確認是 FreeMind (.mm) 格式")
-            return
+        do {
+            let (text, url) = try FileIO.readInterchangeText()
+            _ = importFreeMindText(text, title: url.deletingPathExtension().lastPathComponent)
+        } catch {
+            reportInterchangeFailure(error, format: "FreeMind")
         }
-        imported.title = url.deletingPathExtension().lastPathComponent
-        mutate { $0 = imported }
-        filePath = nil
-        selection = imported.root.id
-        dirty = true
-        notify("已匯入 FreeMind ✓")
     }
 
 }
