@@ -19,12 +19,15 @@ public enum AppIconArtwork {
         public let dotDiameter: CGFloat
         public let hubWidth: CGFloat
         public let spread: CGFloat
+        public let translationX: CGFloat
 
-        public init(lineWidth: CGFloat, dotDiameter: CGFloat, hubWidth: CGFloat, spread: CGFloat) {
+        public init(lineWidth: CGFloat, dotDiameter: CGFloat, hubWidth: CGFloat, spread: CGFloat,
+                    translationX: CGFloat = 0) {
             self.lineWidth = lineWidth
             self.dotDiameter = dotDiameter
             self.hubWidth = hubWidth
             self.spread = spread
+            self.translationX = translationX
         }
     }
 
@@ -67,17 +70,21 @@ public enum AppIconArtwork {
     public static func metrics(for band: SizeBand) -> Metrics {
         switch band {
         case .small:
-            return Metrics(lineWidth: 112, dotDiameter: 158, hubWidth: 190, spread: 200)
+            return Metrics(lineWidth: 112, dotDiameter: 158, hubWidth: 190, spread: 200,
+                           translationX: -101.75)
         case .mid:
-            return Metrics(lineWidth: 78, dotDiameter: 132, hubWidth: 200, spread: 215)
+            return Metrics(lineWidth: 78, dotDiameter: 132, hubWidth: 200, spread: 215,
+                           translationX: -82.50)
         case .large:
-            return Metrics(lineWidth: 40, dotDiameter: 104, hubWidth: 210, spread: 230)
+            return Metrics(lineWidth: 40, dotDiameter: 104, hubWidth: 210, spread: 230,
+                           translationX: -56.75)
         }
     }
 
     /// Returns the final 8-bit PNG for a logical icon slot. `backgroundOnly` is an offline
     /// oracle for endpoint contrast; the generator always leaves it false.
-    public static func pngData(for slot: Slot, backgroundOnly: Bool = false) throws -> Data {
+    public static func pngData(for slot: Slot, backgroundOnly: Bool = false,
+                               translationOverride: CGFloat? = nil) throws -> Data {
         guard slot.pixelSize > 0 else { throw RenderError.invalidPixelSize }
         let pixelSize = slot.pixelSize
         guard let context = makeContext(pixelSize: pixelSize) else {
@@ -92,7 +99,7 @@ public enum AppIconArtwork {
         context.scaleBy(x: scale, y: scale)
         try drawBackground(in: context)
         if !backgroundOnly {
-            drawGlyph(in: context, band: slot.band)
+            drawGlyph(in: context, band: slot.band, translationOverride: translationOverride)
         }
         context.restoreGState()
 
@@ -160,8 +167,11 @@ public enum AppIconArtwork {
         context.restoreGState()
     }
 
-    private static func drawGlyph(in context: CGContext, band: SizeBand) {
+    private static func drawGlyph(in context: CGContext, band: SizeBand,
+                                  translationOverride: CGFloat?) {
         let metrics = metrics(for: band)
+        context.saveGState()
+        context.translateBy(x: translationOverride ?? metrics.translationX, y: 0)
         let palette = Palette.light
         let ink = cgColor(palette.creamTextRGB)
         let endpointInk = cgColor(palette.creamTextRGB)
@@ -201,5 +211,6 @@ public enum AppIconArtwork {
         context.addPath(hub)
         context.setFillColor(ink)
         context.fillPath()
+        context.restoreGState()
     }
 }

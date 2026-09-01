@@ -4330,6 +4330,46 @@ struct IconRasterRunStats {
     let peaks: [Int]
 }
 
+struct IconCentroidEvidence {
+    let inkCount: Int
+    let inkX: Double
+    let inkY: Double
+    let boardCenterX: Double
+    let boardCenterY: Double
+    let tolerance: Double
+
+    var deltaX: Double { inkX - boardCenterX }
+    var deltaY: Double { inkY - boardCenterY }
+}
+
+func iconCentroidEvidence(_ image: NSBitmapImageRep) -> IconCentroidEvidence? {
+    guard image.pixelsWide > 0, image.pixelsHigh > 0 else { return nil }
+    var inkCount = 0
+    var xSum = 0.0
+    var ySum = 0.0
+    for y in 0..<image.pixelsHigh {
+        for x in 0..<image.pixelsWide {
+            guard let color = iconRasterColor(image, x: x, y: y) else { return nil }
+            guard iconInkScore(color) > 470 else { continue }
+            inkCount += 1
+            xSum += Double(x) + 0.5
+            ySum += Double(y) + 0.5
+        }
+    }
+    guard inkCount > 0 else { return nil }
+    let xScale = Double(image.pixelsWide) / 1024.0
+    let yScale = Double(image.pixelsHigh) / 1024.0
+    let boardCenterX = 512.0 * xScale
+    let boardCenterY = 512.0 * yScale
+    let renderedBoardWidth = 824.0 * xScale
+    return IconCentroidEvidence(inkCount: inkCount,
+                                inkX: xSum / Double(inkCount),
+                                inkY: ySum / Double(inkCount),
+                                boardCenterX: boardCenterX,
+                                boardCenterY: boardCenterY,
+                                tolerance: max(renderedBoardWidth * 0.01, 1.0))
+}
+
 func iconRasterColor(_ image: NSBitmapImageRep, x: Int, y: Int) -> Palette.RGB? {
     guard x >= 0, x < image.pixelsWide, y >= 0, y < image.pixelsHigh,
           image.bitsPerPixel == 32, image.samplesPerPixel == 4,
@@ -4348,9 +4388,14 @@ func iconInkScore(_ color: Palette.RGB) -> Int {
     Int(((color.red + color.green + color.blue) * 255).rounded())
 }
 
-func iconRunStats(_ image: NSBitmapImageRep) -> IconRasterRunStats? {
+func iconRunStats(_ image: NSBitmapImageRep,
+                  slot: AppIconArtwork.Slot,
+                  translationOverride: CGFloat? = nil) -> IconRasterRunStats? {
     guard image.pixelsWide > 0, image.pixelsHigh > 0 else { return nil }
-    let x = Int(floor(Double(image.pixelsWide) * 0.70))
+    let translationX = translationOverride
+        ?? AppIconArtwork.metrics(for: slot.band).translationX
+    let x = Int(floor(Double(image.pixelsWide)
+                      * (0.70 + Double(translationX) / 1024.0)))
     var peaks: [Int] = []
     var inRun = false
     var peak = 0
@@ -4378,13 +4423,20 @@ func iconPixelCoordinate(_ coordinate: CGFloat, pixelSize: Int) -> Int {
 }
 
 func iconExpectedEndpoints(for band: AppIconArtwork.SizeBand) -> [CGPoint] {
+    let translationX = AppIconArtwork.metrics(for: band).translationX
     switch band {
     case .small:
-        return [CGPoint(x: 742, y: 712), CGPoint(x: 766, y: 512), CGPoint(x: 742, y: 312)]
+        return [CGPoint(x: 742 + translationX, y: 712),
+                CGPoint(x: 766 + translationX, y: 512),
+                CGPoint(x: 742 + translationX, y: 312)]
     case .mid:
-        return [CGPoint(x: 742, y: 727), CGPoint(x: 766, y: 512), CGPoint(x: 742, y: 297)]
+        return [CGPoint(x: 742 + translationX, y: 727),
+                CGPoint(x: 766 + translationX, y: 512),
+                CGPoint(x: 742 + translationX, y: 297)]
     case .large:
-        return [CGPoint(x: 742, y: 742), CGPoint(x: 766, y: 512), CGPoint(x: 742, y: 282)]
+        return [CGPoint(x: 742 + translationX, y: 742),
+                CGPoint(x: 766 + translationX, y: 512),
+                CGPoint(x: 742 + translationX, y: 282)]
     }
 }
 
@@ -4426,7 +4478,7 @@ for slot in iconSlots {
         iconImages[slot.fileName] = image
         check(image.pixelsWide == slot.pixelSize && image.pixelsHigh == slot.pixelSize,
               "icon " + slot.fileName + " has its declared final dimensions")
-        guard let stats = iconRunStats(image) else {
+        guard let stats = iconRunStats(image, slot: slot) else {
             check(false, "icon " + slot.fileName + " has a readable final raster")
             continue
         }
@@ -4435,6 +4487,17 @@ for slot in iconSlots {
               + " peaks=" + String(describing: stats.peaks))
         check(stats.count == 3, "icon " + slot.fileName + " has exactly three ink runs")
         check(stats.weakestPeak >= 680, "icon " + slot.fileName + " weakest ink run reaches 680")
+        if let centroid = iconCentroidEvidence(image) {
+            print(String(format: "Icon centroid %@: dx=%.4f dy=%.4f tol=%.4f ink=%d",
+                         slot.fileName, centroid.deltaX, centroid.deltaY,
+                         centroid.tolerance, centroid.inkCount))
+            check(abs(centroid.deltaX) <= centroid.tolerance,
+                  "icon " + slot.fileName + " ink centroid x is board-balanced")
+            check(abs(centroid.deltaY) <= centroid.tolerance,
+                  "icon " + slot.fileName + " ink centroid y is board-balanced")
+        } else {
+            check(false, "icon " + slot.fileName + " has centroid evidence")
+        }
 
         let backgroundData = try AppIconArtwork.pngData(for: slot, backgroundOnly: true)
         guard let background = NSBitmapImageRep(data: backgroundData) else {
@@ -4446,6 +4509,38 @@ for slot in iconSlots {
         check(false, "icon " + slot.fileName + " renders without error")
     }
 }
+
+var zeroTranslationControlFailures: [String] = []
+var zeroTranslationControlValidated = 0
+for slot in iconSlots {
+    do {
+        let data = try AppIconArtwork.pngData(for: slot, translationOverride: 0)
+        guard let image = NSBitmapImageRep(data: data),
+              let centroid = iconCentroidEvidence(image) else {
+            check(false, "icon " + slot.fileName + " zero-translation centroid evidence")
+            continue
+        }
+        zeroTranslationControlValidated += 1
+        let rejected = abs(centroid.deltaX) > centroid.tolerance
+            || abs(centroid.deltaY) > centroid.tolerance
+        if rejected { zeroTranslationControlFailures.append(slot.fileName) }
+        print(String(format: "Icon t=0 control %@: dx=%.4f dy=%.4f tol=%.4f rejected=%@",
+                     slot.fileName, centroid.deltaX, centroid.deltaY,
+                     centroid.tolerance, rejected ? "true" : "false"))
+        check(rejected, "icon " + slot.fileName + " t=0 centroid control rejects")
+        check(abs(centroid.deltaX) > centroid.tolerance,
+              "icon " + slot.fileName + " t=0 control fails x centroid")
+    } catch {
+        check(false, "icon " + slot.fileName + " zero-translation control renders")
+    }
+}
+print("Icon t=0 centroid control failures: " + zeroTranslationControlFailures.joined(separator: ","))
+check(zeroTranslationControlValidated == iconSlots.count,
+      "icon t=0 centroid control covers every slot")
+check(zeroTranslationControlFailures.count == iconSlots.count,
+      "icon t=0 centroid control rejects every slot")
+check(zeroTranslationControlFailures.contains("icon_16x16.png"),
+      "icon t=0 centroid control includes the 16px slot")
 
 let physical32Slots = iconSlots.filter { $0.pixelSize == 32 }
 check(AppIconArtwork.metrics(for: .small).lineWidth == 112,
