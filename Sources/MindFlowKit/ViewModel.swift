@@ -186,9 +186,12 @@ public final class MindMapViewModel: ObservableObject {
             if let warning {
                 NSLog("MindFlow autosave committed with warning: \(warning)")
             }
-        case .failed(let error):
+        case .failed(let error, let warning):
             notify("自動保存失敗，已保留舊版本")
             NSLog("MindFlow autosave failed: \(error)")
+            if let warning {
+                NSLog("MindFlow autosave cleanup warning: \(warning)")
+            }
         }
         return outcome
     }

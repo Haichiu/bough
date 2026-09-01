@@ -148,6 +148,20 @@ func assertTabEvidencePreserved(_ before: TabDirectoryEvidence, _ after: TabDire
           "\(label) preserves root titles and node counts")
 }
 
+func seedTabTransactions(_ root: URL, count: Int) -> [URL] {
+    assertTestDirectory(root, label: "seed transaction root")
+    return (0..<count).map { index in
+        let transaction = root.appendingPathComponent(
+            "\(TabStore.transactionDirectoryPrefix)seed-\(index)-\(UUID().uuidString)", isDirectory: true)
+        try! FileManager.default.createDirectory(at: transaction, withIntermediateDirectories: false)
+        assertTestDirectory(transaction, label: "seeded transaction")
+        try! FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1_600_000_000 + Double(index))],
+            ofItemAtPath: transaction.path)
+        return transaction
+    }
+}
+
 var failures = 0
 
 func check(_ condition: Bool, _ label: String, line: Int = #line) {
@@ -3185,16 +3199,17 @@ do {
         })
     let store = TabStore(directory: fixture.live, dependencies: dependencies)
     let outcome = store.save(fixture.entries)
-    if case .failed(let error) = outcome {
+    if let error = outcome.primaryError {
         print("TabStore second-write failure: \(error)")
+        if let warning = outcome.cleanupWarning { print("TabStore cleanup warning: \(warning)") }
     }
     check(!outcome.succeeded, "second staging write failure returns a failed outcome")
     check(writeCount == 2 && !exchangeCalled,
           "second write failure prevents any directory exchange")
     let after = tabDirectoryEvidence(fixture.live, label: "write failure after")
     assertTabEvidencePreserved(before, after, label: "second-write failure")
-    check(tabTransactionDirectories(root).count >= 1,
-          "failed staging is retained as transaction evidence")
+    check(tabTransactionDirectories(root).isEmpty,
+          "failed staging is removed before failure-artifact bounding")
 
     // The same injected store proves ViewModel timestamp/status behavior without
     // constructing a model from the user's Application Support directory.
@@ -3231,8 +3246,9 @@ do {
             throw TabStoreCheckFailure.exchange
         })
     let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(fixture.entries)
-    if case .failed(let error) = outcome {
+    if let error = outcome.primaryError {
         print("TabStore exchange failure: \(error)")
+        if let warning = outcome.cleanupWarning { print("TabStore cleanup warning: \(warning)") }
     }
     check(!outcome.succeeded, "directory exchange failure returns a failed outcome")
     check(exchangeCalled, "exchange failure seam was exercised")
@@ -3338,9 +3354,11 @@ do {
         })
     let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(fixture.entries)
     switch outcome {
-    case .failed(let error):
-        print("TabStore corrupt-staging outcome: \(error)")
-        if case .validationFailed(_, let reason) = error {
+    case .failed:
+        if let error = outcome.primaryError {
+            print("TabStore corrupt-staging outcome: \(error)")
+        }
+        if let error = outcome.primaryError, case .validationFailed(_, let reason) = error {
             check(reason.contains("cannot decode"),
                   "corrupt staging is refused by precommit validation")
         } else {
@@ -3376,12 +3394,13 @@ do {
             }
         })
     let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(entries)
-    if case .failed(let error) = outcome {
+    if let error = outcome.primaryError {
         print("TabStore post-exchange rollback outcome: \(error)")
+        if let warning = outcome.cleanupWarning { print("TabStore cleanup warning: \(warning)") }
     }
     check(!outcome.succeeded, "post-exchange validation failure returns failure")
     check(exchangeCalls == 2, "post-exchange validation failure performs atomic rollback")
-    if case .failed(.postCommitValidationFailed) = outcome {
+    if let error = outcome.primaryError, case .postCommitValidationFailed = error {
         check(true, "post-exchange failure is typed separately from precommit failure")
     } else {
         check(false, "post-exchange failure is typed separately from precommit failure")
@@ -3417,7 +3436,7 @@ do {
         TabStore.Entry(id: newID, document: newDocument)
     ])
     check(!outcome.succeeded, "rollback exchange failure returns failure")
-    if case .failed(.rollbackFailed) = outcome {
+    if let error = outcome.primaryError, case .rollbackFailed = error {
         check(true, "rollback exchange failure returns a distinct severe outcome")
     } else {
         check(false, "rollback exchange failure returns a distinct severe outcome")
@@ -3467,6 +3486,258 @@ do {
           "transaction pruning does not run before exchange and validation")
     check(afterCount <= TabStore.maximumRetainedTransactions,
           "successful commit retains at most three transaction siblings")
+}
+
+// MARK: - TabStore follow-up: empty snapshots and bounded failure artifacts
+// These tests deliberately use fresh canonical /tmp roots and never FileIO's
+// Application Support path.
+do {
+    let root = freshTabStoreRoot("empty-snapshot")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "empty snapshot before")
+    let store = TabStore(directory: fixture.live)
+    let outcome = store.save([])
+    check(!outcome.succeeded, "empty snapshots fail before staging")
+    if let error = outcome.primaryError, case .emptySnapshot = error {
+        check(true, "empty snapshot returns the typed emptySnapshot error")
+    } else {
+        check(false, "empty snapshot returns the typed emptySnapshot error")
+    }
+    check(outcome.cleanupWarning == nil, "empty snapshot has no cleanup warning without artifacts")
+    let after = tabDirectoryEvidence(fixture.live, label: "empty snapshot after")
+    assertTabEvidencePreserved(before, after, label: "empty snapshot rejection")
+    check(tabTransactionDirectories(root).isEmpty,
+          "empty snapshot creates zero new transaction directories")
+
+    let timestamp = Date(timeIntervalSince1970: 1_700_000_300)
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: store)
+        vm.sessions = []
+        vm.document = fixture.single
+        vm.lastSavedAt = timestamp
+        let vmOutcome = vm.autosaveAllSessions()
+        check(!vmOutcome.succeeded, "empty ViewModel snapshot uses the failure path")
+        check(vm.lastSavedAt == timestamp,
+              "empty snapshot leaves ViewModel lastSavedAt unchanged")
+        check(vm.statusMessage == "自動保存失敗，已保留舊版本",
+              "empty snapshot exposes the existing failure status")
+    }
+    let afterViewModel = tabDirectoryEvidence(fixture.live, label: "empty snapshot after ViewModel")
+    assertTabEvidencePreserved(before, afterViewModel, label: "empty ViewModel snapshot")
+    check(tabTransactionDirectories(root).isEmpty,
+          "empty ViewModel snapshot creates zero transaction directories")
+}
+
+do {
+    let root = freshTabStoreRoot("repeat-write-failure")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "repeat write failure before")
+    var writeCount = 0
+    var exchangeCalled = false
+    let production = TabStore.Dependencies.production
+    let dependencies = TabStore.Dependencies(
+        writeData: { data, url in
+            writeCount += 1
+            if writeCount == 2 { throw TabStoreCheckFailure.write }
+            try production.writeData(data, url)
+        },
+        exchangeDirectories: { _, _ in
+            exchangeCalled = true
+            throw TabStoreCheckFailure.exchange
+        },
+        removeItem: production.removeItem)
+    let store = TabStore(directory: fixture.live, dependencies: dependencies)
+    for attempt in 1...5 {
+        writeCount = 0
+        let outcome = store.save(fixture.entries)
+        if let error = outcome.primaryError, case .writeFailed = error {
+            check(true, "repeat write failure \(attempt) keeps writeFailed as primary error")
+        } else {
+            check(false, "repeat write failure \(attempt) keeps writeFailed as primary error")
+        }
+        check(!exchangeCalled, "repeat write failure \(attempt) never reaches exchange")
+        check(outcome.cleanupWarning == nil,
+              "repeat write failure \(attempt) cleans its partial staging")
+        check(tabTransactionDirectories(root).isEmpty,
+              "repeat write failure \(attempt) leaves zero transaction artifacts")
+        let after = tabDirectoryEvidence(fixture.live, label: "repeat write failure \(attempt) after")
+        assertTabEvidencePreserved(before, after, label: "repeat write failure \(attempt)")
+    }
+}
+
+do {
+    let root = freshTabStoreRoot("repeat-exchange-failure")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "repeat exchange failure before")
+    var exchangeCount = 0
+    let production = TabStore.Dependencies.production
+    let dependencies = TabStore.Dependencies(
+        writeData: production.writeData,
+        exchangeDirectories: { _, _ in
+            exchangeCount += 1
+            throw TabStoreCheckFailure.exchange
+        },
+        removeItem: production.removeItem)
+    let store = TabStore(directory: fixture.live, dependencies: dependencies)
+    for attempt in 1...5 {
+        let outcome = store.save(fixture.entries)
+        if let error = outcome.primaryError, case .exchangeFailed = error {
+            check(true, "repeat exchange failure \(attempt) keeps exchangeFailed as primary error")
+        } else {
+            check(false, "repeat exchange failure \(attempt) keeps exchangeFailed as primary error")
+        }
+        let count = tabTransactionDirectories(root).count
+        check(count == min(attempt, TabStore.maximumRetainedTransactions),
+              "repeat exchange failure \(attempt) retains current plus at most two siblings")
+        let after = tabDirectoryEvidence(fixture.live, label: "repeat exchange failure \(attempt) after")
+        assertTabEvidencePreserved(before, after, label: "repeat exchange failure \(attempt)")
+    }
+    check(exchangeCount == 5, "repeat exchange failure exercises every injected attempt")
+}
+
+do {
+    let root = freshTabStoreRoot("cleanup-failure")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let before = tabDirectoryEvidence(fixture.live, label: "cleanup failure before")
+    var writeCount = 0
+    var attemptedRemovals: [URL] = []
+    let production = TabStore.Dependencies.production
+    let dependencies = TabStore.Dependencies(
+        writeData: { data, url in
+            writeCount += 1
+            if writeCount == 2 { throw TabStoreCheckFailure.write }
+            try production.writeData(data, url)
+        },
+        exchangeDirectories: { _, _ in
+            throw TabStoreCheckFailure.exchange
+        },
+        removeItem: { url in
+            attemptedRemovals.append(url)
+            throw TabStoreCheckFailure.write
+        })
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save(fixture.entries)
+    if let error = outcome.primaryError, case .writeFailed = error {
+        check(true, "cleanup refusal preserves writeFailed as the primary error")
+    } else {
+        check(false, "cleanup refusal preserves writeFailed as the primary error")
+    }
+    check(attemptedRemovals.count == 1, "cleanup refusal attempts to remove only the partial current staging")
+    print("TabStore cleanup-failure attempted removals: \(attemptedRemovals.map { $0.path })")
+    let live = fixture.live.standardizedFileURL
+    let liveParent = live.deletingLastPathComponent().standardizedFileURL
+    check(attemptedRemovals.allSatisfy { $0.standardizedFileURL != live },
+          "cleanup refusal never attempts to remove live")
+    check(attemptedRemovals.allSatisfy {
+        let target = $0.standardizedFileURL
+        return target.lastPathComponent.hasPrefix(TabStore.transactionDirectoryPrefix)
+            && target.deletingLastPathComponent().standardizedFileURL == liveParent
+    }, "cleanup refusal attempts only same-parent transaction paths")
+    if let warning = outcome.cleanupWarning {
+        check(Set(warning.failedURLs.map { $0.standardizedFileURL.path })
+              == Set(attemptedRemovals.map { $0.standardizedFileURL.path }),
+              "cleanup warning explicitly reports every failed removal URL")
+    } else {
+        check(false, "cleanup warning explicitly reports every failed removal URL")
+    }
+    let after = tabDirectoryEvidence(fixture.live, label: "cleanup failure after")
+    assertTabEvidencePreserved(before, after, label: "cleanup refusal")
+    check(tabTransactionDirectories(root).count <= TabStore.maximumRetainedTransactions,
+          "cleanup refusal still bounds transaction artifacts")
+}
+
+do {
+    let root = freshTabStoreRoot("postrollback-bounded")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let seeded = seedTabTransactions(root, count: 4)
+    let before = tabDirectoryEvidence(fixture.live, label: "postrollback bounded before")
+    let newID = UUID(uuidString: "88888888-8888-4888-8888-888888888888")!
+    let newDocument = MindDocument(title: "Bounded rollback candidate", root: MindNode(text: "失敗後的候選根"))
+    let production = TabStore.Dependencies.production
+    var exchangeCalls = 0
+    let dependencies = TabStore.Dependencies(
+        writeData: production.writeData,
+        exchangeDirectories: { live, staging in
+            exchangeCalls += 1
+            try production.exchangeDirectories(live, staging)
+            if exchangeCalls == 1 {
+                try Data("bounded corrupt post-exchange".utf8).write(
+                    to: live.appendingPathComponent("\(newID.uuidString).mindmap"), options: .atomic)
+            }
+        },
+        removeItem: production.removeItem)
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save([
+        TabStore.Entry(id: newID, document: newDocument)
+    ])
+    check(!outcome.succeeded, "post-exchange bounded failure returns failure")
+    if let error = outcome.primaryError, case .postCommitValidationFailed = error {
+        check(true, "post-exchange bounded failure keeps post-validation as primary error")
+    } else {
+        check(false, "post-exchange bounded failure keeps post-validation as primary error")
+    }
+    let after = tabDirectoryEvidence(fixture.live, label: "postrollback bounded after")
+    assertTabEvidencePreserved(before, after, label: "post-exchange bounded rollback")
+    let transactions = tabTransactionDirectories(root)
+    let corruptData = Data("bounded corrupt post-exchange".utf8)
+    check(transactions.contains {
+        (try? Data(contentsOf: $0.appendingPathComponent("\(newID.uuidString).mindmap"))) == corruptData
+    }, "post-exchange bounded cleanup preserves the failed current snapshot")
+    let seededPaths = Set(seeded.map { $0.standardizedFileURL.path })
+    let retainedSeeded = transactions.filter { seededPaths.contains($0.standardizedFileURL.path) }
+    check(transactions.count <= TabStore.maximumRetainedTransactions
+              && retainedSeeded.count <= TabStore.maximumRetainedTransactions - 1,
+          "post-exchange bounded cleanup evicts only older unrelated siblings")
+}
+
+do {
+    let root = freshTabStoreRoot("rollback-failure-bounded")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let seeded = seedTabTransactions(root, count: 4)
+    let before = tabDirectoryEvidence(fixture.live, label: "rollback-failure bounded before")
+    let newID = UUID(uuidString: "99999999-9999-4999-8999-999999999999")!
+    let newDocument = MindDocument(title: "Severe bounded candidate", root: MindNode(text: "嚴重失敗候選根"))
+    let production = TabStore.Dependencies.production
+    var exchangeCalls = 0
+    let dependencies = TabStore.Dependencies(
+        writeData: production.writeData,
+        exchangeDirectories: { live, staging in
+            exchangeCalls += 1
+            if exchangeCalls == 2 { throw TabStoreCheckFailure.exchange }
+            try production.exchangeDirectories(live, staging)
+            try Data("bounded corrupt rollback".utf8).write(
+                to: live.appendingPathComponent("\(newID.uuidString).mindmap"), options: .atomic)
+        },
+        removeItem: production.removeItem)
+    let outcome = TabStore(directory: fixture.live, dependencies: dependencies).save([
+        TabStore.Entry(id: newID, document: newDocument)
+    ])
+    check(!outcome.succeeded, "bounded rollback failure returns failure")
+    if let error = outcome.primaryError, case .rollbackFailed = error {
+        check(true, "bounded rollback failure keeps the severe primary error")
+    } else {
+        check(false, "bounded rollback failure keeps the severe primary error")
+    }
+    check(exchangeCalls == 2, "bounded rollback failure reaches the failed rollback exchange")
+    assertTestDirectory(fixture.live, label: "live after bounded rollback failure")
+    let transactions = tabTransactionDirectories(root)
+    let oldName = "\(fixture.singleID.uuidString).mindmap"
+    let oldData = before.files[oldName]!
+    check(transactions.contains {
+        (try? Data(contentsOf: $0.appendingPathComponent(oldName))) == oldData
+    }, "bounded rollback failure preserves the old live path")
+    let corruptData = Data("bounded corrupt rollback".utf8)
+    check((try? Data(contentsOf: fixture.live.appendingPathComponent("\(newID.uuidString).mindmap"))) == corruptData,
+          "bounded rollback failure preserves the live path")
+    let seededPaths = Set(seeded.map { $0.standardizedFileURL.path })
+    let retainedSeeded = transactions.filter { seededPaths.contains($0.standardizedFileURL.path) }
+    check(transactions.count <= TabStore.maximumRetainedTransactions
+              && retainedSeeded.count <= TabStore.maximumRetainedTransactions - 1,
+          "bounded rollback failure evicts only older unrelated siblings")
 }
 
 if failures == 0 {

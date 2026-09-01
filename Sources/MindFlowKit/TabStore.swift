@@ -4,7 +4,7 @@ import Foundation
 /// Transactional autosave for the set of open tabs.
 ///
 /// A save builds and validates a complete sibling snapshot, swaps directories
-/// atomically, validates the new live directory, and only then prunes old
+/// atomically, validates the new live directory, and only then cleans old
 /// transaction directories.
 public struct TabStore {
     public static let maximumEntries = 20
@@ -24,6 +24,12 @@ public struct TabStore {
     public enum CleanupWarning: CustomStringConvertible {
         case cleanupFailed([URL])
 
+        public var failedURLs: [URL] {
+            switch self {
+            case .cleanupFailed(let urls): return urls
+            }
+        }
+
         public var description: String {
             switch self {
             case .cleanupFailed(let urls):
@@ -33,6 +39,7 @@ public struct TabStore {
     }
 
     public enum SaveError: Swift.Error, CustomStringConvertible {
+        case emptySnapshot
         case duplicateID(UUID)
         case tooManyEntries(Int)
         case encodingFailed(UUID, String)
@@ -48,6 +55,8 @@ public struct TabStore {
 
         public var description: String {
             switch self {
+            case .emptySnapshot:
+                return "empty tab snapshot is not allowed"
             case .duplicateID(let id):
                 return "duplicate tab ID: \(id.uuidString)"
             case .tooManyEntries(let count):
@@ -78,11 +87,22 @@ public struct TabStore {
 
     public enum SaveOutcome {
         case committed(warning: CleanupWarning?)
-        case failed(SaveError)
+        case failed(error: SaveError, warning: CleanupWarning?)
 
         public var succeeded: Bool {
             if case .committed = self { return true }
             return false
+        }
+
+        public var primaryError: SaveError? {
+            if case .failed(let error, _) = self { return error }
+            return nil
+        }
+
+        public var cleanupWarning: CleanupWarning? {
+            switch self {
+            case .committed(let warning), .failed(_, let warning): return warning
+            }
         }
     }
 
@@ -91,11 +111,14 @@ public struct TabStore {
     public struct Dependencies {
         public var writeData: (Data, URL) throws -> Void
         public var exchangeDirectories: (URL, URL) throws -> Void
+        public var removeItem: (URL) throws -> Void
 
         public init(writeData: @escaping (Data, URL) throws -> Void,
-                    exchangeDirectories: @escaping (URL, URL) throws -> Void) {
+                    exchangeDirectories: @escaping (URL, URL) throws -> Void,
+                    removeItem: @escaping (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) }) {
             self.writeData = writeData
             self.exchangeDirectories = exchangeDirectories
+            self.removeItem = removeItem
         }
 
         public static var production: Dependencies {
@@ -105,6 +128,9 @@ public struct TabStore {
                 },
                 exchangeDirectories: { live, staging in
                     try TabStore.atomicExchange(live: live, staging: staging)
+                },
+                removeItem: { url in
+                    try FileManager.default.removeItem(at: url)
                 }
             )
         }
@@ -120,14 +146,16 @@ public struct TabStore {
 
     @discardableResult
     public func save(_ entries: [Entry]) -> SaveOutcome {
+        guard !entries.isEmpty else { return failure(.emptySnapshot) }
+
         var ids = Set<UUID>()
         for entry in entries {
             guard ids.insert(entry.id).inserted else {
-                return .failed(.duplicateID(entry.id))
+                return failure(.duplicateID(entry.id))
             }
         }
         guard entries.count <= Self.maximumEntries else {
-            return .failed(.tooManyEntries(entries.count))
+            return failure(.tooManyEntries(entries.count))
         }
 
         let encoded: [EncodedEntry]
@@ -142,14 +170,14 @@ public struct TabStore {
             }
         } catch {
             let id = entries.first?.id ?? UUID()
-            return .failed(.encodingFailed(id, String(describing: error)))
+            return failure(.encodingFailed(id, String(describing: error)))
         }
 
         let fileManager = FileManager.default
         do {
             try Self.ensureDirectory(directory, fileManager: fileManager)
         } catch {
-            return .failed(.liveDirectoryUnavailable(directory, String(describing: error)))
+            return failure(.liveDirectoryUnavailable(directory, String(describing: error)))
         }
 
         let staging = Self.transactionURL(for: directory, fileManager: fileManager)
@@ -159,39 +187,43 @@ public struct TabStore {
                 throw DirectoryFailure("path is not a directory")
             }
         } catch {
-            return .failed(.stagingDirectoryUnavailable(staging, String(describing: error)))
+            return failure(.stagingDirectoryUnavailable(staging, String(describing: error)))
         }
 
         for file in encoded {
             do {
                 try dependencies.writeData(file.data, staging.appendingPathComponent(file.filename))
             } catch {
-                return .failed(.writeFailed(staging.appendingPathComponent(file.filename),
-                                            String(describing: error)))
+                return failure(.writeFailed(staging.appendingPathComponent(file.filename),
+                                            String(describing: error)),
+                               current: staging, removeCurrent: true)
             }
         }
 
         do {
             try Self.validate(directory: staging, expected: encoded, fileManager: fileManager)
         } catch let error as ValidationFailure {
-            return .failed(.validationFailed(staging, error.reason))
+            return failure(.validationFailed(staging, error.reason),
+                           current: staging, removeCurrent: true)
         } catch {
-            return .failed(.validationFailed(staging, String(describing: error)))
+            return failure(.validationFailed(staging, String(describing: error)),
+                           current: staging, removeCurrent: true)
         }
 
         let oldLive: DirectoryState
         do {
             oldLive = try Self.snapshot(directory: directory, fileManager: fileManager)
         } catch {
-            return .failed(.liveSnapshotFailed(directory, String(describing: error)))
+            return failure(.liveSnapshotFailed(directory, String(describing: error)),
+                           current: staging, removeCurrent: true)
         }
 
         do {
             try dependencies.exchangeDirectories(directory, staging)
         } catch {
-            // Keep the complete staging directory as evidence. Production's
-            // renamex_np is atomic: a failed exchange leaves live untouched.
-            return .failed(.exchangeFailed(directory, staging, String(describing: error)))
+            // Keep the complete attempted snapshot, then bound older siblings.
+            return failure(.exchangeFailed(directory, staging, String(describing: error)),
+                           current: staging)
         }
 
         do {
@@ -201,8 +233,9 @@ public struct TabStore {
                 try dependencies.exchangeDirectories(directory, staging)
             } catch {
                 // Both paths are intentionally preserved for forensic recovery.
-                return .failed(.rollbackFailed(live: directory, staging: staging,
-                                               reason: String(describing: error)))
+                return failure(.rollbackFailed(live: directory, staging: staging,
+                                               reason: String(describing: error)),
+                               current: staging, preserveLive: true)
             }
             do {
                 let restored = try Self.snapshot(directory: directory, fileManager: fileManager)
@@ -210,21 +243,22 @@ public struct TabStore {
                     throw ValidationFailure(reason: "restored live bytes or mtimes differ from the pre-exchange snapshot")
                 }
             } catch {
-                return .failed(.rollbackValidationFailed(directory, String(describing: error)))
+                return failure(.rollbackValidationFailed(directory, String(describing: error)),
+                               current: staging, preserveLive: true)
             }
-            return .failed(.postCommitValidationFailed(directory, error.reason))
+            return failure(.postCommitValidationFailed(directory, error.reason), current: staging)
         } catch {
             do {
                 try dependencies.exchangeDirectories(directory, staging)
             } catch {
-                return .failed(.rollbackFailed(live: directory, staging: staging,
-                                               reason: String(describing: error)))
+                return failure(.rollbackFailed(live: directory, staging: staging,
+                                               reason: String(describing: error)),
+                               current: staging, preserveLive: true)
             }
-            return .failed(.postCommitValidationFailed(directory, String(describing: error)))
+            return failure(.postCommitValidationFailed(directory, String(describing: error)), current: staging)
         }
 
-        let warning = Self.pruneTransactions(directory: directory, current: staging,
-                                              fileManager: fileManager)
+        let warning = warning(for: cleanupTransactions(preserved: [staging]))
         return .committed(warning: warning)
     }
 
@@ -250,6 +284,124 @@ public struct TabStore {
     private struct DirectoryState: Equatable {
         let files: [String: Data]
         let modificationDates: [String: Date]
+    }
+
+    private func failure(_ error: SaveError, current: URL? = nil,
+                         removeCurrent: Bool = false, preserveLive: Bool = false) -> SaveOutcome {
+        var preserved = [URL]()
+        var failed = [URL]()
+        if let current {
+            if removeCurrent {
+                if !removeTransaction(current) {
+                    failed.append(current)
+                    preserved.append(current)
+                }
+            } else {
+                preserved.append(current)
+            }
+        }
+        failed.append(contentsOf: cleanupTransactions(preserved: preserved + (preserveLive ? [directory] : [])))
+        return .failed(error: error, warning: warning(for: failed))
+    }
+
+    private func cleanupTransactions(preserved: [URL]) -> [URL] {
+        pruneTransactions(preserved: preserved)
+    }
+
+    private func removeTransaction(_ target: URL) -> Bool {
+        let safeTarget = target.standardizedFileURL
+        guard Self.isSafeTransactionTarget(safeTarget, live: directory) else { return false }
+        do {
+            try dependencies.removeItem(safeTarget)
+            return !FileManager.default.fileExists(atPath: safeTarget.path)
+        } catch {
+            return false
+        }
+    }
+
+    private func pruneTransactions(preserved: [URL]) -> [URL] {
+        let fileManager = FileManager.default
+        let live = directory.standardizedFileURL
+        let parent = live.deletingLastPathComponent().standardizedFileURL
+        let urls: [URL]
+        do {
+            urls = try fileManager.contentsOfDirectory(at: parent,
+                                                        includingPropertiesForKeys: [.contentModificationDateKey],
+                                                        options: [])
+        } catch {
+            return [parent]
+        }
+        let candidates = urls.filter {
+            $0.lastPathComponent.hasPrefix(Self.transactionDirectoryPrefix)
+                && Self.isDirectory($0, fileManager: fileManager)
+        }
+        var retained = Set<String>()
+        var failed: [URL] = []
+        for url in preserved {
+            let target = url.standardizedFileURL
+            if target.lastPathComponent.hasPrefix(Self.transactionDirectoryPrefix)
+                && target.deletingLastPathComponent().standardizedFileURL == parent
+                && candidates.contains(where: { $0.standardizedFileURL.path == target.path }) {
+                retained.insert(target.path)
+            }
+        }
+
+        var dated: [(url: URL, date: Date)] = []
+        for url in candidates where !retained.contains(url.standardizedFileURL.path) {
+            do {
+                let values = try url.resourceValues(forKeys: [.contentModificationDateKey])
+                guard let date = values.contentModificationDate else {
+                    failed.append(url)
+                    retained.insert(url.standardizedFileURL.path)
+                    continue
+                }
+                dated.append((url, date))
+            } catch {
+                // Do not delete a transaction whose ordering metadata is unreadable.
+                failed.append(url)
+                retained.insert(url.standardizedFileURL.path)
+            }
+        }
+        dated.sort {
+            if $0.date != $1.date { return $0.date > $1.date }
+            return $0.url.lastPathComponent > $1.url.lastPathComponent
+        }
+        let slots = max(0, Self.maximumRetainedTransactions - retained.count)
+        for item in dated.prefix(slots) {
+            retained.insert(item.url.standardizedFileURL.path)
+        }
+
+        for url in candidates where !retained.contains(url.standardizedFileURL.path) {
+            let target = url.standardizedFileURL
+            guard Self.isSafeTransactionTarget(target, live: live) else {
+                failed.append(url)
+                continue
+            }
+            do {
+                try dependencies.removeItem(target)
+                if fileManager.fileExists(atPath: target.path) {
+                    failed.append(url)
+                }
+            } catch {
+                failed.append(url)
+            }
+        }
+        return failed
+    }
+
+    private func warning(for urls: [URL]) -> CleanupWarning? {
+        var seen = Set<String>()
+        let unique = urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
+        return unique.isEmpty ? nil : .cleanupFailed(unique)
+    }
+
+    private static func isSafeTransactionTarget(_ target: URL, live: URL) -> Bool {
+        let standardizedTarget = target.standardizedFileURL
+        let standardizedLive = live.standardizedFileURL
+        guard standardizedTarget != standardizedLive else { return false }
+        guard standardizedTarget.deletingLastPathComponent().standardizedFileURL
+                == standardizedLive.deletingLastPathComponent().standardizedFileURL else { return false }
+        return standardizedTarget.lastPathComponent.hasPrefix(transactionDirectoryPrefix)
     }
 
     private static func ensureDirectory(_ url: URL, fileManager: FileManager) throws {
@@ -350,47 +502,6 @@ public struct TabStore {
             }
         }
         return DirectoryState(files: files, modificationDates: dates)
-    }
-
-    private static func pruneTransactions(directory: URL, current: URL,
-                                          fileManager: FileManager) -> CleanupWarning? {
-        let parent = directory.deletingLastPathComponent()
-        let urls: [URL]
-        do {
-            urls = try fileManager.contentsOfDirectory(at: parent,
-                                                        includingPropertiesForKeys: [.contentModificationDateKey],
-                                                        options: [])
-        } catch {
-            return .cleanupFailed([parent])
-        }
-        var candidates = urls.filter {
-            $0.lastPathComponent.hasPrefix(transactionDirectoryPrefix)
-                && isDirectory($0, fileManager: fileManager)
-        }
-        if !candidates.contains(where: { $0.path == current.path }) {
-            candidates.append(current)
-        }
-        let others = candidates
-            .filter { $0.path != current.path }
-            .sorted {
-                let lhs = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-                    ?? .distantPast
-                let rhs = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-                    ?? .distantPast
-                if lhs != rhs { return lhs > rhs }
-                return $0.lastPathComponent > $1.lastPathComponent
-            }
-        let retained = Set(([current] + Array(others.prefix(max(0, maximumRetainedTransactions - 1))))
-            .map(\.path))
-        var failed: [URL] = []
-        for url in candidates where !retained.contains(url.path) {
-            do {
-                try fileManager.removeItem(at: url)
-            } catch {
-                failed.append(url)
-            }
-        }
-        return failed.isEmpty ? nil : .cleanupFailed(failed)
     }
 
     private static func diagnostics(_ entries: [EncodedEntry]) -> String {
