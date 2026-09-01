@@ -1,7 +1,8 @@
 import Foundation
 
 /// Safety limits shared by interchange import and export.
-/// Native `.mindmap` persistence intentionally does not use this type.
+/// They cover external interchange/paste payloads, not manual editor depth;
+/// native `.mindmap` persistence intentionally does not use this type.
 public struct ImportLimits: Equatable {
     public static let standard = ImportLimits(maxBytes: 8 * 1024 * 1024, maxLevels: 128)
 
@@ -59,8 +60,8 @@ public enum InterchangeError: Error, Equatable, CustomStringConvertible {
             return "無法解析\(format)格式"
         case .tooLarge(let limit, _):
             return "\(format)超過 \(Self.byteLimitDescription(limit)) 大小上限"
-        case .tooDeep(let limit, _):
-            return "\(format)超過 \(limit) 層深度上限"
+        case .tooDeep(let limit, let observedLevel):
+            return "\(format)在第 \(observedLevel) 層超過 \(limit) 層深度上限"
         }
     }
 

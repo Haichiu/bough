@@ -291,6 +291,14 @@ func assertInterchangeStructure(_ expected: MindNode, _ actual: MindNode, label:
     }
 }
 
+func maximumNodeLevel(_ node: MindNode, level: Int = 1) -> Int {
+    var maximum = level
+    for child in node.children {
+        maximum = max(maximum, maximumNodeLevel(child, level: level + 1))
+    }
+    return maximum
+}
+
 // MARK: - Layout engine
 
 do {
@@ -3908,6 +3916,116 @@ do {
     check(transactions.count <= TabStore.maximumRetainedTransactions
               && retainedSeeded.count <= TabStore.maximumRetainedTransactions - 1,
           "bounded rollback failure evicts only older unrelated siblings")
+}
+
+// MARK: - T-036 follow-up: adopted OPML levels and destination-aware paste
+
+do {
+    let limits = ImportLimits(maxBytes: 4096, maxLevels: 2)
+    let accepted = """
+    <opml version="2.0"><body>
+      <outline text="First"/>
+      <outline text="Second"/>
+    </body></opml>
+    """
+    if let document = try? MapImporter.opml(accepted, limits: limits) {
+        check(document.root.text == "First", "OPML keeps the first top-level outline as root")
+        check(document.root.children.map(\.text) == ["Second"],
+              "OPML accepts a second top-level leaf at structural level 2")
+    } else {
+        check(false, "OPML accepts a second top-level leaf at structural level 2")
+    }
+
+    let nestedSecond = """
+    <opml version="2.0"><body>
+      <outline text="First"/>
+      <outline text="Second"><outline text="Child under second"/></outline>
+    </body></opml>
+    """
+    do {
+        _ = try MapImporter.opml(nestedSecond, limits: limits)
+        check(false, "OPML rejects a child of the adopted second top-level at level 3")
+    } catch let error as InterchangeError {
+        if case .tooDeep(let limit, let observedLevel) = error {
+            check(limit == 2 && observedLevel == 3,
+                  "OPML rejects a child of the adopted second top-level at level 3")
+        } else {
+            check(false, "OPML rejects a child of the adopted second top-level at level 3")
+        }
+    } catch {
+        check(false, "OPML rejects a child of the adopted second top-level at level 3")
+    }
+}
+
+do {
+    let root = freshInterchangeRoot("joined-depth")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let destinationID = UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!
+    let base = MindDocument(title: "Destination", root: MindNode(
+        text: "Root", children: [MindNode(id: destinationID, text: "Deep destination")]))
+    let source = markdownChain(levels: 128)
+    check((try? MapImporter.markdown(source)) != nil,
+          "source at level 128 passes before destination attachment")
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: TabStore(directory: root.appendingPathComponent("tabs", isDirectory: true)))
+        vm.document = base
+        vm.selection = destinationID
+        vm.rename(id: destinationID, to: "Renamed destination")
+        let beforeDocument = vm.document
+        let beforeSelection = vm.selection
+        let beforeEditing = vm.editingID
+        let beforePath = URL(fileURLWithPath: "/tmp/mindflow-joined-depth.mindmap")
+        vm.filePath = beforePath
+        vm.dirty = true
+        let beforeDirty = vm.dirty
+        let timestamp = Date(timeIntervalSince1970: 1_700_200_000)
+        vm.lastSavedAt = timestamp
+
+        vm.insertTextAsNodes(source, sourceLabel: "Markdown")
+        check(vm.document == beforeDocument,
+              "joined level 129 paste leaves the document unchanged")
+        check(vm.selection == beforeSelection && vm.editingID == beforeEditing,
+              "joined level 129 paste leaves selection/editing unchanged")
+        check(vm.filePath == beforePath && vm.dirty == beforeDirty && vm.lastSavedAt == timestamp,
+              "joined level 129 paste leaves filePath/dirty/timestamp unchanged")
+        check(vm.statusMessage?.contains("128") == true && vm.statusMessage?.contains("129") == true,
+              "joined depth status reports final level 129 and global 128 limit")
+
+        vm.undo()
+        check(vm.document == base, "joined rejection leaves the existing undo stack intact")
+    }
+}
+
+do {
+    let root = freshInterchangeRoot("root-boundary")
+    defer { try? FileManager.default.removeItem(at: root) }
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: TabStore(directory: root.appendingPathComponent("tabs", isDirectory: true)))
+        vm.insertTextAsNodes(markdownChain(levels: 128), sourceLabel: "Markdown")
+        check(vm.document.root.children.count == 1,
+              "root-level paste accepts a source ending at level 128")
+        check(maximumNodeLevel(vm.document.root) == 128,
+              "root-level paste preserves the exact final level 128 boundary")
+    }
+}
+
+do {
+    let root = freshInterchangeRoot("too-deep-target")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let deepDocument = interchangeChainDocument(levels: 128)
+    var deepest = deepDocument.root
+    while let child = deepest.children.first { deepest = child }
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: TabStore(directory: root.appendingPathComponent("tabs", isDirectory: true)))
+        vm.document = deepDocument
+        vm.selection = deepest.id
+        let before = vm.document
+        vm.insertTextAsNodes(markdownChain(levels: 2), sourceLabel: "Markdown")
+        check(vm.document == before,
+              "a level-128 destination rejects a level-2 imported child")
+        check(vm.statusMessage?.contains("128") == true && vm.statusMessage?.contains("129") == true,
+              "too-deep destination reports global limit and final level")
+    }
 }
 
 // MARK: - T-036: bounded interchange import/export

@@ -715,18 +715,61 @@ public final class MindMapViewModel: ObservableObject {
         selection ?? document.root.id
     }
 
+    /// Returns the 1-based structural level of an existing node without
+    /// imposing a limit on manually-created documents.
+    private func structuralLevel(of id: UUID) -> Int? {
+        var pending: [(node: MindNode, level: Int)] = [(document.root, 1)]
+        while let current = pending.popLast() {
+            if current.node.id == id { return current.level }
+            for child in current.node.children.reversed() {
+                pending.append((child, current.level + 1))
+            }
+        }
+        return nil
+    }
+
     /// Parses plain text / Markdown outline and appends it as nodes under
     /// `parentID` (falling back to the current selection, then root).
-    /// Used by ⌘⇧V paste and canvas drop.
+    /// Used by ⌘⇧V paste and canvas drop. The external subtree is bounded after
+    /// joining the existing document: source level `d` lands at `P + d - 1`.
+    /// Manual node creation remains unrestricted.
     public func insertTextAsNodes(_ rawText: String, sourceLabel: String, parentID: UUID? = nil) {
+        let targetID = parentID ?? selection ?? document.root.id
+        let standard = ImportLimits.standard
+        guard let parentLevel = structuralLevel(of: targetID) else {
+            notify("找不到\(sourceLabel)加入目標")
+            return
+        }
+        // A level-2 imported child would land below the global limit here.
+        // Reject before constructing the derived ImportLimits value.
+        guard parentLevel < standard.maxLevels else {
+            let observedLevel = parentLevel == Int.max ? Int.max : parentLevel + 1
+            reportInterchangeFailure(
+                InterchangeError.tooDeep(limit: standard.maxLevels, observedLevel: observedLevel),
+                format: sourceLabel)
+            return
+        }
+
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
             notify("沒有可加入的文字")
             return
         }
+        let limits = ImportLimits(maxBytes: standard.maxBytes,
+                                  maxLevels: standard.maxLevels - parentLevel + 1)
         let imported: MindDocument
         do {
-            imported = try MapImporter.markdown(text)
+            imported = try MapImporter.markdown(text, limits: limits)
+        } catch let error as InterchangeError {
+            if case .tooDeep(_, let observedLevel) = error {
+                let finalLevel = parentLevel + observedLevel - 1
+                reportInterchangeFailure(
+                    InterchangeError.tooDeep(limit: standard.maxLevels, observedLevel: finalLevel),
+                    format: sourceLabel)
+            } else {
+                reportInterchangeFailure(error, format: sourceLabel)
+            }
+            return
         } catch {
             reportInterchangeFailure(error, format: sourceLabel)
             return
@@ -735,11 +778,9 @@ public final class MindMapViewModel: ObservableObject {
             notify("無法解析\(sourceLabel)內容")
             return
         }
-        // Attach imported tree under the given node (or selection/root).
-        let parentID = parentID ?? selection ?? document.root.id
         let importedChildren = imported.root.children
         mutate { doc in
-            doc.root.update(parentID) { node in
+            doc.root.update(targetID) { node in
                 node.children.append(contentsOf: importedChildren)
             }
         }

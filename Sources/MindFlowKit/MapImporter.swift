@@ -236,7 +236,10 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
     }
 
     private let limits: ImportLimits
-    private var stack: [Node] = []
+    // Keep the effective document level with each parser node. Later OPML
+    // top-level outlines are adopted under the first root, so stack depth alone
+    // is not their structural depth.
+    private var stack: [(node: Node, level: Int)] = []
     private var rootNode: Node?
     private(set) var title: String?
     private var inTitle = false
@@ -267,7 +270,9 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
         case "outline":
             // OPML permits multiple body outlines; the existing importer treats
             // later top-level outlines as children of the established root.
-            let level = stack.isEmpty ? (rootNode == nil ? 1 : 2) : stack.count + 1
+            // Carry the adopted node's actual level so its children continue at
+            // level + 1 rather than restarting from parser stack depth.
+            let level = stack.last.map { $0.level + 1 } ?? (rootNode == nil ? 1 : 2)
             guard level <= limits.maxLevels else {
                 rejectTooDeep(parser, level: level)
                 return
@@ -276,13 +281,13 @@ private final class OPMLParserDelegate: NSObject, XMLParserDelegate {
             node.text = attributeDict["text"] ?? ""
             node.note = attributeDict["_note"] ?? ""
             if let parent = stack.last {
-                parent.children.append(node)
+                parent.node.children.append(node)
             } else if let establishedRoot = rootNode {
                 establishedRoot.children.append(node)
             } else {
                 rootNode = node
             }
-            stack.append(node)
+            stack.append((node, level))
         case "title":
             inTitle = true
             titleBuffer = ""
