@@ -4322,6 +4322,212 @@ do {
         check(vm.document == original, "rejected imports leave the existing undo stack intact")
     }
 }
+
+// T-036 icon: inspect the final decoded 8-bit raster, not source constants alone.
+struct IconRasterRunStats {
+    let count: Int
+    let weakestPeak: Int
+    let peaks: [Int]
+}
+
+func iconRasterColor(_ image: NSBitmapImageRep, x: Int, y: Int) -> Palette.RGB? {
+    guard x >= 0, x < image.pixelsWide, y >= 0, y < image.pixelsHigh,
+          image.bitsPerPixel == 32, image.samplesPerPixel == 4,
+          let bitmapData = image.bitmapData else {
+        return nil
+    }
+    let offset = y * image.bytesPerRow + x * 4
+    let bytes = UnsafeBufferPointer(start: bitmapData.advanced(by: offset), count: 4)
+    // NSBitmapImageRep decodes these generated PNGs as non-premultiplied RGBA.
+    return Palette.RGB(red: Double(bytes[0]) / 255,
+                       green: Double(bytes[1]) / 255,
+                       blue: Double(bytes[2]) / 255).quantized8
+}
+
+func iconInkScore(_ color: Palette.RGB) -> Int {
+    Int(((color.red + color.green + color.blue) * 255).rounded())
+}
+
+func iconRunStats(_ image: NSBitmapImageRep) -> IconRasterRunStats? {
+    guard image.pixelsWide > 0, image.pixelsHigh > 0 else { return nil }
+    let x = Int(floor(Double(image.pixelsWide) * 0.70))
+    var peaks: [Int] = []
+    var inRun = false
+    var peak = 0
+    for y in 0..<image.pixelsHigh {
+        guard let color = iconRasterColor(image, x: x, y: y) else { return nil }
+        let ink = iconInkScore(color) > 470
+        if ink {
+            if !inRun {
+                inRun = true
+                peak = 0
+            }
+            peak = max(peak, iconInkScore(color))
+        } else if inRun {
+            peaks.append(peak)
+            inRun = false
+        }
+    }
+    if inRun { peaks.append(peak) }
+    return IconRasterRunStats(count: peaks.count, weakestPeak: peaks.min() ?? 0, peaks: peaks)
+}
+
+func iconPixelCoordinate(_ coordinate: CGFloat, pixelSize: Int) -> Int {
+    let raw = Int(floor(coordinate * CGFloat(pixelSize) / 1024))
+    return min(max(raw, 0), pixelSize - 1)
+}
+
+func iconExpectedEndpoints(for band: AppIconArtwork.SizeBand) -> [CGPoint] {
+    switch band {
+    case .small:
+        return [CGPoint(x: 742, y: 712), CGPoint(x: 766, y: 512), CGPoint(x: 742, y: 312)]
+    case .mid:
+        return [CGPoint(x: 742, y: 727), CGPoint(x: 766, y: 512), CGPoint(x: 742, y: 297)]
+    case .large:
+        return [CGPoint(x: 742, y: 742), CGPoint(x: 766, y: 512), CGPoint(x: 742, y: 282)]
+    }
+}
+
+let expectedIconSlotNames: Set<String> = [
+    "icon_16x16.png", "icon_16x16@2x.png", "icon_32x32.png", "icon_32x32@2x.png",
+    "icon_128x128.png", "icon_128x128@2x.png", "icon_256x256.png", "icon_256x256@2x.png",
+    "icon_512x512.png", "icon_512x512@2x.png"
+]
+let iconSlots = AppIconArtwork.slots
+check(iconSlots.count == 10, "icon declares all ten iconset slots")
+check(Set(iconSlots.map { $0.fileName }) == expectedIconSlotNames,
+      "icon slot filenames match the iconutil contract")
+let expectedIconSlotSizes: [String: Int] = [
+    "icon_16x16.png": 16, "icon_16x16@2x.png": 32, "icon_32x32.png": 32,
+    "icon_32x32@2x.png": 64, "icon_128x128.png": 128, "icon_128x128@2x.png": 256,
+    "icon_256x256.png": 256, "icon_256x256@2x.png": 512,
+    "icon_512x512.png": 512, "icon_512x512@2x.png": 1024
+]
+let expectedIconSmallSlots = Set(["icon_16x16.png", "icon_16x16@2x.png"])
+let expectedIconMidSlots = Set(["icon_32x32.png", "icon_32x32@2x.png"])
+check(iconSlots.allSatisfy { expectedIconSlotSizes[$0.fileName] == $0.pixelSize },
+      "icon slots use their specified physical pixel sizes")
+check(iconSlots.allSatisfy { slot in
+    expectedIconSmallSlots.contains(slot.fileName) ? slot.band == .small :
+    expectedIconMidSlots.contains(slot.fileName) ? slot.band == .mid : slot.band == .large
+}, "icon slots use their specified logical artwork bands")
+
+var iconData: [String: Data] = [:]
+var iconImages: [String: NSBitmapImageRep] = [:]
+var iconBackgrounds: [String: NSBitmapImageRep] = [:]
+for slot in iconSlots {
+    do {
+        let data = try AppIconArtwork.pngData(for: slot)
+        iconData[slot.fileName] = data
+        guard let image = NSBitmapImageRep(data: data) else {
+            check(false, "icon " + slot.fileName + " decodes as PNG")
+            continue
+        }
+        iconImages[slot.fileName] = image
+        check(image.pixelsWide == slot.pixelSize && image.pixelsHigh == slot.pixelSize,
+              "icon " + slot.fileName + " has its declared final dimensions")
+        guard let stats = iconRunStats(image) else {
+            check(false, "icon " + slot.fileName + " has a readable final raster")
+            continue
+        }
+        print("Icon raster " + slot.fileName + ": " + String(image.pixelsWide) + "x"
+              + String(image.pixelsHigh) + " runs=" + String(stats.count)
+              + " peaks=" + String(describing: stats.peaks))
+        check(stats.count == 3, "icon " + slot.fileName + " has exactly three ink runs")
+        check(stats.weakestPeak >= 680, "icon " + slot.fileName + " weakest ink run reaches 680")
+
+        let backgroundData = try AppIconArtwork.pngData(for: slot, backgroundOnly: true)
+        guard let background = NSBitmapImageRep(data: backgroundData) else {
+            check(false, "icon " + slot.fileName + " background oracle decodes as PNG")
+            continue
+        }
+        iconBackgrounds[slot.fileName] = background
+    } catch {
+        check(false, "icon " + slot.fileName + " renders without error")
+    }
+}
+
+let physical32Slots = iconSlots.filter { $0.pixelSize == 32 }
+check(AppIconArtwork.metrics(for: .small).lineWidth == 112,
+      "small icon stroke strength uses the DESIGN 112px value")
+check(physical32Slots.count == 2,
+      "the two physical 32px slots are both represented")
+if let small32 = physical32Slots.first(where: { $0.band == .small }),
+   let mid32 = physical32Slots.first(where: { $0.band == .mid }),
+   let smallData = iconData[small32.fileName],
+   let midData = iconData[mid32.fileName] {
+    check(small32.band != mid32.band && small32.fileName != mid32.fileName,
+          "physical 32px slots retain distinct logical size bands")
+    check(AppIconArtwork.metrics(for: small32.band) != AppIconArtwork.metrics(for: mid32.band),
+          "small and mid 32px slots use distinct artwork metrics")
+    check(smallData != midData,
+          "small 32px and mid 32px final PNG bytes are not deduplicated")
+} else {
+    check(false, "physical 32px slots resolve both small and mid artwork")
+}
+
+let iconPalette = Palette.light
+let iconAccent = iconPalette.accentRGB.quantized8
+let iconCream = iconPalette.creamTextRGB.quantized8
+let iconBottom = Palette.iconGradientBottomRGB.quantized8
+let accentCoordinates = Palette.accentOKLCh
+let bottomCoordinates = Palette.iconGradientBottomOKLCh
+let hueDistance = abs(bottomCoordinates.hue - accentCoordinates.hue)
+let wrappedHueDistance = min(hueDistance, 360 - hueDistance)
+let finalBottomCoordinates = iconBottom.oklch
+let finalBottomHueDistance = abs(finalBottomCoordinates.hue - accentCoordinates.hue)
+let finalBottomWrappedHueDistance = min(finalBottomHueDistance, 360 - finalBottomHueDistance)
+let finalBottomChromaDelta = abs(finalBottomCoordinates.chroma - bottomCoordinates.chroma)
+print("Icon source colors: top=" + iconAccent.hex + " ink=" + iconCream.hex
+      + " bottom=" + iconBottom.hex)
+print(String(format: "Icon bottom OKLCh: L=%.6f C=%.6f h=%.3f", bottomCoordinates.lightness,
+             bottomCoordinates.chroma, bottomCoordinates.hue))
+check(iconAccent.hex == "#3368a0", "icon top stop comes from Palette light accent")
+check(iconCream.hex == "#f2efe7", "icon glyph ink comes from Palette light cream")
+if let largeImage = iconImages["icon_512x512@2x.png"],
+   let hubInk = iconRasterColor(largeImage, x: 355, y: 512) {
+    check(hubInk == iconCream, "icon final raster hub uses Palette cream ink")
+} else {
+    check(false, "icon final raster hub has a readable ink sample")
+}
+check(iconBottom.hex == "#003c71", "icon derived bottom stop has the expected final 8-bit value")
+check(abs(bottomCoordinates.lightness - accentCoordinates.lightness * 0.70) <= 0.000001,
+      "icon bottom preserves the specified OKLCh lightness multiplier")
+check(wrappedHueDistance <= 1.0, "icon bottom preserves accent OKLCh hue")
+check(bottomCoordinates.chroma <= accentCoordinates.chroma + 0.000001,
+      "icon gamut mapping only lowers OKLCh chroma")
+print(String(format: "Icon final bottom OKLCh: L=%.6f C=%.6f h=%.3f",
+             finalBottomCoordinates.lightness, finalBottomCoordinates.chroma, finalBottomCoordinates.hue))
+check(finalBottomWrappedHueDistance <= 1.0,
+      "icon final 8-bit bottom preserves accent hue within rounding")
+check(finalBottomChromaDelta <= 0.002,
+      "icon final 8-bit bottom preserves mapped chroma within rounding")
+
+var endpointContrasts: [Double] = []
+for slot in iconSlots {
+    guard let image = iconImages[slot.fileName],
+          let background = iconBackgrounds[slot.fileName] else { continue }
+    for (index, endpoint) in iconExpectedEndpoints(for: slot.band).enumerated() {
+        let x = iconPixelCoordinate(endpoint.x, pixelSize: image.pixelsWide)
+        let y = iconPixelCoordinate(endpoint.y, pixelSize: image.pixelsHigh)
+        let endpointLabel = "icon " + slot.fileName + " endpoint " + String(index + 1)
+        guard let foreground = iconRasterColor(image, x: x, y: y),
+              let localBackground = iconRasterColor(background, x: x, y: y) else {
+            check(false, endpointLabel + " has final-raster samples")
+            continue
+        }
+        let ratio = foreground.contrastRatio(with: localBackground)
+        endpointContrasts.append(ratio)
+        check(ratio >= 3.0, endpointLabel + " contrasts with its final local gradient")
+    }
+}
+if let minimum = endpointContrasts.min(), let maximum = endpointContrasts.max() {
+    print(String(format: "Icon endpoint final-raster contrast range: %.4f...%.4f", minimum, maximum))
+}
+check(endpointContrasts.count == iconSlots.count * 3,
+      "icon endpoint contrast covers every endpoint in every slot")
+
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

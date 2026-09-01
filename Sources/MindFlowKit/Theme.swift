@@ -97,6 +97,11 @@ public struct Palette {
         let rgb: RGB
     }
 
+    private enum GamutMapping {
+        case step
+        case boundary
+    }
+
     private struct Values {
         let canvas: RGB
         let card: RGB
@@ -143,6 +148,10 @@ public struct Palette {
     public var branchRGB: [RGB] { resolvedValues.branches.map(\.rgb) }
     public var branchOKLCh: [OKLCh] { resolvedValues.branches.map(\.oklch) }
     public static var accentOKLCh: OKLCh { baseOKLCh }
+    /// App Icon bottom stop: same accent hue/chroma, with OKLCh lightness × 0.70.
+    /// The shared gamut mapper may lower chroma, but never clamps RGB channels.
+    public static var iconGradientBottomRGB: RGB { iconGradientBottomSample.rgb }
+    public static var iconGradientBottomOKLCh: OKLCh { iconGradientBottomSample.oklch }
 
     public func color(forIndex index: Int) -> Color {
         let safeIndex = ((index % 6) + 6) % 6
@@ -192,6 +201,11 @@ public struct Palette {
     private static let accentRGBValue = RGB(hex: 0x3368A0)
     private static let baseOKLCh = rgbToOKLCh(accentRGBValue)
     private static let darkCanvasRGBValue = RGB(hex: 0x101819)
+    private static let iconGradientBottomSample = gamutMapped(
+        lightness: baseOKLCh.lightness * 0.70,
+        chroma: baseOKLCh.chroma,
+        hue: baseOKLCh.hue,
+        mapping: .boundary)
 
     private static let lightBranchSamples = makeBranchSamples(dark: false)
     private static let darkBranchSamples = makeBranchSamples(dark: true)
@@ -244,13 +258,32 @@ public struct Palette {
         }
     }
 
-    private static func gamutMapped(lightness: Double, chroma: Double, hue: Double) -> Sample {
+    private static func gamutMapped(lightness: Double, chroma: Double, hue: Double,
+                                    mapping: GamutMapping = .step) -> Sample {
         var mappedChroma = chroma
-        var linear = oklchToLinearRGB(lightness: lightness, chroma: mappedChroma, hue: hue)
-        while mappedChroma > 0 && !inGamut(linear) {
-            mappedChroma = max(0, mappedChroma - 0.005)
-            linear = oklchToLinearRGB(lightness: lightness, chroma: mappedChroma, hue: hue)
+        if case .boundary = mapping {
+            var low = 0.0
+            var high = chroma
+            if !inGamut(oklchToLinearRGB(lightness: lightness, chroma: high, hue: hue)) {
+                for _ in 0..<48 {
+                    let middle = (low + high) / 2
+                    if inGamut(oklchToLinearRGB(lightness: lightness,
+                                                chroma: middle, hue: hue)) {
+                        low = middle
+                    } else {
+                        high = middle
+                    }
+                }
+                mappedChroma = low
+            }
+        } else {
+            var linear = oklchToLinearRGB(lightness: lightness, chroma: mappedChroma, hue: hue)
+            while mappedChroma > 0 && !inGamut(linear) {
+                mappedChroma = max(0, mappedChroma - 0.005)
+                linear = oklchToLinearRGB(lightness: lightness, chroma: mappedChroma, hue: hue)
+            }
         }
+        let linear = oklchToLinearRGB(lightness: lightness, chroma: mappedChroma, hue: hue)
         let rgb = RGB(red: fromLinear(linear.0),
                       green: fromLinear(linear.1),
                       blue: fromLinear(linear.2)).quantized8
