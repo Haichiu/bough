@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import CoreText
 import Foundation
 import CryptoKit
 import MindFlowKit
@@ -1368,6 +1369,147 @@ do {
             check(atHeightCap || neededHeight <= usableHeight + 0.5,
                   "depth \(depth) text fits height (\(Int(neededHeight)) <= \(Int(usableHeight)))")
         }
+    }
+}
+
+// MARK: - Final-raster typography hierarchy
+//
+// Measure the contract string 思考Hg in the final 8-bit alpha raster at both
+// backing scales rather than trusting pointSize or capHeight: integer coverage
+// can collapse a visible ratio. Ink is alpha coverage >=0.5, implemented as an
+// alpha byte >=128; changing the string changes the semantic contract. Hgx
+// previously measured 16/14/12 at 1x while 思考Hg measures 18/15/13, so the
+// probe text is not interchangeable. Equal-size and stale-size inputs use this
+// same evaluator as mutation controls, analogous to the final-8bit color checks.
+struct TypographyRasterEvidence {
+    let inkHeights: [Int]
+
+    var adjacentRatios: [Double] {
+        zip(inkHeights, inkHeights.dropFirst()).map { Double($0.0) / Double($0.1) }
+    }
+
+    var passesHierarchy: Bool {
+        adjacentRatios.allSatisfy { $0 >= 1.10 }
+    }
+}
+
+func renderedTypographyEvidence(fonts: [NSFont], backingScale: Int,
+                                 probe: String) -> TypographyRasterEvidence? {
+    guard !fonts.isEmpty, !probe.isEmpty, backingScale > 0 else { return nil }
+    let width = 180 * backingScale
+    let height = 80 * backingScale
+    let bytesPerRow = width * 4
+    let byteCount = height * bytesPerRow
+    let pixels = UnsafeMutablePointer<UInt8>.allocate(capacity: byteCount)
+    pixels.initialize(repeating: 0, count: byteCount)
+    defer { pixels.deallocate() }
+
+    guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+          let context = CGContext(data: pixels,
+                                  width: width,
+                                  height: height,
+                                  bitsPerComponent: 8,
+                                  bytesPerRow: bytesPerRow,
+                                  space: colorSpace,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                                      | CGBitmapInfo.byteOrder32Big.rawValue) else {
+        return nil
+    }
+    context.setAllowsAntialiasing(true)
+    context.setShouldAntialias(true)
+    context.scaleBy(x: CGFloat(backingScale), y: CGFloat(backingScale))
+    context.setFillColor(CGColor(colorSpace: colorSpace,
+                                 components: [1, 1, 1, 1])!)
+
+    let baseline: CGFloat = 32
+    var heights: [Int] = []
+    for font in fonts {
+        let attributed = NSAttributedString(string: probe, attributes: [.font: font])
+        let line = CTLineCreateWithAttributedString(attributed)
+        context.textPosition = CGPoint(x: 12, y: baseline)
+        CTLineDraw(line, context)
+
+        var minimumY = height
+        var maximumY = -1
+        for y in 0..<height {
+            for x in 0..<width {
+                let alpha = pixels[y * bytesPerRow + x * 4 + 3]
+                guard alpha >= 128 else { continue }
+                minimumY = min(minimumY, y)
+                maximumY = max(maximumY, y)
+            }
+        }
+        guard maximumY >= minimumY else { return nil }
+        heights.append(maximumY - minimumY + 1)
+        context.clear(CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+    }
+    return TypographyRasterEvidence(inkHeights: heights)
+}
+
+func typographyFonts(sizes: [CGFloat]) -> [NSFont] {
+    [
+        .systemFont(ofSize: sizes[0], weight: .semibold),
+        .systemFont(ofSize: sizes[1], weight: .medium),
+        .systemFont(ofSize: sizes[2], weight: .regular),
+    ]
+}
+
+do {
+    for backingScale in [1, 2] {
+        let productionFonts = [0, 1, 2].map { NodeStyle.of(depth: $0).font }
+        guard let production = renderedTypographyEvidence(fonts: productionFonts,
+                                                          backingScale: backingScale,
+                                                          probe: "思考Hg") else {
+            check(false, "typography production raster renders at \(backingScale)x")
+            continue
+        }
+        print(String(format: "Typography raster %dx production heights=%@ ratios=%@",
+                     backingScale, String(describing: production.inkHeights),
+                     String(describing: production.adjacentRatios)))
+        check(production.passesHierarchy,
+              "typography production adjacent raster ratios >= 1.10 at \(backingScale)x")
+
+        let shortFonts = [NodeStyle.of(depth: 0).font]
+        guard let shortEvidence = renderedTypographyEvidence(fonts: shortFonts,
+                                                             backingScale: backingScale,
+                                                             probe: "一"),
+              let shortHeight = shortEvidence.inkHeights.first,
+              let contractHeight = production.inkHeights.first else {
+            check(false, "typography probe rasters render at \(backingScale)x")
+            continue
+        }
+        print(String(format: "Typography raster %dx probes 一=%d 思考Hg=%d",
+                     backingScale, shortHeight, contractHeight))
+        check(shortHeight * 2 <= contractHeight,
+              "typography probe distinguishes glyph ink from line-box height at \(backingScale)x")
+
+        let equal = typographyFonts(sizes: [13, 13, 13])
+        guard let equalEvidence = renderedTypographyEvidence(fonts: equal,
+                                                              backingScale: backingScale,
+                                                              probe: "思考Hg") else {
+            check(false, "typography equal-size mutation raster renders at \(backingScale)x")
+            continue
+        }
+        print(String(format: "Typography raster %dx equal mutation heights=%@ ratios=%@ accepted=%@",
+                     backingScale, String(describing: equalEvidence.inkHeights),
+                     String(describing: equalEvidence.adjacentRatios),
+                     equalEvidence.passesHierarchy ? "true" : "false"))
+        check(!equalEvidence.passesHierarchy,
+              "typography equal-size mutation rejects at \(backingScale)x")
+
+        let stale = typographyFonts(sizes: [15, 13, 12.5])
+        guard let staleEvidence = renderedTypographyEvidence(fonts: stale,
+                                                              backingScale: backingScale,
+                                                              probe: "思考Hg") else {
+            check(false, "typography stale-size mutation raster renders at \(backingScale)x")
+            continue
+        }
+        print(String(format: "Typography raster %dx stale mutation heights=%@ ratios=%@ accepted=%@",
+                     backingScale, String(describing: staleEvidence.inkHeights),
+                     String(describing: staleEvidence.adjacentRatios),
+                     staleEvidence.passesHierarchy ? "true" : "false"))
+        check(!staleEvidence.passesHierarchy,
+              "typography stale-size mutation rejects at \(backingScale)x")
     }
 }
 
