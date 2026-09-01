@@ -46,6 +46,22 @@ Owner 裁定迭代 50 輪。本檔是唯一進度來源；唤醒後先讀這裡�
 | 2 | T-035 follow-up：删除危險的 `u35.sh`（trap 覆蓋使備份還原被靜默拆掉）、Cmd-Z 收進 `performCoreShortcut` | Checks+verify 獨立跑過 | `a72c2b2` |
 | 3 | T-036 色票 A（OKLCh 推導、三層節點形態、深色中性色、移除假 theme picker）| 主 agent 量渲染像素：深色四色對畫布 3.102–3.129、奶油字 5.007–5.049；混色 5.03–5.33。**首版被退**：紅色量化後 2.9986。六色中四色親量、二色依回報 hex 計算 | `cc90f7c` |
 | 4 | 狀態訊號縮放不變（指示器/選取/重掛/search/batch/hover/連結線/summary，含 padding、圓角、虛線）| fit 0.23 下量得指示器 6px=**3.00pt**、選取圈 4px=**2.00pt**；若隨內容縮應為 1.38px / 0.92px。mutation（不除 scale）rc1 / 47 failures。**命中帶未動** | `249b56c` |
+| 5 | TabStore 交易邊界（staging+commit、sibling 上限、cleanup 不掩蓋主因）| 助理獨立驗 ownership gate 與 names/bytes/mtime oracle；verify rc0、mutation rc1。規則收斂為「**只有本次確實新增 sibling 才得 prune**」，以不變式取代列舉錯誤路徑 | `219332c` |
+| 6 | import 上限（bytes 8 MiB、depth 128、**不設節點上限**）| bounded read + 邊解析邊中止；拒絕時不動 document/undo/dirty/selection。掉了 OPML 多 top-level 深度少算 1 的 bug（fixture 只有一個 top-level，結構上測不到）。原生 `.mindmap` 不受限 | `060b744` |
+| 7 | 圖標改由程式生成（三尺寸帶、光學置中）| 10 slots 全過 runs=3 / peak≥680 / 端點對比≥3；主 agent 獨立重建 1024 量得**重心偏移 0.07%**（修正前 6.78%）。字形美感仍 owner-pending | `bce215f` `f4d2bcd` |
+| 8 | 字體階層：**產品無缺陷，NodeStyle 未改**；只補契約 gate | 實渲染比 1x/2x 皆 1.20/1.1538；equal 與 stale baseline 兩條 control 兩尺度全 rejected；墨色 oracle 以 `一`=2px vs `思考Hg`=18px 證明未退化成 line box | `5e4769b` |
+
+### 這兩輪的教訓：文件漂移比沒文件更危險
+
+主 agent 依 §2 提出字體階層修正案，但 §2 寫的 15/13/12.5 早已不是產品（實為 18/15/13）。那個「4% 塌陷」不存在，**提案若執行會把已可辨識的階層縮小。**
+
+違反的是專案自己的第一條：**以可達的程式碼為準。**
+
+修法不是把數字同步回來 —— 同步過的會再漂。而是立規則：
+
+> **只有被檢查強制的數字才寫進 DESIGN；其餘一律指向程式碼。**
+
+§8 的圖標數字沒爛，因為 Checks 會失敗；§2、§3、§4 都爛了，因為沒人守。
 
 ### 色彩這輪的教訓
 
