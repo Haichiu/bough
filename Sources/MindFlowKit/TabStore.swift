@@ -146,6 +146,29 @@ public struct TabStore {
 
     @discardableResult
     public func save(_ entries: [Entry]) -> SaveOutcome {
+        var transactionCreated = false
+
+        func failure(_ error: SaveError, current: URL? = nil,
+                     removeCurrent: Bool = false, preserveLive: Bool = false) -> SaveOutcome {
+            var preserved = [URL]()
+            var failed = [URL]()
+            if transactionCreated {
+                if let current {
+                    if removeCurrent {
+                        if !removeTransaction(current) {
+                            failed.append(current)
+                            preserved.append(current)
+                        }
+                    } else {
+                        preserved.append(current)
+                    }
+                }
+                failed.append(contentsOf: cleanupTransactions(
+                    preserved: preserved + (preserveLive ? [directory] : [])))
+            }
+            return .failed(error: error, warning: warning(for: failed))
+        }
+
         guard !entries.isEmpty else { return failure(.emptySnapshot) }
 
         var ids = Set<UUID>()
@@ -183,11 +206,14 @@ public struct TabStore {
         let staging = Self.transactionURL(for: directory, fileManager: fileManager)
         do {
             try fileManager.createDirectory(at: staging, withIntermediateDirectories: false)
+            transactionCreated = true
             guard Self.isDirectory(staging, fileManager: fileManager) else {
                 throw DirectoryFailure("path is not a directory")
             }
         } catch {
-            return failure(.stagingDirectoryUnavailable(staging, String(describing: error)))
+            return failure(.stagingDirectoryUnavailable(staging, String(describing: error)),
+                           current: transactionCreated ? staging : nil,
+                           removeCurrent: transactionCreated)
         }
 
         for file in encoded {
@@ -258,8 +284,8 @@ public struct TabStore {
             return failure(.postCommitValidationFailed(directory, String(describing: error)), current: staging)
         }
 
-        let warning = warning(for: cleanupTransactions(preserved: [staging]))
-        return .committed(warning: warning)
+        let cleanupWarning = warning(for: cleanupTransactions(preserved: [staging]))
+        return .committed(warning: cleanupWarning)
     }
 
     private struct EncodedEntry {
@@ -284,24 +310,6 @@ public struct TabStore {
     private struct DirectoryState: Equatable {
         let files: [String: Data]
         let modificationDates: [String: Date]
-    }
-
-    private func failure(_ error: SaveError, current: URL? = nil,
-                         removeCurrent: Bool = false, preserveLive: Bool = false) -> SaveOutcome {
-        var preserved = [URL]()
-        var failed = [URL]()
-        if let current {
-            if removeCurrent {
-                if !removeTransaction(current) {
-                    failed.append(current)
-                    preserved.append(current)
-                }
-            } else {
-                preserved.append(current)
-            }
-        }
-        failed.append(contentsOf: cleanupTransactions(preserved: preserved + (preserveLive ? [directory] : [])))
-        return .failed(error: error, warning: warning(for: failed))
     }
 
     private func cleanupTransactions(preserved: [URL]) -> [URL] {

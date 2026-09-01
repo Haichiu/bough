@@ -148,6 +148,63 @@ func assertTabEvidencePreserved(_ before: TabDirectoryEvidence, _ after: TabDire
           "\(label) preserves root titles and node counts")
 }
 
+struct TabTransactionEvidence: Equatable {
+    let names: [String]
+    let contents: [String: [String: Data]]
+    let modificationDates: [String: Date]
+    let fileModificationDates: [String: [String: Date]]
+}
+
+func tabTransactionEvidence(_ root: URL, label: String) -> TabTransactionEvidence {
+    assertTestDirectory(root, label: label + " root")
+    let directories = tabTransactionDirectories(root).sorted { $0.lastPathComponent < $1.lastPathComponent }
+    var contents: [String: [String: Data]] = [:]
+    var modificationDates: [String: Date] = [:]
+    var fileModificationDates: [String: [String: Date]] = [:]
+    for directory in directories {
+        assertTestDirectory(directory, label: label + " transaction")
+        let directoryValues = try! directory.resourceValues(forKeys: [.contentModificationDateKey])
+        guard let directoryDate = directoryValues.contentModificationDate else {
+            preconditionFailure("missing transaction mtime for \(directory.path)")
+        }
+        let files = try! FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey], options: [])
+            .filter { url in
+                var isDirectory: ObjCBool = false
+                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                    && !isDirectory.boolValue
+            }
+        var directoryContents: [String: Data] = [:]
+        var directoryFileDates: [String: Date] = [:]
+        for file in files {
+            directoryContents[file.lastPathComponent] = try! Data(contentsOf: file)
+            let values = try! file.resourceValues(forKeys: [.contentModificationDateKey])
+            guard let date = values.contentModificationDate else {
+                preconditionFailure("missing transaction file mtime for \(file.path)")
+            }
+            directoryFileDates[file.lastPathComponent] = date
+        }
+        let name = directory.lastPathComponent
+        contents[name] = directoryContents
+        modificationDates[name] = directoryDate
+        fileModificationDates[name] = directoryFileDates
+    }
+    print("TabStore sibling evidence \(label): names=\(directories.map(\.lastPathComponent)) contents=\(contents)")
+    return TabTransactionEvidence(names: directories.map(\.lastPathComponent), contents: contents,
+                                  modificationDates: modificationDates,
+                                  fileModificationDates: fileModificationDates)
+}
+
+func assertTabTransactionEvidencePreserved(_ before: TabTransactionEvidence,
+                                           _ after: TabTransactionEvidence, label: String) {
+    check(before.names == after.names, "\(label) preserves exact sibling names")
+    check(before.contents == after.contents, "\(label) preserves exact sibling contents")
+    check(before.modificationDates == after.modificationDates,
+          "\(label) preserves every sibling directory mtime")
+    check(before.fileModificationDates == after.fileModificationDates,
+          "\(label) preserves every sibling file mtime")
+}
+
 func seedTabTransactions(_ root: URL, count: Int) -> [URL] {
     assertTestDirectory(root, label: "seed transaction root")
     return (0..<count).map { index in
@@ -155,9 +212,11 @@ func seedTabTransactions(_ root: URL, count: Int) -> [URL] {
             "\(TabStore.transactionDirectoryPrefix)seed-\(index)-\(UUID().uuidString)", isDirectory: true)
         try! FileManager.default.createDirectory(at: transaction, withIntermediateDirectories: false)
         assertTestDirectory(transaction, label: "seeded transaction")
-        try! FileManager.default.setAttributes(
-            [.modificationDate: Date(timeIntervalSince1970: 1_600_000_000 + Double(index))],
-            ofItemAtPath: transaction.path)
+        let marker = transaction.appendingPathComponent("forensic-\(index).bin")
+        try! Data("forensic-marker-\(index)".utf8).write(to: marker, options: .atomic)
+        let date = Date(timeIntervalSince1970: 1_600_000_000 + Double(index))
+        try! FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: marker.path)
+        try! FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: transaction.path)
         return transaction
     }
 }
@@ -3486,6 +3545,62 @@ do {
           "transaction pruning does not run before exchange and validation")
     check(afterCount <= TabStore.maximumRetainedTransactions,
           "successful commit retains at most three transaction siblings")
+}
+
+// MARK: - TabStore pre-artifact rejection ownership
+// Rejections before staging are intentionally allowed to leave the seeded
+// evidence above the retention bound untouched.
+do {
+    let root = freshTabStoreRoot("pre-artifact-rejection")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let seeded = seedTabTransactions(root, count: TabStore.maximumRetainedTransactions + 2)
+    let beforeSiblings = tabTransactionEvidence(root, label: "pre-artifact rejection before")
+    let beforeLive = tabDirectoryEvidence(fixture.live, label: "pre-artifact rejection live before")
+    check(seeded.count > TabStore.maximumRetainedTransactions,
+          "pre-artifact fixture starts above the transaction sibling bound")
+    let store = TabStore(directory: fixture.live)
+
+    let empty = store.save([])
+    if let error = empty.primaryError, case .emptySnapshot = error {
+        check(true, "pre-artifact empty rejection is typed")
+    } else {
+        check(false, "pre-artifact empty rejection is typed")
+    }
+    check(empty.cleanupWarning == nil,
+          "pre-artifact empty rejection does not report cleanup for untouched siblings")
+    let afterEmptySiblings = tabTransactionEvidence(root, label: "pre-artifact empty rejection after")
+    assertTabTransactionEvidencePreserved(beforeSiblings, afterEmptySiblings,
+                                          label: "pre-artifact empty rejection")
+    check(tabTransactionDirectories(root).count == seeded.count,
+          "pre-artifact empty rejection keeps the above-bound sibling count")
+
+    let duplicate = store.save([fixture.entries[0], fixture.entries[0]])
+    if let error = duplicate.primaryError, case .duplicateID = error {
+        check(true, "pre-artifact duplicate rejection is typed")
+    } else {
+        check(false, "pre-artifact duplicate rejection is typed")
+    }
+    let afterDuplicateSiblings = tabTransactionEvidence(root, label: "pre-artifact duplicate rejection after")
+    assertTabTransactionEvidencePreserved(beforeSiblings, afterDuplicateSiblings,
+                                          label: "pre-artifact duplicate rejection")
+
+    let tooMany = (0...TabStore.maximumEntries).map { _ in
+        TabStore.Entry(id: UUID(), document: fixture.single)
+    }
+    let overCeiling = store.save(tooMany)
+    if let error = overCeiling.primaryError, case .tooManyEntries = error {
+        check(true, "pre-artifact ceiling rejection is typed")
+    } else {
+        check(false, "pre-artifact ceiling rejection is typed")
+    }
+    let afterCeilingSiblings = tabTransactionEvidence(root, label: "pre-artifact ceiling rejection after")
+    assertTabTransactionEvidencePreserved(beforeSiblings, afterCeilingSiblings,
+                                          label: "pre-artifact ceiling rejection")
+    let afterLive = tabDirectoryEvidence(fixture.live, label: "pre-artifact rejection live after")
+    assertTabEvidencePreserved(beforeLive, afterLive, label: "pre-artifact rejections")
+    check(tabTransactionDirectories(root).count == seeded.count,
+          "pre-artifact rejections keep all seeded siblings")
 }
 
 // MARK: - TabStore follow-up: empty snapshots and bounded failure artifacts
