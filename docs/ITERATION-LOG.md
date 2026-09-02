@@ -57,7 +57,8 @@ Owner 裁定迭代 50 輪。本檔是唯一進度來源；唤醒後先讀這裡�
 | 13 | 外殼語意色（去 Palette A）| 主 agent 量：**畫布本體 x0…1403 y171…1343 前後相異像素 = 0**（light／dark 皆然）；dirty 暖色像素 96→0／112→0；星標核心 `244,197,65` 前後相同 | `71d3784` |
 | 14 | 工具列精簡（主列只留子主題／兄弟／檢閱器，餘進 More）| 選單項目帶九條：Divider 在 y384…385（高2、色113,114,113）、刪除置底；工具列無垂直分隔線。**發現 destructive 在 macOS 選單不渲染紅色**，oracle 改守可觀察三件 | `30cca8f` `3df5f27` |
 | 15 | 星標幾何：bottom-center + layout 預留 + fishbone reroute | 主 agent 親量四版面×light／dark **32/32 CLEAR**，墨色一致（light 119／dark 120）；fishbone 由 FOREIGN 18px→0；association 僅擦過 padding（foreign 全在 ink bbox 下一列） | `6ca883a` |
-| 16 | T-044 分頁標題（16-grapheme、active live、最終字串唯一）＋T-049 節點層建立＋D2 吞字修復＋T-050 驗收管道 | resolver headless 全綠＋12/14 boundary mutation 有牙；GUI：p1 量 AXIdentifier 與 resolver 輸出在**量出的 reverse-mtime 順序**上逐字相等（截斷後才碰撞、使用者字串被讓開、8+1+7=16），陰性對照實測；T-049 四路徑 node-level＋方向鍵導航（以取代目標反推選取）PASS；D2 吞字（`6d74a8a` live-store seed）雙情境 PASS；T-050 原目標降級 backlog（實測 `.accessibilityLabel` 在普通內容區不產生屬性），identifier 僅驗收管道 | `7f3404a` `7056f10` `68bd471` `6d74a8a` `a6ea038` |
+| 16 | T-044 分頁標題（16-grapheme、active live、最終字串唯一）＋T-049 節點層建立＋D2 吞字修復＋T-050 驗收管道 |
+| 17 | T-047 icon 字形重設計（方向 A 卡片樹＋強制破對稱）| `da2aaa2` glyph：root 填充卡（≥2.1×）＋兩張描邊子卡（不互為鏡像）＋圓角肘線；`a2128e4` gates（p1 修正版，渲染完成品上量）：非實心（16px fill=0.6042 ≤ 0.70；錨點舊=0.469 過／實心≈0.9 拒）＋flip-mismatch ≥0.10 全 10 slots（本 glyph 最低 0.2055@64px；**舊 icon 0.000 被拒＝陰性對照**）；內點 ±1 design unit 全綠；mutation 鏡像子卡／填實心各 rc=1 首敗；掃描先斷言、對比≥3.0、光學置中不變全過。**Pending**：p1 三尺寸帶實拍美學判讀（p1 自述意向：accept＋flag 16px known limitation——小 band 觀感待 owner 下次啟動最終裁；blob 計數已證偽「崩解」疑慮：16/32/32@2x 新舊皆單一連通、新墨量約 2×）| `da2aaa2` `a2128e4` | resolver headless 全綠＋12/14 boundary mutation 有牙；GUI：p1 量 AXIdentifier 與 resolver 輸出在**量出的 reverse-mtime 順序**上逐字相等（截斷後才碰撞、使用者字串被讓開、8+1+7=16），陰性對照實測；T-049 四路徑 node-level＋方向鍵導航（以取代目標反推選取）PASS；D2 吞字（`6d74a8a` live-store seed）雙情境 PASS；T-050 原目標降級 backlog（實測 `.accessibilityLabel` 在普通內容區不產生屬性），identifier 僅驗收管道 | `7f3404a` `7056f10` `68bd471` `6d74a8a` `a6ea038` |
 
 ### 這兩輪的教訓：文件漂移比沒文件更危險
 
