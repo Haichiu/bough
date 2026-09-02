@@ -290,6 +290,10 @@ public struct ContentView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // T-050: label sits directly on the styled button — placed
+                    // below the gesture/help/context wrappers the p1 probe saw
+                    // only the generic "button" description, title/value missing.
+                    .accessibilityLabel(tabDisplayTitles[index])
                     .background(
                         Capsule().fill(isActive
                             ? Color(nsColor: .controlBackgroundColor)
@@ -318,7 +322,6 @@ public struct ContentView: View {
                             }
                     )
                     .help("切換到此分頁（拖曳可排序）")
-                    .accessibilityLabel("切換到分頁：\(tabDisplayTitles[index])")
                     .contextMenu {
                         Button("建立分頁副本") { vm.duplicateActiveTab() }
                         Divider()
@@ -339,8 +342,10 @@ public struct ContentView: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        // T-050: same placement as the switch button; plain String
+                        // concatenation avoids the LocalizedStringKey path.
+                        .accessibilityLabel("關閉分頁：" + tabDisplayTitles[index])
                         .help("關閉此分頁")
-                        .accessibilityLabel("關閉分頁：\(tabDisplayTitles[index])")
                     }
                 }
             }

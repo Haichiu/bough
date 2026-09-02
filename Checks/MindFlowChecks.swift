@@ -6100,6 +6100,45 @@ do {
 
 print("T-049 PENDING: arrow-key node navigation needs a real keyboard and is not simulated headlessly")
 
+// MARK: - T-050: tab buttons expose the resolver label over accessibility
+// p1 probe evidence (HEAD 7056f10): all five tab buttons reported title/value
+// missing with the generic "button" description, while other controls in the
+// same dump surfaced labels. The switch button attached its accessibilityLabel
+// below the drag-gesture/help/context wrappers, so it never landed on the
+// AXButton element; the search-bar buttons attach labels right after the
+// button style and do surface them. AX verbatim equality and the remove-label
+// negative control stay with the p1 GUI probe.
+
+do {
+    let t050ContentView = projectSource("Sources/MindFlowKit/ContentView.swift")
+    let t050Slice: Substring
+    if let start = t050ContentView.range(of: "// MARK: - Tab bar"),
+       let end = t050ContentView.range(of: "private var tabDisplayTitles") {
+        t050Slice = t050ContentView[start.upperBound..<end.lowerBound]
+    } else {
+        t050Slice = ""
+    }
+    check(!t050Slice.isEmpty, "T-050 tab bar source slice is locatable")
+    check(t050Slice.components(separatedBy: ".accessibilityLabel(tabDisplayTitles[index])").count == 2,
+          "T-050 switch button exposes the resolver label verbatim from the shared computed var")
+    check(t050Slice.contains(".accessibilityLabel(\"關閉分頁：\" + tabDisplayTitles[index])"),
+          "T-050 close button keeps the 關閉分頁 format sourced from the shared computed var")
+    check(!t050Slice.contains("切換到分頁："),
+          "T-050 switch label is not prefixed or recomputed outside the resolver")
+    check(!t050Slice.contains(".accessibilityLabel(\"子主題\")")
+          && !t050Slice.contains(".accessibilityLabel(\"中心主題\")"),
+          "T-050 tab labels are not hardcoded")
+    if let labelRange = t050Slice.range(of: ".accessibilityLabel(tabDisplayTitles[index])"),
+       let helpRange = t050Slice.range(of: ".help(\"切換到此分頁") {
+        check(labelRange.upperBound < helpRange.lowerBound,
+              "T-050 switch label is attached above the gesture/help/context wrappers")
+    } else {
+        check(false, "T-050 switch label ordering is checkable")
+    }
+}
+
+print("T-050 PENDING: AX verbatim equality and the remove-label negative control are p1 GUI-probe items and are not simulated headlessly")
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
