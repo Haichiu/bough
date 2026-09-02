@@ -6465,6 +6465,62 @@ do {
     print("T-051 S2 B: committed=\(bOutcome.succeeded) error=\(bOutcome.primaryError.map(String.init(describing:)) ?? "none") tabsPathStillSymlink=\(stillSymlink)")
 }
 
+// MARK: - T-051 S3: OPML entity expansion stays bounded (confirmatory)
+
+// External entities: shouldResolveExternalEntities is left unset, so the
+// parser must never fetch SYSTEM entities into the document. Internal entity
+// recursion (billion laughs): the import must fail bounded or produce bounded
+// output. If both hold without product changes, this fixture is the record.
+do {
+    let external = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE opml [
+        <!ENTITY x SYSTEM "file:///etc/passwd">
+        ]>
+        <opml version="2.0"><head><title>t</title></head>
+        <body><outline text="&x;"/></body></opml>
+        """
+    var externalThrew = false
+    var externalText = ""
+    do {
+        let doc = try MapImporter.opml(Data(external.utf8))
+        externalText = doc.root.children.map(\.text).joined()
+    } catch { externalThrew = true }
+    check(externalThrew || (!externalText.contains("root:") && externalText.count < 200),
+          "S3 external SYSTEM entities are never fetched into the document")
+    print("T-051 S3 external: threw=\(externalThrew) textLength=\(externalText.count)")
+
+    let dtd = """
+        <!ENTITY a "0123456789">
+        <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">
+        <!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">
+        <!ENTITY d "&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;">
+        <!ENTITY e "&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;">
+        <!ENTITY f "&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;">
+        <!ENTITY g "&f;&f;&f;&f;&f;&f;&f;&f;&f;&f;">
+        <!ENTITY h "&g;&g;&g;&g;&g;&g;&g;&g;&g;&g;">
+        <!ENTITY i "&h;&h;&h;&h;&h;&h;&h;&h;&h;&h;">
+        <!ENTITY j "&i;&i;&i;&i;&i;&i;&i;&i;&i;&i;">
+        """
+    let bomb = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE opml [\(dtd)]>
+        <opml version="2.0"><head><title>t</title></head>
+        <body><outline text="&j;"/></body></opml>
+        """
+    let started = Date()
+    var bombThrew = false
+    var bombText = ""
+    do {
+        let doc = try MapImporter.opml(Data(bomb.utf8))
+        bombText = doc.root.children.map(\.text).joined()
+    } catch { bombThrew = true }
+    let elapsed = Date().timeIntervalSince(started)
+    check(bombThrew || bombText.count <= 100_000,
+          "S3 internal entity recursion fails bounded or yields bounded text")
+    print("T-051 S3 internal: threw=\(bombThrew) textLength=\(bombText.count) seconds=\(String(format: "%.2f", elapsed))")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
