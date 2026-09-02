@@ -1805,11 +1805,17 @@ do {
         let vm = MindMapViewModel()
         vm.autosaveAllSessions()
         while vm.sessions.count > 1 { vm.closeTab(0) }
-        let startCount = vm.sessions.count
         let node = vm.addChild(to: nil)!
-        check(vm.document.root.find(node)?.text.isEmpty == true, "new nodes start empty")
-        vm.commitNodeText(id: node, text: "   ")
-        check(vm.sessions.count == startCount, "empty commit discards brand-new node")
+        check(vm.document.root.find(node)?.text == MindMapViewModel.newNodeDefaultText,
+              "canvas creation starts with the default text, not empty")
+        // The empty-commit discard mechanism is untouched and stays reachable
+        // through the outline paths that still create genuinely empty nodes.
+        let emptyNode = vm.insertChildUnder(id: vm.document.root.id)!
+        check(vm.document.root.find(emptyNode)?.text.isEmpty == true,
+              "outline insertion still starts empty")
+        vm.commitNodeText(id: emptyNode, text: "   ")
+        check(vm.document.root.find(emptyNode) == nil,
+              "empty commit discards a brand-new empty node")
         let kept = vm.addChild(to: nil)!
         vm.rename(id: kept, to: "既有文字")
         vm.commitNodeText(id: kept, text: "")
@@ -2118,7 +2124,8 @@ do {
 
         // Per-tab undo: undoing here must not touch the other tab.
         vm.undo()
-        check(vm.document.root.find(x)?.text == "", "per-tab undo isolates stacks")
+        check(vm.document.root.find(x)?.text == MindMapViewModel.newNodeDefaultText,
+              "per-tab undo isolates stacks")
 
         // Zen & theme flags.
         vm.toggleZen()
@@ -2749,15 +2756,16 @@ do {
               "addSiblingBefore adds exactly one UUID and preserves every existing UUID")
         check(vm.document.root.find(target)?.children.map(\.id) == [leaf],
               "addSiblingBefore preserves the selected subtree")
-        check(vm.document.root.find(inserted)?.text == ""
-              && vm.selection == inserted && vm.editingID == inserted,
-              "addSiblingBefore selects an empty node and enters editing")
+        check(vm.document.root.find(inserted)?.text == MindMapViewModel.newNodeDefaultText
+              && vm.selection == inserted && vm.editingID == nil,
+              "addSiblingBefore selects the default-text node without editing")
         vm.undo()
         check(vm.document == beforeSibling, "undo fully restores addSiblingBefore")
         vm.redo()
         check(vm.document == afterSibling, "redo fully restores addSiblingBefore")
+        vm.rename(id: inserted, to: "")
         vm.cancelNodeEditing(id: inserted, draft: "")
-        check(vm.document == beforeSibling, "Esc discards only the newly-created empty leaf")
+        check(vm.document == beforeSibling, "Esc still discards a genuinely empty leaf")
 
         // Command+Enter wraps only the selection, leaving its siblings in place.
         vm.newDocument()
@@ -2780,17 +2788,18 @@ do {
         check(ids(afterParent) == beforeParentIDs.union([parent])
               && ids(afterParent).count == beforeParentCount + 1,
               "insertParent adds exactly one UUID and preserves every existing UUID")
-        check(vm.document.root.find(parent)?.text == ""
-              && vm.selection == parent && vm.editingID == parent,
-              "insertParent selects an empty parent and enters editing")
+        check(vm.document.root.find(parent)?.text == MindMapViewModel.newNodeDefaultText
+              && vm.selection == parent && vm.editingID == nil,
+              "insertParent selects the default-text parent without editing")
         vm.undo()
         check(vm.document == beforeParent, "undo fully restores insertParent")
         vm.redo()
         check(vm.document == afterParent, "redo fully restores insertParent")
+        vm.rename(id: parent, to: "")
         vm.cancelNodeEditing(id: parent, draft: "")
         check(vm.document.root.find(parent)?.children.map(\.id) == [wrapped]
               && vm.document.root.find(wrapped)?.children.map(\.id) == [descendant],
-              "Esc on an empty wrapper preserves the original subtree")
+              "Esc on a textless wrapper with children preserves the original subtree")
 
         // The central topic has neither a sibling nor a parent; both commands are no-ops.
         vm.newDocument()
@@ -6021,6 +6030,75 @@ do {
           && !t044ContentView.contains("private func tabTitle"),
           "T-044 ContentView renders resolver final labels directly")
 }
+
+// MARK: - T-049: node creation stays at node level
+// Owner feel-ticket: creating a node must not jump into text editing (XMind
+// behavior). The default text is the p1 ruling; the empty-commit discard
+// mechanism itself is untouched and simply no longer triggers on these paths.
+
+do {
+    await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.autosaveAllSessions()
+        vm.newDocument()
+
+        let t049Text: (UUID?) -> String? = { id in
+            id.flatMap { vm.document.root.find($0)?.text }
+        }
+
+        let childID = vm.addChild(to: nil)
+        check(childID != nil && vm.editingID == nil && vm.selection == childID
+              && t049Text(childID) == MindMapViewModel.newNodeDefaultText,
+              "T-049 addChild stays at node level with the default text")
+
+        let siblingID = vm.addSibling(of: childID!)
+        check(siblingID != nil && vm.editingID == nil && vm.selection == siblingID
+              && t049Text(siblingID) == MindMapViewModel.newNodeDefaultText,
+              "T-049 addSibling stays at node level with the default text")
+
+        let beforeID = vm.addSiblingBefore(of: siblingID!)
+        check(beforeID != nil && vm.editingID == nil && vm.selection == beforeID
+              && t049Text(beforeID) == MindMapViewModel.newNodeDefaultText,
+              "T-049 addSiblingBefore stays at node level with the default text")
+
+        let parentID = vm.insertParent(id: beforeID!)
+        check(parentID != nil && vm.editingID == nil && vm.selection == parentID
+              && t049Text(parentID) == MindMapViewModel.newNodeDefaultText,
+              "T-049 insertParent stays at node level with the default text")
+
+        // Tab×5: rapid creation without typing leaves five visible, selectable,
+        // non-empty nodes and never opens the editor.
+        vm.newDocument()
+        var tabChain: [UUID] = []
+        for _ in 0..<5 {
+            guard let created = vm.addChild(to: vm.selection) else { break }
+            tabChain.append(created)
+        }
+        check(tabChain.count == 5,
+              "T-049 five rapid creations all exist")
+        check(tabChain.allSatisfy { t049Text($0) == MindMapViewModel.newNodeDefaultText },
+              "T-049 rapid creations carry the default text")
+        check(tabChain.allSatisfy { id in vm.selection = id; return vm.selection == id },
+              "T-049 every rapid-created node is selectable")
+        check(vm.editingID == nil,
+              "T-049 rapid creation never opens the editor")
+
+        // Type-to-replace (KeyboardMonitor D2 seam): the first printable
+        // character swaps the whole text instead of appending.
+        let typedID = tabChain[0]
+        vm.selection = typedID
+        vm.beginEditing(id: typedID, replacingWith: "x")
+        check(vm.editingID == typedID && t049Text(typedID) == "x",
+              "T-049 type-to-replace swaps the default text wholesale")
+
+        // Delete still removes the node.
+        vm.delete(id: typedID)
+        check(vm.document.root.find(typedID) == nil,
+              "T-049 delete still removes a created node")
+    }
+}
+
+print("T-049 PENDING: arrow-key node navigation needs a real keyboard and is not simulated headlessly")
 
 if failures == 0 {
     print("ALL CHECKS PASSED")

@@ -344,12 +344,20 @@ public final class MindMapViewModel: ObservableObject {
 
     // MARK: - Structure editing (XMind core interactions)
 
+    /// Default text for nodes created by the canvas creation paths (T-049).
+    /// Creation stays at node level instead of jumping into editing, so new
+    /// nodes are visible and selectable immediately; type-to-replace still
+    /// swaps the whole text on the first keystroke.
+    public static let newNodeDefaultText = "子主題"
+
     @discardableResult
     public func addChild(to parentID: UUID?) -> UUID? {
         let target = parentID ?? document.root.id
         guard document.root.contains(target) else { return nil }
-        // Start empty: typing replaces cleanly, empty commit discards the node.
-        let newNode = MindNode(text: "")
+        // Node level by default (T-049): creation does not open the editor, so
+        // the node starts with visible text instead of relying on the
+        // empty-commit discard path.
+        let newNode = MindNode(text: Self.newNodeDefaultText)
         mutate { doc in
             doc.root.update(target) { node in
                 node.collapsed = false
@@ -357,7 +365,6 @@ public final class MindMapViewModel: ObservableObject {
             }
         }
         selection = newNode.id
-        editingID = newNode.id
         flash(newNode.id)
         notify("已新增子主題，直接輸入文字")
         return newNode.id
@@ -368,7 +375,7 @@ public final class MindMapViewModel: ObservableObject {
         guard id != document.root.id,
               let parentNode = document.root.parent(of: id),
               document.root.contains(id) else { return nil }
-        let newNode = MindNode(text: "")
+        let newNode = MindNode(text: Self.newNodeDefaultText)
         mutate { doc in
             doc.root.update(parentNode.id) { parent in
                 if let index = parent.children.firstIndex(where: { $0.id == id }) {
@@ -379,7 +386,6 @@ public final class MindMapViewModel: ObservableObject {
             }
         }
         selection = newNode.id
-        editingID = newNode.id
         flash(newNode.id)
         notify("已新增兄弟主題，直接輸入文字")
         return newNode.id
@@ -391,14 +397,13 @@ public final class MindMapViewModel: ObservableObject {
         guard id != document.root.id,
               let parentNode = document.root.parent(of: id),
               let index = parentNode.children.firstIndex(where: { $0.id == id }) else { return nil }
-        let newNode = MindNode(text: "")
+        let newNode = MindNode(text: Self.newNodeDefaultText)
         mutate { doc in
             doc.root.update(parentNode.id) { parent in
                 parent.children.insert(newNode, at: index)
             }
         }
         selection = newNode.id
-        editingID = newNode.id
         flash(newNode.id)
         notify("已在前方新增兄弟主題，直接輸入文字")
         return newNode.id
@@ -1452,7 +1457,7 @@ public final class MindMapViewModel: ObservableObject {
               let node = document.root.find(id),
               let parentNode = document.root.parent(of: id),
               let index = parentNode.children.firstIndex(where: { $0.id == id }) else { return nil }
-        let newParent = MindNode(text: "")
+        let newParent = MindNode(text: Self.newNodeDefaultText)
         mutate { doc in
             var wrapper = newParent
             wrapper.children = [node]
@@ -1461,7 +1466,6 @@ public final class MindMapViewModel: ObservableObject {
             }
         }
         selection = newParent.id
-        editingID = newParent.id
         flash(newParent.id)
         notify("已插入父主題，直接輸入文字")
         return newParent.id
