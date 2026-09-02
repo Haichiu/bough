@@ -1521,14 +1521,23 @@ public final class MindMapViewModel: ObservableObject {
     }
 
 
-    /// Opens the node's URL in the default browser.
-    /// Normalizes user-typed URLs by adding `https://` when no scheme is present,
-    /// so "example.com" opens like browsers would. Returns nil when unparseable.
+    /// Opens the node's URL in the default browser or mail client.
+    ///
+    /// Principle: allow only schemes that hand content to a browser or a mail
+    /// composer (http, https, mailto); refuse schemes that address the local
+    /// file system or that dispatch to whichever app registered them (file:,
+    /// x-anything:, ...). Scheme-less text is not a URL and is refused instead
+    /// of being promoted to https. Leading and trailing whitespace and control
+    /// characters are normalized first, so "\n file://" cannot smuggle a scheme
+    /// past the check. Scheme matching is case-insensitive.
     public static func makeOpenableURL(_ raw: String) -> URL? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let hasScheme = trimmed.range(of: "^[a-zA-Z][a-zA-Z0-9+.-]*:", options: .regularExpression) != nil
-        return URL(string: hasScheme ? trimmed : "https://" + trimmed)
+        let normalized = raw.trimmingCharacters(
+            in: CharacterSet.whitespacesAndNewlines.union(.controlCharacters))
+        guard !normalized.isEmpty else { return nil }
+        guard let colon = normalized.firstIndex(of: ":") else { return nil }
+        let scheme = String(normalized[..<colon]).lowercased()
+        guard ["http", "https", "mailto"].contains(scheme) else { return nil }
+        return URL(string: normalized)
     }
 
     public func openURL(id: UUID) {
@@ -1538,7 +1547,7 @@ public final class MindMapViewModel: ObservableObject {
             return
         }
         guard let url = Self.makeOpenableURL(urlString) else {
-            notify("網址格式無效，無法開啟")
+            notify("網址無法開啟：僅支援 http、https、mailto 連結")
             return
         }
         NSWorkspace.shared.open(url)

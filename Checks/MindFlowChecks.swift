@@ -1258,12 +1258,31 @@ do {
     check(vmI.document.root.children[0].image == nil, "empty string clears the image")
 
 
-    // v20.5: URL normalization for openURL
-    check(MindMapViewModel.makeOpenableURL("example.com")?.absoluteString == "https://example.com", "scheme-less URLs get https://")
+    // T-051 S1: URL scheme allowlist for openURL.
+    // Principle: only schemes that hand content to a browser or a mail composer
+    // open; schemes that address the local file system or dispatch to arbitrary
+    // registered apps are refused, as is scheme-less text.
+    check(MindMapViewModel.makeOpenableURL("example.com") == nil, "scheme-less text is refused, not promoted to https")
     check(MindMapViewModel.makeOpenableURL("  https://a.tw/x  ")?.absoluteString == "https://a.tw/x", "whitespace is trimmed")
-    check(MindMapViewModel.makeOpenableURL("mailto:a@b.c")?.absoluteString == "mailto:a@b.c", "existing schemes are preserved")
+    check(MindMapViewModel.makeOpenableURL("mailto:a@b.c")?.absoluteString == "mailto:a@b.c", "mailto is allowed")
+    check(MindMapViewModel.makeOpenableURL("MAILTO:a@b.c") != nil, "scheme matching is case-insensitive")
     check(MindMapViewModel.makeOpenableURL("   ") == nil, "blank URLs return nil")
     check(MindMapViewModel.makeOpenableURL("https://中文字.tw") != nil, "unicode hosts still parse")
+    check(MindMapViewModel.makeOpenableURL("file:///etc/passwd") == nil, "the file scheme is refused")
+    check(MindMapViewModel.makeOpenableURL("FILE:///etc/passwd") == nil, "uppercase file is refused")
+    check(MindMapViewModel.makeOpenableURL("File:///etc/passwd") == nil, "mixed-case file is refused")
+    check(MindMapViewModel.makeOpenableURL("\n file:///etc/passwd") == nil, "leading whitespace cannot smuggle a scheme")
+    check(MindMapViewModel.makeOpenableURL("\u{0}file:///etc/passwd") == nil, "leading control characters cannot smuggle a scheme")
+    check(MindMapViewModel.makeOpenableURL("x-app-handler://run") == nil, "arbitrary-app schemes are refused")
+    check(MindMapViewModel.makeOpenableURL("http\n://a.tw") == nil, "a control character inside the scheme is refused")
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.newDocument()
+        let node = vm.addChild(to: nil)!
+        vm.setNodeURL(id: node, to: "file:///etc/passwd")
+        vm.openURL(id: node)
+        check(vm.statusMessage?.contains("mailto") == true, "refusing a scheme notifies instead of opening")
+    }
     } else {
         check(false, "future-proof document decodes")
     }
