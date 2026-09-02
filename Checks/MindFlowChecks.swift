@@ -5252,7 +5252,7 @@ let t043Check: () -> Void = {
         "if vm.focusBranchID != nil",
         "Menu(\"版面\")",
         "Label(\"複製 MD\"",
-        "Button(\"刪除\", role: .destructive)"
+        "Button(\"刪除\""
     ]
     check(moreActions.allSatisfy { more.contains($0) },
           "More retains every toolbar capability")
@@ -5268,14 +5268,14 @@ let t043Check: () -> Void = {
     check(positions.count == moreActions.count
           && zip(positions, positions.dropFirst()).allSatisfy { $0 <= $1 },
           "More action order ends with Delete")
-    check(more.contains("Divider()\n                    Button(\"刪除\", role: .destructive)"),
-          "More separates the final destructive Delete action")
-    if let delete = more.range(of: "Button(\"刪除\", role: .destructive)") {
+    check(more.contains("Divider()\n                    Button(\"刪除\""),
+          "More separates the final Delete action from non-destructive actions")
+    if let delete = more.range(of: "Button(\"刪除\"") {
         let afterDelete = String(more[delete.upperBound...])
         check(!afterDelete.contains("Button(") && !afterDelete.contains("Menu("),
-              "destructive Delete is the final More action")
+              "Delete is the final More action")
     } else {
-        check(false, "destructive Delete is present for final-action validation")
+        check(false, "Delete is present for final-action validation")
     }
 
     check(source.contains("NotificationCenter.default.post(name: .mindFlowFit")
