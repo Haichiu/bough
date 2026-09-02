@@ -50,6 +50,13 @@ Owner 裁定迭代 50 輪。本檔是唯一進度來源；唤醒後先讀這裡�
 | 6 | import 上限（bytes 8 MiB、depth 128、**不設節點上限**）| bounded read + 邊解析邊中止；拒絕時不動 document/undo/dirty/selection。掉了 OPML 多 top-level 深度少算 1 的 bug（fixture 只有一個 top-level，結構上測不到）。原生 `.mindmap` 不受限 | `060b744` |
 | 7 | 圖標改由程式生成（三尺寸帶、光學置中）| 10 slots 全過 runs=3 / peak≥680 / 端點對比≥3；主 agent 獨立重建 1024 量得**重心偏移 0.07%**（修正前 6.78%）。字形美感仍 owner-pending | `bce215f` `f4d2bcd` |
 | 8 | 字體階層：**產品無缺陷，NodeStyle 未改**；只補契約 gate | 實渲染比 1x/2x 皆 1.20/1.1538；equal 與 stale baseline 兩條 control 兩尺度全 rejected；墨色 oracle 以 `一`=2px vs `思考Hg`=18px 證明未退化成 line box | `5e4769b` |
+| 9 | 六分支 light／dark 視覺審查 fixture | 建立後立即用它抳出 connector 色彩缺陷：六條連接線全為單一 `#3268A0` | `4bda586` |
+| 10 | UI 測試 storage 雔離（單一 `MINDFLOW_STORAGE_ROOT`）| 產品端 marker 守衛（目錄存在 + 是目錄 + marker 內容逐位元組相等）；production-path gate 改錯即 rc=1；GUI proof：owner tabs digest／20 檔／root-title SHA16／node count 前後相同 | `5e68795` |
+| 11 | connector 幾何所有權（`ConnectionGeometry` 產 primitives，其餘只做 adapter）| 主 agent 親量：x=615 六條連接線 **y 範圍新舊逐條完全相同**，顏色由 1 種變 6 種；light 對比 4.81–5.34、dark 3.09–3.24 | `99d179b` |
+| 12 | 儲存失敗持續信號（`Set<StorageFailureKind>`、episode semantics）| 三個 mutation 有牙；主 agent 逐字核對三條文案，確認 warning 提前 return、**有警告時不顯示時間戳** | `bb6c044` |
+| 13 | 外殼語意色（去 Palette A）| 主 agent 量：**畫布本體 x0…1403 y171…1343 前後相異像素 = 0**（light／dark 皆然）；dirty 暖色像素 96→0／112→0；星標核心 `244,197,65` 前後相同 | `71d3784` |
+| 14 | 工具列精簡（主列只留子主題／兄弟／檢閱器，餘進 More）| 選單項目帶九條：Divider 在 y384…385（高2、色113,114,113）、刪除置底；工具列無垂直分隔線。**發現 destructive 在 macOS 選單不渲染紅色**，oracle 改守可觀察三件 | `30cca8f` `3df5f27` |
+| 15 | 星標幾何：bottom-center + layout 預留 + fishbone reroute | 主 agent 親量四版面×light／dark **32/32 CLEAR**，墨色一致（light 119／dark 120）；fishbone 由 FOREIGN 18px→0；association 僅擦過 padding（foreign 全在 ink bbox 下一列） | `6ca883a` |
 
 ### 這兩輪的教訓：文件漂移比沒文件更危險
 
