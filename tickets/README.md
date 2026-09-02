@@ -159,6 +159,32 @@
 
 ---
 
+### T-049 新增節點後停在節點層，不自動進編輯（owner 回報）
+
+**owner 原話**：「應該要預設先是針對節點的行動，而不是新增節點後就跳到編輯文字，這跟 xmind 邏輯不一樣。」
+
+**現況（已實讀確認）**：四個建立路徑各自設 `editingID = newNode.id` —— `ViewModel.swift:360`（addChild）、`:382`（addSibling）、`:401`（addSiblingBefore）、`:1464`（插入父主題）。
+
+**能力不會遺失（已驗）**：「打字即編輯」已存在於 `KeyboardMonitor.swift:280`（D2），守衛為「有 selection、無修飾鍵、單一可印字元」—— 建立路徑本來就會設 `selection`，所以拿掉自動編輯後，**打字仍然直接進編輯並取代內容**。四條 `notify` 的「直接輸入文字」仍然屬實。
+
+**但有一個隱藏耦合，不可只刪四行**：
+新節點是 `MindNode(text: "")`，`ViewModel.swift:352` 註解寫明「empty commit discards the node」—— **空節點的清除機制掛在編輯階段上**。拿掉自動編輯，就沒有編輯階段可以“空白提交”，連按 Tab 會留下一串永久的空節點。
+
+**交付**：
+1. 四個建立路徑不再設 `editingID`（保留 `selection`、`flash`、`notify`）
+2. **同時**決定空節點命運。建議：新節點給預設文字（如「子主題」）而非空字串 —— 符合 XMind、節點可見可選，且打字即編輯會整段取代它。若改選別的方案，必須講明空節點何時消失
+
+**〔可觀察結果〕**：
+- Tab／Enter 建立後：`editingID == nil`、`selection == 新節點`
+- 此時方向鍵導航節點（不是移動文字插入點）；Delete 刪節點
+- 打一個可印字元 → 進編輯且內容**被取代**（不是附加在預設文字後面）
+- 連按 Tab 五次不打字：五個節點都**可見、可選、可刪**，沒有隱形節點
+- **陰性對照**：把 `editingID = newNode.id` 加回任一路徑，第一條必須 FAIL
+
+**邊界**：不順便改鍵位配置、不動第二次點擊進編輯（`MapCanvasView:467`）、不動 D2 本身。
+
+---
+
 ## 已知阻礙
 
 - `~/.pi/agent/extensions/guard.ts:804` 與 `:782` 重複宣告 `const decision` → **所有新 pi session 無法啟動**。需 Owner 授權才能修。
