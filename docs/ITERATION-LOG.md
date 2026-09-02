@@ -76,6 +76,16 @@ T-044/T-050 兩輪出現同一結構性現象：**「gates 全綠＋mutation 有
 
 > **凡票的目標是 runtime 行為（AX 浮現、實際鍵擊路徑、渲染結果），完工條件只能是實跑探針的結果，不得是 gate／source 結果。** gate 與 mutation 降級為防回歸用途。
 
+### 教訓：對照組無效，比沒有對照組更貴
+
+T-050 三輪「改→全綠→實測仍空」之後才發現：拿來對照的兩顆工具列按鈕能浮現 label，**不是因為 Label 形狀，而是因為它們在 AXToolbar（NSToolbarItem 由 AppKit 取名）**——這個機制不存在於普通內容區。「跟它們逐字同形」從一開始就不可能成功。
+
+> **對照組必須先驗證「差異軸真的是我們比對的那個軸」，否則二分只是在錯誤的維度上排序。** 共用一部分特徵就假設共用全部，是「把宣稱當事實」的二分版。
+
+同一輪的量具教訓：System Events 的 `description` 回的是 AXRoleDescription（所以全是「button」），不是 AXDescription；SwiftUI `.accessibilityLabel` 寫進後者。量具讀錯欄位，三輪修補全部白做。
+
+結果記錄：`.accessibilityIdentifier` 在普通內容區會浮現 → T-044 的 AX 逐字驗收以 identifier 為管道結案；identifier 是**驗收管道，不是無障礙修復**，分頁對 VoiceOver 依然無名（T-050 原目標降級進 backlog，票內有實測依據）。
+
 §8 的圖標數字沒爛，因為 Checks 會失敗；§2、§3、§4 都爛了，因為沒人守。
 
 ### 色彩這輪的教訓

@@ -202,6 +202,8 @@
 
 **邊界**：不動 `TabDisplayTitles` 模組；不動工具列既有標籤；GUI 探針屬 p1 車道。
 
+**結案記錄（2026-09-03，p1 裁決）**：原目標（真正的無障礙名稱）**降級進 backlog，不排程**——owner 不用 VoiceOver。實測依據：四顆對照組（純 Button／.accessibilityLabel／容器外同名／identifier）證明 `.accessibilityLabel` 在本 target 的普通內容區**不產生** AXTitle／AXDescription（屬性本身不存在，非空值）；工具列能浮現是因 `.toolbar{}` 走 NSToolbarItem 的 AppKit 取名路徑。已落地的是 `.accessibilityIdentifier`（**僅驗收管道，不是無障礙修復**——分頁對 VoiceOver 依然無名）。
+
 ---
 
 ## 已知阻礙
