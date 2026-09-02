@@ -1623,7 +1623,7 @@ public final class MindMapViewModel: ObservableObject {
         var target = filePath
         if let path = filePath {
             guard FileIO.write(document, to: path) else {
-                notify("⚠️ 儲存失敗，請確認磁碟可寫入")
+                notify("⚠︎ 儲存失敗，請確認磁碟可寫入")
                 return false
             }
         } else {

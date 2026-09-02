@@ -5106,6 +5106,104 @@ do {
     }
 }
 
+
+
+// MARK: - T-042: semantic shell colors and content-color ownership
+// Shell controls must follow AppKit semantic tokens in both appearance lanes;
+// document content (star/color tag) deliberately remains Palette/Theme-owned.
+func projectSource(_ relativePath: String) -> String {
+    let checksFile = URL(fileURLWithPath: #filePath)
+    let projectRoot = checksFile.deletingLastPathComponent().deletingLastPathComponent()
+    let url = projectRoot.appendingPathComponent(relativePath)
+    precondition(FileManager.default.fileExists(atPath: url.path),
+                 "missing project source for T-042: \(relativePath)")
+    return try! String(contentsOf: url, encoding: .utf8)
+}
+
+let t042ContentView = projectSource("Sources/MindFlowKit/ContentView.swift")
+let t042ViewModel = projectSource("Sources/MindFlowKit/ViewModel.swift")
+
+let t042PaletteReferences = t042ContentView.components(separatedBy: "Palette").count - 1
+check(t042PaletteReferences == 1
+      && t042ContentView.contains("Palette.screen.statusHighlight"),
+      "ContentView retains Palette only for the outline star content color")
+check(!t042ContentView.contains("palette."),
+      "ContentView has no lower-case Palette shell color references")
+check(!t042ContentView.contains("palette.accent.opacity(0.18)")
+      && !t042ContentView.contains("palette.statusHighlight")
+      && !t042ContentView.contains("palette.textPrimary")
+      && !t042ContentView.contains("palette.textSecondary"),
+      "old Palette shell colors are unreachable")
+check(t042ContentView.contains("Theme.colorTags")
+      && t042ContentView.contains("Theme.colorTag(named: key)"),
+      "outline color tags remain Theme content colors")
+check(!t042ContentView.contains(".tint(")
+      && !t042ContentView.contains(".accentColor(")
+      && !t042ContentView.contains(".foregroundStyle(.red)"),
+      "ContentView does not inject a global tint or fixed shell red")
+
+check(t042ContentView.contains("Capsule().fill(isActive")
+      && t042ContentView.contains("Color(nsColor: .controlBackgroundColor)")
+      && t042ContentView.contains("Color(nsColor: .separatorColor)"),
+      "active tab uses semantic control fill and separator boundary")
+check(t042ContentView.contains("Circle().fill(Color(nsColor: .secondaryLabelColor))"),
+      "dirty dot uses the semantic secondary label color")
+check(t042ContentView.contains("RoundedRectangle(cornerRadius: 5)")
+      && t042ContentView.contains(".fill(vm.selection == row.id")
+      && t042ContentView.contains(".stroke(vm.selection == row.id")
+      && !t042ContentView.contains("palette.accent.opacity(0.16)"),
+      "selected outline row uses neutral fill and separator")
+
+let warningCondition = "if let warning = vm.storageWarningText, !vm.storageFailures.isEmpty"
+check(t042ContentView.contains(warningCondition),
+      "empty storage failure state has no warning icon and nonempty state enters it")
+check(t042ContentView.components(separatedBy: "exclamationmark.triangle.fill").count - 1 == 1
+      && t042ContentView.contains(".foregroundStyle(Color(nsColor: .systemOrange))")
+      && t042ContentView.contains(".accessibilityLabel(warning)")
+      && t042ContentView.contains(".accessibilityHint(warning)")
+      && t042ContentView.contains(".help(warning)"),
+      "global warning icon has one orange visual and matching AX/help text")
+let warningIndex = t042ContentView.range(of: warningCondition)?.lowerBound
+let tabLoopIndex = t042ContentView.range(of: "ForEach(vm.sessions.indices")?.lowerBound
+check(warningIndex != nil && tabLoopIndex != nil && warningIndex! > tabLoopIndex!,
+      "global warning icon is outside per-tab dirty-dot rendering")
+
+check(!t042ViewModel.contains("⚠️")
+      && t042ViewModel.contains("notify(\"⚠︎ 儲存失敗，請確認磁碟可寫入\")"),
+      "manual-save warning uses the text-presentation warning marker")
+check(t042ContentView.contains("including persistent storage warnings"),
+      "saveSubtitle comment describes ViewModel warning delegation")
+
+let t042SemanticTokens: [(String, NSColor)] = [
+    ("controlBackground", .controlBackgroundColor),
+    ("separator", .separatorColor),
+    ("secondaryLabel", .secondaryLabelColor),
+    ("label", .labelColor),
+    ("systemOrange", .systemOrange),
+    ("systemRed", .systemRed)
+]
+for appearanceName in [NSAppearance.Name.aqua, NSAppearance.Name.darkAqua] {
+    guard let appearance = NSAppearance(named: appearanceName) else {
+        check(false, "semantic colors resolve \(appearanceName.rawValue) appearance")
+        continue
+    }
+    for (name, color) in t042SemanticTokens {
+        var resolved: NSColor?
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.sRGB)
+        }
+        let valid = resolved != nil && resolved!.redComponent.isFinite
+            && resolved!.greenComponent.isFinite && resolved!.blueComponent.isFinite
+        check(valid, "semantic \(name) resolves in \(appearanceName.rawValue)")
+    }
+}
+for path in ["Sources/MindFlowKit/MapCanvasView.swift",
+             "Sources/MindFlowKit/NodeView.swift",
+             "Sources/MindFlowKit/MapExporter.swift"] {
+    check(projectSource(path).contains("Palette"),
+          "Palette ownership remains in \(path)")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

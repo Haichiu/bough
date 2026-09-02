@@ -3,7 +3,6 @@ import SwiftUI
 
 public struct ContentView: View {
     @EnvironmentObject private var vm: MindMapViewModel
-    private let palette = Palette.screen
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var searchFocused: Bool
     @FocusState private var outlineFocused: Bool
@@ -278,7 +277,7 @@ public struct ContentView: View {
                                 .font(.callout)
                                 .lineLimit(1)
                             if vm.sessions[index].dirty || (isActive && vm.dirty) {
-                                Circle().fill(palette.statusHighlight).frame(width: 6, height: 6)
+                                Circle().fill(Color(nsColor: .secondaryLabelColor)).frame(width: 6, height: 6)
                             }
                         }
                         .padding(.horizontal, 10)
@@ -287,7 +286,14 @@ public struct ContentView: View {
                     }
                     .buttonStyle(.plain)
                     .background(
-                        Capsule().fill(isActive ? palette.accent.opacity(0.18) : palette.textSecondary.opacity(0.08))
+                        Capsule().fill(isActive
+                            ? Color(nsColor: .controlBackgroundColor)
+                            : Color.clear)
+                    )
+                    .overlay(
+                        Capsule().stroke(
+                            isActive ? Color(nsColor: .separatorColor) : Color.clear,
+                            lineWidth: 1)
                     )
                     .opacity(draggingTab == index ? 0.55 : 1)
                     .offset(x: draggingTab == index ? tabDragX : 0)
@@ -346,6 +352,14 @@ public struct ContentView: View {
             .help("新增分頁（⌘N）")
             Spacer(minLength: 0)
         }
+        }
+        if let warning = vm.storageWarningText, !vm.storageFailures.isEmpty {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color(nsColor: .systemOrange))
+                .help(warning)
+                .accessibilityLabel(warning)
+                .accessibilityHint(warning)
+                .padding(.trailing, 8)
         }
         }
         .padding(.horizontal, 10)
@@ -428,7 +442,8 @@ public struct ContentView: View {
                     .fill(tag.color)
                     .frame(width: 16, height: 16)
                     .overlay(Circle().stroke(
-                        vm.document.root.find(id)?.colorTag == tag.key ? palette.textPrimary : Color.clear,
+                        vm.document.root.find(id)?.colorTag == tag.key
+                            ? Color(nsColor: .labelColor) : Color.clear,
                         lineWidth: 2))
                     .onTapGesture { vm.setColorTag(id: id, tag: tag.key) }
                     .help(tag.name)
@@ -461,7 +476,7 @@ public struct ContentView: View {
                 Button("刪除這條概要") { vm.removeSummary(id: sumID) }
                     .buttonStyle(.borderless)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color(nsColor: .systemRed))
             }
         } else if let linkID = vm.selectedLinkID,
                   vm.document.links.contains(where: { $0.id == linkID }) {
@@ -488,7 +503,8 @@ public struct ContentView: View {
                 }
                 .font(.body)
                 .frame(maxHeight: .infinity)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(palette.textSecondary.opacity(0.3)))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(
+                    Color(nsColor: .secondaryLabelColor).opacity(0.3)))
                 .overlay(alignment: .topLeading) {
                     if noteDraft.isEmpty {
                         Text("備註…").foregroundStyle(.secondary).padding(6).allowsHitTesting(false)
@@ -614,7 +630,7 @@ public struct ContentView: View {
             if row.marked {
                 Image(systemName: "star.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(palette.statusHighlight)
+                    .foregroundStyle(Palette.screen.statusHighlight)
             }
             if !row.note.isEmpty {
                 Image(systemName: "note.text")
@@ -671,7 +687,9 @@ public struct ContentView: View {
                 }
                 Text(row.text.isEmpty ? "（空白）" : row.text)
                     .font(row.isRoot ? .body.bold() : .body)
-                    .foregroundStyle(row.text.isEmpty ? palette.textSecondary : palette.textPrimary)
+                    .foregroundStyle(row.text.isEmpty
+                        ? Color(nsColor: .secondaryLabelColor)
+                        : Color(nsColor: .labelColor))
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -682,9 +700,16 @@ public struct ContentView: View {
         .contentShape(Rectangle())
         .opacity(outlineDimmed(row, focusSet: focusSet))
         .background(
-            vm.selection == row.id
-                ? palette.accent.opacity(0.16)
-                : Color.clear
+            RoundedRectangle(cornerRadius: 5)
+                .fill(vm.selection == row.id
+                    ? Color(nsColor: .controlBackgroundColor)
+                    : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 5)
+                .stroke(vm.selection == row.id
+                    ? Color(nsColor: .separatorColor)
+                    : Color.clear, lineWidth: 1)
         )
         .cornerRadius(5)
         .contextMenu { outlineRowMenu(row) }
@@ -727,7 +752,7 @@ public struct ContentView: View {
         vm.notify("已送出列印 ✓")
     }
 
-    /// Title-bar status: version, save state, and when auto-save last ran.
+    /// Title-bar subtitle delegated to ViewModel, including persistent storage warnings.
     private var saveSubtitle: String {
         vm.saveStatusSubtitle
     }
