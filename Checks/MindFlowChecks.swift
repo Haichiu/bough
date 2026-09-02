@@ -6100,14 +6100,14 @@ do {
 
 print("T-049 PENDING: arrow-key node navigation needs a real keyboard and is not simulated headlessly")
 
-// MARK: - T-050: tab buttons expose the resolver label over accessibility
-// p1 probe evidence (HEAD 7056f10): all five tab buttons reported title/value
-// missing with the generic "button" description, while other controls in the
-// same dump surfaced labels. The switch button attached its accessibilityLabel
-// below the drag-gesture/help/context wrappers, so it never landed on the
-// AXButton element; the search-bar buttons attach labels right after the
-// button style and do surface them. AX verbatim equality and the remove-label
-// negative control stay with the p1 GUI probe.
+// MARK: - T-050: tab buttons carry the toolbar Label shape
+// Governance (p1 ruling): a source gate carries ZERO information about whether
+// a label actually surfaces over AX — that acceptance closes with the p1 GUI
+// probe (five tab buttons' AX value verbatim equal to the resolver labels, plus
+// the remove-label negative control). These gates only guard the shape against
+// regression: the AX name must come from the Label title sourced from the
+// shared tabDisplayTitles computed var, with no accessibility overrides on the
+// tab buttons, exactly like the two toolbar buttons that do surface.
 
 do {
     let t050ContentView = projectSource("Sources/MindFlowKit/ContentView.swift")
@@ -6119,25 +6119,21 @@ do {
         t050Slice = ""
     }
     check(!t050Slice.isEmpty, "T-050 tab bar source slice is locatable")
-    check(t050Slice.components(separatedBy: ".accessibilityLabel(tabDisplayTitles[index])").count == 2,
-          "T-050 switch button exposes the resolver label verbatim from the shared computed var")
-    check(t050Slice.contains(".accessibilityLabel(\"關閉分頁：\" + tabDisplayTitles[index])"),
-          "T-050 close button keeps the 關閉分頁 format sourced from the shared computed var")
+    check(t050Slice.components(separatedBy: "Text(tabDisplayTitles[index])").count == 2,
+          "T-050 switch label renders the title from the shared computed var")
+    check(t050Slice.contains("Text(\"關閉分頁：\" + tabDisplayTitles[index])"),
+          "T-050 close label keeps the 關閉分頁 format from the shared computed var")
+    check(t050Slice.contains("EmptyView()") && t050Slice.contains("labelStyle(.iconOnly)"),
+          "T-050 tab buttons follow the toolbar Label shape")
+    check(t050Slice.components(separatedBy: ".accessibilityLabel(").count == 2,
+          "T-050 tab buttons carry no accessibility overrides (the storage warning keeps its own)")
     check(!t050Slice.contains("切換到分頁："),
           "T-050 switch label is not prefixed or recomputed outside the resolver")
-    check(!t050Slice.contains(".accessibilityLabel(\"子主題\")")
-          && !t050Slice.contains(".accessibilityLabel(\"中心主題\")"),
+    check(!t050Slice.contains("Text(\"子主題\")") && !t050Slice.contains("Text(\"中心主題\")"),
           "T-050 tab labels are not hardcoded")
-    if let labelRange = t050Slice.range(of: ".accessibilityLabel(tabDisplayTitles[index])"),
-       let helpRange = t050Slice.range(of: ".help(\"切換到此分頁") {
-        check(labelRange.upperBound < helpRange.lowerBound,
-              "T-050 switch label is attached above the gesture/help/context wrappers")
-    } else {
-        check(false, "T-050 switch label ordering is checkable")
-    }
 }
 
-print("T-050 PENDING: AX verbatim equality and the remove-label negative control are p1 GUI-probe items and are not simulated headlessly")
+print("T-050 PENDING: AX label surfacing, verbatim equality, and the remove-label negative control are p1 GUI-probe items and are not simulated headlessly")
 
 // MARK: - D2 handoff: the first keystroke reaches the replacing path
 // p1 measured (two scenarios): a printable keystroke on a selected node opened

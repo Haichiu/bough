@@ -278,9 +278,17 @@ public struct ContentView: View {
                         vm.switchTab(to: index)
                     } label: {
                         HStack(spacing: 5) {
-                            Text(tabDisplayTitles[index])
-                                .font(.callout)
-                                .lineLimit(1)
+                            // T-050: the toolbar's two buttons surface their AX
+                            // name through Label's title with no accessibility
+                            // overrides; same shape here, sourced from the same
+                            // computed var the tab title renders.
+                            Label {
+                                Text(tabDisplayTitles[index])
+                                    .font(.callout)
+                                    .lineLimit(1)
+                            } icon: {
+                                EmptyView()
+                            }
                             if vm.sessions[index].dirty || (isActive && vm.dirty) {
                                 Circle().fill(Color(nsColor: .secondaryLabelColor)).frame(width: 6, height: 6)
                             }
@@ -290,10 +298,6 @@ public struct ContentView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    // T-050: label sits directly on the styled button — placed
-                    // below the gesture/help/context wrappers the p1 probe saw
-                    // only the generic "button" description, title/value missing.
-                    .accessibilityLabel(tabDisplayTitles[index])
                     .background(
                         Capsule().fill(isActive
                             ? Color(nsColor: .controlBackgroundColor)
@@ -335,16 +339,20 @@ public struct ContentView: View {
                         Button {
                             vm.closeTab(index)
                         } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(.secondary)
-                                .padding(3)
-                                .contentShape(Circle())
+                            // T-050: toolbar-shaped Label — the title carries the
+                            // AX name, the icon stays the only visible part.
+                            Label {
+                                Text("關閉分頁：" + tabDisplayTitles[index])
+                            } icon: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .labelStyle(.iconOnly)
+                            .padding(3)
+                            .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
-                        // T-050: same placement as the switch button; plain String
-                        // concatenation avoids the LocalizedStringKey path.
-                        .accessibilityLabel("關閉分頁：" + tabDisplayTitles[index])
                         .help("關閉此分頁")
                     }
                 }
