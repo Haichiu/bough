@@ -84,6 +84,10 @@ T-050 三輪「改→全綠→實測仍空」之後才發現：拿來對照的�
 
 同一輪的量具教訓：System Events 的 `description` 回的是 AXRoleDescription（所以全是「button」），不是 AXDescription；SwiftUI `.accessibilityLabel` 寫進後者。量具讀錯欄位，三輪修補全部白做。
 
+### 行為記錄：分頁排序 = reverse mtime（最新在最左）
+
+p1 以五個完全相異標題實測：畫面左→右 = 建檔序反轉。與 T-044 的刻意取捨有交互：**使用者只要重新存檔一個舊分頁，它就會跳到最左，suffix 也可能重算**（suffix 依 session order 分配、刻意不持久化）。不是缺陷，但未寫下的行為三個月後無法與缺陷區分。
+
 結果記錄：`.accessibilityIdentifier` 在普通內容區會浮現 → T-044 的 AX 逐字驗收以 identifier 為管道結案；identifier 是**驗收管道，不是無障礙修復**，分頁對 VoiceOver 依然無名（T-050 原目標降級進 backlog，票內有實測依據）。
 
 §8 的圖標數字沒爛，因為 Checks 會失敗；§2、§3、§4 都爛了，因為沒人守。
