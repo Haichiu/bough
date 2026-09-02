@@ -185,6 +185,25 @@
 
 ---
 
+### T-050 分頁按鈕無障礙標籤（T-044 follow-up）
+
+**背景（p1 GUI 探針，HEAD `7056f10`）**：隔離 storage、五分頁；五個分頁按鈕 `title = missing value`、`description = "button"`、`value = missing value` —— 完全無可讀標籤。同一次 dump 中工具列按鈕有標籤（「子主題」「兄弟主題」、`More`），只有分頁列沒設。功能間接證據：按鈕寬 68/85/86/209/226 —— 三個同根分頁去重後綴有避開佔用、兩個僅中段相異的 25 字長標題差約 ` · 2` 寬度；即 final-string allocator 在真實 GUI 正確運作，缺的是 AX 通道。
+
+**裁定（p1）**：分頁按鈕加無障礙標籤，值 = resolver 計算出的最終 label。理由：可辨識是票目的本身（讀螢幕使用者完全分不出分頁）；工具列已這樣做，屬一致性補齊，非新機制。
+
+**交付**：
+1. 切換與關閉按鈕的 AX 標籤逐字等於 `tabDisplayTitles[index]`（同一 computed var 來源；不得另行計算或 hardcode）。
+2. 找出現行 `.accessibilityLabel` 為何在 macOS AX 未浮現（`description="button"` 而非我們的字串），以最小修補讓它浮現；機制寫進 commit message —— 本案的失敗模式正是「看起來有實則無」。
+3. 陰性對照由 p1 GUI 探針執行：拿掉標籤必須回到 missing value。
+
+**驗收**：
+- p1 重跑同一支探針：五分頁 AX value 逐字 == final labels（含去重後綴與截斷省略號）。
+- headless gates 全綠；source check：accessibilityLabel/Value 引用 `tabDisplayTitles`。
+
+**邊界**：不動 `TabDisplayTitles` 模組；不動工具列既有標籤；GUI 探針屬 p1 車道。
+
+---
+
 ## 已知阻礙
 
 - `~/.pi/agent/extensions/guard.ts:804` 與 `:782` 重複宣告 `const decision` → **所有新 pi session 無法啟動**。需 Owner 授權才能修。
