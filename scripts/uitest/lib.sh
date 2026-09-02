@@ -1,77 +1,219 @@
 #!/usr/bin/env bash
 # T-003 uitest shared helpers. Sourced by u*.sh / run.sh. Not executed directly.
 #
-# Method: AX locate (System Events entire-contents dump) + coordinate click
-# (System Events `click at`) + CGEvent drag (JXA) + CGEvent key timing probe.
-# No screencapture diffing. Touches only scripts/ and docs/ (plus the app's
-# autosave tabs dir, which is backed up and restored).
+# UI tests use a marker-guarded storage root under a dedicated /tmp base. The
+# creator owns cleanup; child scenarios inherit the root but can never remove it.
 set -uo pipefail
 
 UIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ="$(cd "$UIT_DIR/../.." && pwd)"
 APP="${UITEST_APP:-$HOME/Desktop/MindFlow.app}"
 SLOT_ID="0D3F1CE0-0000-4000-8000-0000000000F1"
-APP_SUPPORT="$HOME/Library/Application Support/MindFlow"
-TABS="$APP_SUPPORT/tabs"
-# A suite exports one transaction to its child scenarios. Standalone scenarios
-# create their own. run.sh always replaces inherited values before touching tabs.
-UIT_BACKUP="${UIT_BACKUP:-}"
-UIT_BACKUP_OWNER="${UIT_BACKUP_OWNER:-}"
+UIT_STORAGE_BASE="${UITEST_STORAGE_BASE:-/tmp/mindflow-uitest-storage}"
+UIT_STORAGE_ROOT="${UIT_STORAGE_ROOT:-}"
+UIT_STORAGE_OWNER="${UIT_STORAGE_OWNER:-}"
+UIT_STORAGE_CREATOR="${UIT_STORAGE_CREATOR:-0}"
+MINDFLOW_STORAGE_ROOT="${MINDFLOW_STORAGE_ROOT:-}"
+UIT_STORAGE_MARKER_FILE=".mindflow-uitest-root"
+UIT_STORAGE_MARKER_CONTENT="mindflow-uitest-storage-v1"
+UIT_STORAGE_MAX_AGE=86400
+UIT_CLEANUP_CALLBACKS=()
+UIT_CLEANUP_TRAP_INSTALLED=0
+TABS=""
 ART_DIR="/tmp/uitest-artifacts"
 mkdir -p "$ART_DIR"
 
-uit_new_backup(){
-  UIT_BACKUP="$APP_SUPPORT/tabs.pre-uitest-$$-$(date +%s)-$RANDOM"
-  UIT_BACKUP_OWNER=$$
-  export UIT_BACKUP UIT_BACKUP_OWNER
+uit_storage_marker_valid(){
+  local root="${1:-}" marker_path
+  [[ "$root" == /* && -d "$root" && ! -L "$root" ]] || return 1
+  marker_path="$root/$UIT_STORAGE_MARKER_FILE"
+  [[ -f "$marker_path" && ! -L "$marker_path" ]] || return 1
+  cmp -s "$marker_path" <(printf '%s' "$UIT_STORAGE_MARKER_CONTENT")
 }
 
-uit_ensure_backup(){
-  mkdir -p "$APP_SUPPORT"
-  [[ -n "$UIT_BACKUP" && -n "$UIT_BACKUP_OWNER" ]] || {
-    echo "ERROR: backup transaction is uninitialized" >&2; return 1;
+uit_storage_owner_alive(){
+  local owner="${1:-}"
+  [[ "$owner" =~ ^[0-9]+$ && "$owner" -gt 0 ]] || return 1
+  kill -0 "$owner" 2>/dev/null
+}
+
+uit_storage_base_real(){
+  case "$UIT_STORAGE_BASE" in
+    /tmp/mindflow-uitest-*) ;;
+    *) return 1 ;;
+  esac
+  [[ -d "$UIT_STORAGE_BASE" && ! -L "$UIT_STORAGE_BASE" ]] || return 1
+  (cd "$UIT_STORAGE_BASE" 2>/dev/null && pwd -P)
+}
+
+uit_storage_path_is_safe_child(){
+  local root="${1:-}" base_real parent name
+  [[ "$root" == /* && -d "$root" && ! -L "$root" ]] || return 1
+  base_real="$(uit_storage_base_real)" || return 1
+  parent="$(cd "$(dirname "$root")" 2>/dev/null && pwd -P)" || return 1
+  [[ "$parent" == "$base_real" ]] || return 1
+  name="$(basename "$root")"
+  [[ "$name" =~ ^run-[0-9]+-[0-9]+-[0-9]+$ ]] || return 1
+  [[ "$root" != "$base_real" ]]
+}
+
+# Retain only stale, dead-owner, marker-valid run roots. This is deliberately
+# conservative: unmarked, live-owner, symlink, and malformed entries survive.
+uit_prune_storage(){
+  local base_real now candidate name rest owner mtime failures=0
+  base_real="$(uit_storage_base_real)" || return 0
+  now="$(date +%s)"
+  for candidate in "$base_real"/run-*; do
+    [[ -d "$candidate" && ! -L "$candidate" ]] || continue
+    uit_storage_marker_valid "$candidate" || continue
+    name="$(basename "$candidate")"
+    [[ "$name" =~ ^run-[0-9]+-[0-9]+-[0-9]+$ ]] || continue
+    rest="${name#run-}"
+    owner="${rest%%-*}"
+    uit_storage_owner_alive "$owner" && continue
+    mtime="$(stat -f %m "$candidate" 2>/dev/null)" || continue
+    [[ "$mtime" =~ ^[0-9]+$ ]] || continue
+    (( now - mtime >= UIT_STORAGE_MAX_AGE )) || continue
+    if ! rm -rf "$candidate"; then
+      echo "ERROR: could not prune stale storage root $candidate" >&2
+      failures=1
+    elif [[ -e "$candidate" ]]; then
+      echo "ERROR: stale storage root remains after prune: $candidate" >&2
+      failures=1
+    fi
+  done
+  return "$failures"
+}
+
+uit_new_storage(){
+  case "$UIT_STORAGE_BASE" in
+    /tmp/mindflow-uitest-*) ;;
+    *) echo "ERROR: storage base must be dedicated under /tmp" >&2; return 1 ;;
+  esac
+  mkdir -p "$UIT_STORAGE_BASE" || {
+    echo "ERROR: cannot create dedicated UI storage base $UIT_STORAGE_BASE" >&2
+    return 1
   }
-  if [[ "$UIT_BACKUP_OWNER" != "$$" ]]; then
-    kill -0 "$UIT_BACKUP_OWNER" 2>/dev/null || {
-      echo "ERROR: inherited backup owner $UIT_BACKUP_OWNER is not running" >&2; return 1;
-    }
-    [[ -d "$UIT_BACKUP" ]] || {
-      echo "ERROR: inherited backup $UIT_BACKUP is missing" >&2; return 1;
-    }
-    return 0
-  fi
-  [[ -d "$UIT_BACKUP" ]] && return 0
-  # Failing to back up must stop the run: everything after this point mutates the
-  # owner's real tabs directory. Remove any partial destination, never the source.
-  if ! cp -R "$TABS" "$UIT_BACKUP"; then
-    rm -rf "$UIT_BACKUP"
-    echo "ERROR: could not back up $TABS; refusing to run" >&2
+  uit_prune_storage || return 1
+
+  local root="" attempt
+  for attempt in $(seq 1 10); do
+    root="$UIT_STORAGE_BASE/run-$$-$(date +%s)-$RANDOM"
+    if mkdir -m 700 "$root" 2>/dev/null; then break; fi
+    root=""
+  done
+  [[ -n "$root" ]] || { echo "ERROR: cannot allocate unique UI storage root" >&2; return 1; }
+  if ! printf '%s' "$UIT_STORAGE_MARKER_CONTENT" > "$root/$UIT_STORAGE_MARKER_FILE" ||
+     ! mkdir -m 700 "$root/tabs" "$root/recovery"; then
+    rm -rf "$root"
+    echo "ERROR: cannot initialize isolated UI storage root" >&2
     return 1
   fi
-  local stale
-  stale=$(find "$APP_SUPPORT" -maxdepth 1 -type d -name 'tabs.pre-uitest-*' | wc -l | tr -d ' ')
-  if [[ "$stale" -gt 3 ]]; then
-    echo "WARN: $stale uitest backups in $APP_SUPPORT; earlier runs did not restore" >&2
+  UIT_STORAGE_ROOT="$root"
+  UIT_STORAGE_OWNER=$$
+  UIT_STORAGE_CREATOR=1
+  export UIT_STORAGE_ROOT UIT_STORAGE_OWNER UIT_STORAGE_CREATOR
+}
+
+uit_prepare_storage(){
+  local inherited=0
+  if [[ -n "$UIT_STORAGE_ROOT" && -n "$UIT_STORAGE_OWNER" ]] &&
+     uit_storage_marker_valid "$UIT_STORAGE_ROOT" &&
+     uit_storage_owner_alive "$UIT_STORAGE_OWNER"; then
+    inherited=1
+    UIT_STORAGE_CREATOR=0
+  else
+    uit_new_storage || return 1
+  fi
+
+  # A valid marker never falls back to the owner's store. Child-directory
+  # creation failure is surfaced in-place and leaves owner data untouched.
+  if ! mkdir -m 700 -p "$UIT_STORAGE_ROOT/tabs" "$UIT_STORAGE_ROOT/recovery"; then
+    echo "ERROR: cannot initialize isolated storage children under $UIT_STORAGE_ROOT" >&2
+    return 1
+  fi
+  TABS="$UIT_STORAGE_ROOT/tabs"
+  MINDFLOW_STORAGE_ROOT="$UIT_STORAGE_ROOT"
+  export TABS MINDFLOW_STORAGE_ROOT
+  if [[ "$inherited" == 0 && "$UIT_STORAGE_CREATOR" == 1 && "$UIT_CLEANUP_TRAP_INSTALLED" == 0 ]]; then
+    UIT_CLEANUP_TRAP_INSTALLED=1
+    trap 'uit_cleanup_all; _uit_cleanup_rc=$?; if [[ "$_uit_cleanup_rc" -ne 0 ]]; then exit "$_uit_cleanup_rc"; fi' EXIT TERM INT
   fi
 }
 
-uit_prepare_backup(){
-  if [[ -z "$UIT_BACKUP" && -z "$UIT_BACKUP_OWNER" ]]; then
-    uit_new_backup
-  elif [[ -z "$UIT_BACKUP" || -z "$UIT_BACKUP_OWNER" ]]; then
-    echo "ERROR: incomplete inherited backup transaction" >&2
-    return 1
-  fi
-  uit_ensure_backup || return 1
-  if [[ "$UIT_BACKUP_OWNER" == "$$" ]]; then
-    trap uit_restore EXIT TERM INT
-  fi
-  return 0
+uit_register_cleanup(){
+  [[ $# -eq 1 && -n "$1" ]] || { echo "ERROR: cleanup callback name required" >&2; return 2; }
+  UIT_CLEANUP_CALLBACKS[${#UIT_CLEANUP_CALLBACKS[@]}]="$1"
 }
 
 uit_pkill(){
   pkill -x MindFlow 2>/dev/null || true
-  for _ in $(seq 1 50); do pgrep -x MindFlow >/dev/null 2>&1 || return 0; sleep 0.1; done
+  local _
+  for _ in $(seq 1 50); do
+    if ! pgrep -x MindFlow >/dev/null 2>&1; then return 0; fi
+    sleep 0.1
+  done
+  echo "ERROR: MindFlow did not stop during harness cleanup" >&2
+  return 1
+}
+
+uit_cleanup_storage(){
+  [[ "${UIT_STORAGE_CREATOR:-0}" == 1 && "${UIT_STORAGE_OWNER:-}" == "$$" ]] || return 0
+  if ! uit_storage_path_is_safe_child "$UIT_STORAGE_ROOT" ||
+     ! uit_storage_marker_valid "$UIT_STORAGE_ROOT"; then
+    echo "ERROR: refusing to remove untrusted UI storage root ${UIT_STORAGE_ROOT:-unset}" >&2
+    return 1
+  fi
+  if ! rm -rf "$UIT_STORAGE_ROOT"; then
+    echo "ERROR: could not remove isolated UI storage root $UIT_STORAGE_ROOT" >&2
+    return 1
+  fi
+  if [[ -e "$UIT_STORAGE_ROOT" ]]; then
+    echo "ERROR: isolated UI storage root remains $UIT_STORAGE_ROOT" >&2
+    return 1
+  fi
+  UIT_STORAGE_ROOT=""
+  UIT_STORAGE_OWNER=""
+  UIT_STORAGE_CREATOR=0
+  TABS=""
+  MINDFLOW_STORAGE_ROOT=""
+  export UIT_STORAGE_ROOT UIT_STORAGE_OWNER UIT_STORAGE_CREATOR TABS MINDFLOW_STORAGE_ROOT
+  return 0
+}
+
+uit_cleanup_all(){
+  local original_rc=$?
+  local final_rc
+  final_rc=$original_rc
+  local callback callback_rc callback_failed=0 shutdown_rc=0 storage_rc=0
+  local errexit_was_on=0 nounset_was_on=0
+  case "$-" in *e*) errexit_was_on=1;; esac
+  case "$-" in *u*) nounset_was_on=1;; esac
+  set +e
+  set +u
+  trap - EXIT TERM INT
+
+  for callback in "${UIT_CLEANUP_CALLBACKS[@]}"; do
+    "$callback"
+    callback_rc=$?
+    if [[ "$callback_rc" -ne 0 ]]; then
+      echo "ERROR: cleanup callback $callback failed (rc=$callback_rc)" >&2
+      callback_failed=1
+    fi
+  done
+
+  # App shutdown and storage cleanup are independent so a failed callback cannot
+  # skip either one.
+  uit_pkill
+  shutdown_rc=$?
+  uit_cleanup_storage
+  storage_rc=$?
+  if [[ "$shutdown_rc" -ne 0 || "$storage_rc" -ne 0 ]]; then final_rc=1; fi
+  if [[ "$callback_failed" -ne 0 && "$original_rc" -eq 0 ]]; then final_rc=1; fi
+
+  if [[ "$nounset_was_on" -ne 0 ]]; then set -u; fi
+  if [[ "$errexit_was_on" -ne 0 ]]; then set -e; fi
+  return "$final_rc"
 }
 
 uit_require_frontmost(){
@@ -94,7 +236,7 @@ uit_launch(){ # <fixture-basename> [waitsec] -> echoes pid
   local f="$1" waitsec="${2:-30}" t0 w
   uit_pkill
   uit_stage "$f" || return 1
-  open "$APP"
+  open --env "MINDFLOW_STORAGE_ROOT=$MINDFLOW_STORAGE_ROOT" "$APP"
   t0=$(date +%s)
   while :; do
     if pgrep -x MindFlow >/dev/null 2>&1; then
@@ -149,19 +291,6 @@ uit_quit_flush(){ # graceful Cmd+Q -> willTerminate autosave rewrites the tabs s
   sleep 0.5
 }
 
-uit_restore(){
-  # A child may use its parent's snapshot, but only the creator may restore or
-  # delete it. This keeps every suite anchored to its pre-run state.
-  [[ -n "$UIT_BACKUP_OWNER" && "$UIT_BACKUP_OWNER" == "$$" ]] || return 0
-  uit_pkill
-  if [[ -d "$UIT_BACKUP" ]]; then
-    rm -rf "$TABS"
-    if ! mv "$UIT_BACKUP" "$TABS"; then
-      echo "ERROR: could not restore $TABS; backup remains at $UIT_BACKUP" >&2
-      return 1
-    fi
-  fi
-}
 
 uit_report(){ # <name> <0|1> <msg-on-fail>
   local name="$1" ok="$2" msg="${3:-}"

@@ -2,6 +2,8 @@
 # One-shot quality gate: full logic checks + optimized release build.
 set -e
 cd "$(dirname "$0")/.."
+echo "==> Storage isolation check…"
+bash "$(dirname "$0")/uitest/test-storage-isolation.sh"
 echo "==> UI coverage check…"
 bash "$(dirname "$0")/check-ui-coverage.sh"
 echo "==> No bare-key menu shortcuts…"

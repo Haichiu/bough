@@ -4,12 +4,19 @@
 set -u
 cd "$(dirname "$0")"
 source ./lib.sh
-# The suite owns one fresh snapshot. Children inherit this exact transaction;
-# any UIT_BACKUP left in the caller environment is intentionally discarded.
-uit_new_backup
-uit_ensure_backup || exit 1
-export UIT_BACKUP UIT_BACKUP_OWNER
-trap uit_restore EXIT TERM INT
+# Every suite starts in a fresh marked root. Inherited product/storage variables
+# are discarded; children inherit only this creator-owned root.
+UIT_STORAGE_BASE="${UITEST_STORAGE_BASE:-/tmp/mindflow-uitest-storage}"
+case "$UIT_STORAGE_BASE" in
+  /tmp/mindflow-uitest-*) ;;
+  *) UIT_STORAGE_BASE="/tmp/mindflow-uitest-storage" ;;
+esac
+UIT_STORAGE_ROOT=""
+UIT_STORAGE_OWNER=""
+UIT_STORAGE_CREATOR=0
+MINDFLOW_STORAGE_ROOT=""
+export UIT_STORAGE_BASE UIT_STORAGE_ROOT UIT_STORAGE_OWNER UIT_STORAGE_CREATOR MINDFLOW_STORAGE_ROOT
+uit_prepare_storage || exit 1
 PASS=0; FAIL=0; SKIP=0
 COMMIT="${UITEST_COMMIT:-$(git -C "$PROJ" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 BINARY_SHA=$(shasum -a 256 "$APP/Contents/MacOS/MindFlow" 2>/dev/null | awk '{print substr($1,1,16)}')

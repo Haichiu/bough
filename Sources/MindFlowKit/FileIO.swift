@@ -1,11 +1,63 @@
 import AppKit
 import Foundation
 
+public struct StoragePaths: Equatable {
+    public static let environmentKey = "MINDFLOW_STORAGE_ROOT"
+    public static let markerFileName = ".mindflow-uitest-root"
+    public static let markerContents = "mindflow-uitest-storage-v1"
+
+    public let root: URL
+
+    public init(root: URL) {
+        self.root = root
+    }
+
+    public var tabs: URL {
+        root.appendingPathComponent("tabs", isDirectory: true)
+    }
+
+    public var recovery: URL {
+        root.appendingPathComponent("recovery", isDirectory: true)
+    }
+
+    public var autosave: URL {
+        root.appendingPathComponent("autosave.mindmap")
+    }
+
+    public static func resolve(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default
+    ) -> StoragePaths {
+        guard let rawRoot = environment[environmentKey],
+              !rawRoot.isEmpty,
+              rawRoot.hasPrefix("/") else {
+            return production(fileManager: fileManager)
+        }
+
+        let root = URL(fileURLWithPath: rawRoot, isDirectory: true)
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: root.path, isDirectory: &isDirectory),
+              isDirectory.boolValue,
+              let marker = try? Data(contentsOf: root.appendingPathComponent(markerFileName)),
+              marker == Data(markerContents.utf8) else {
+            return production(fileManager: fileManager)
+        }
+        return StoragePaths(root: root)
+    }
+
+    public static func production(fileManager: FileManager = .default) -> StoragePaths {
+        let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return StoragePaths(root: applicationSupport.appendingPathComponent("MindFlow", isDirectory: true))
+    }
+}
+
 public enum FileIO {
+    private static var currentStoragePaths: StoragePaths {
+        StoragePaths.resolve()
+    }
     /// One autosave slot per open tab.
     static var tabsDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MindFlow/tabs", isDirectory: true)
+        let base = currentStoragePaths.tabs
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
@@ -45,8 +97,7 @@ public enum FileIO {
 
     /// Recoverable copies of closed tabs live here, never scanned as tabs.
     static var recoveryDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MindFlow/recovery", isDirectory: true)
+        let base = currentStoragePaths.recovery
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
@@ -76,10 +127,9 @@ public enum FileIO {
     }
 
     static var autosaveURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MindFlow", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("autosave.mindmap")
+        let paths = currentStoragePaths
+        try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
+        return paths.autosave
     }
 
     @discardableResult

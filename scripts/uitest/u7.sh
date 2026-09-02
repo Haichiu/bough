@@ -3,7 +3,7 @@
 # Fixed artifacts overwrite U7-ax.tsv/U7.svg; no unbounded accumulation.
 set -u
 cd "$(dirname "$0")"; source ./lib.sh
-uit_prepare_backup || exit 1
+uit_prepare_storage || exit 1
 SVG_OUT="$ART_DIR/U7.svg"; AX_OUT="$ART_DIR/U7-ax.tsv"
 FIX="$PROJ/scripts/fixtures/u7-style.mindmap"
 

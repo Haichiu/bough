@@ -233,6 +233,65 @@ func check(_ condition: Bool, _ label: String, line: Int = #line) {
     }
 }
 
+func storagePathChecks() {
+    let fileManager = FileManager.default
+    let expectedRoot = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("MindFlow", isDirectory: true)
+    let production = StoragePaths.resolve(environment: [:], fileManager: fileManager)
+    check(production.root == expectedRoot &&
+          production.tabs == expectedRoot.appendingPathComponent("tabs", isDirectory: true) &&
+          production.recovery == expectedRoot.appendingPathComponent("recovery", isDirectory: true) &&
+          production.autosave == expectedRoot.appendingPathComponent("autosave.mindmap"),
+          "storage env-unset paths preserve production locations")
+
+    let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
+        .appendingPathComponent("mindflow-storage-paths-\(UUID().uuidString)", isDirectory: true)
+    try! fileManager.createDirectory(at: root, withIntermediateDirectories: false)
+    assertTestDirectory(root, label: "storage-path check root")
+    defer { try? fileManager.removeItem(at: root) }
+
+    let markerURL = root.appendingPathComponent(StoragePaths.markerFileName)
+    try! Data(StoragePaths.markerContents.utf8).write(to: markerURL, options: .atomic)
+    let isolated = StoragePaths.resolve(
+        environment: [StoragePaths.environmentKey: root.path], fileManager: fileManager)
+    check(isolated.root == root &&
+          isolated.tabs == root.appendingPathComponent("tabs", isDirectory: true) &&
+          isolated.recovery == root.appendingPathComponent("recovery", isDirectory: true) &&
+          isolated.autosave == root.appendingPathComponent("autosave.mindmap"),
+          "valid marker routes tabs recovery and autosave together")
+
+    let blockedTabs = root.appendingPathComponent("tabs")
+    try! Data("not-a-directory".utf8).write(to: blockedTabs, options: .atomic)
+    let blocked = StoragePaths.resolve(
+        environment: [StoragePaths.environmentKey: root.path], fileManager: fileManager)
+    check(blocked.root == root &&
+          blocked.tabs == root.appendingPathComponent("tabs", isDirectory: true),
+          "valid marker never falls back when an isolated child is blocked")
+    try! fileManager.removeItem(at: blockedTabs)
+
+    let unmarked = root.appendingPathComponent("unmarked", isDirectory: true)
+    try! fileManager.createDirectory(at: unmarked, withIntermediateDirectories: false)
+    let malformed = root.appendingPathComponent("malformed", isDirectory: true)
+    try! fileManager.createDirectory(at: malformed, withIntermediateDirectories: false)
+    try! Data("wrong-version".utf8).write(
+        to: malformed.appendingPathComponent(StoragePaths.markerFileName), options: .atomic)
+    let regularFile = root.appendingPathComponent("not-a-directory")
+    try! Data("file".utf8).write(to: regularFile, options: .atomic)
+    let invalidEnvironments: [(String, String)] = [
+        ("missing marker", unmarked.path),
+        ("malformed marker", malformed.path),
+        ("relative root", "relative/storage"),
+        ("regular-file root", regularFile.path)
+    ]
+    for (label, rawRoot) in invalidEnvironments {
+        let resolved = StoragePaths.resolve(
+            environment: [StoragePaths.environmentKey: rawRoot], fileManager: fileManager)
+        check(resolved == production, "\(label) falls back to production paths")
+    }
+}
+
+storagePathChecks()
+
 func approxEqual(_ a: CGFloat, _ b: CGFloat, accuracy: CGFloat = 0.5) -> Bool {
     abs(a - b) <= accuracy
 }

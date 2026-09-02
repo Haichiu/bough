@@ -9,7 +9,7 @@
 #                以 FAIL 回報並記入 baseline「無法自動驗證」清單。
 set -u
 cd "$(dirname "$0")"; source ./lib.sh
-uit_prepare_backup || exit 1
+uit_prepare_storage || exit 1
 uit_launch small-20 30 >/dev/null || { uit_report U6 1 "launch failed"; exit 1; }
 sleep 0.5
 uit_ime_switch

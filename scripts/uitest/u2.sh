@@ -2,7 +2,7 @@
 # U2: 再擊同一節點 → 進入編輯（畫布出現帶節點原文字的 TextField）。
 set -u
 cd "$(dirname "$0")"; source ./lib.sh
-uit_prepare_backup || exit 1
+uit_prepare_storage || exit 1
 uit_launch small-20 30 >/dev/null || { uit_report U2 1 "launch failed"; exit 1; }
 sleep 0.5
 D=$(uit_axdump); read CX CY <<<"$(uit_node_coords "$D" N-0005)"

@@ -4,7 +4,7 @@
 # 兩階段各自重新 stage+launch 以求隔離。
 set -u
 cd "$(dirname "$0")"; source ./lib.sh
-uit_prepare_backup || exit 1
+uit_prepare_storage || exit 1
 FIX="$PROJ/scripts/fixtures/small-20.mindmap"
 okA=1; okB=1; msgA=""; msgB=""
 
