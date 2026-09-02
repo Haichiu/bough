@@ -6172,6 +6172,25 @@ do {
 
 print("D2 PENDING: the NSEvent monitor wiring plus the field-editor install race need a real keyboard and are p1 GUI-probe items")
 
+// MARK: - D2 editor seed: the draft starts from the live store
+// p1 measurement: after type-to-replace the editor still showed the old text,
+// and Return committed that stale draft back over the replacement, with the
+// rapid-entry spawn leaving 子主題 ×2. NodeView seeded editText from its node
+// snapshot; the seed must consult the live document at seed time instead.
+
+do {
+    // The live-beats-snapshot rule itself is one `??`; what matters headlessly
+    // is the wiring: both seed sites go through the live document read.
+    let d2SeedCanvas = projectSource("Sources/MindFlowKit/MapCanvasView.swift")
+    check(d2SeedCanvas.contains("editSeed: { vm.document.root.find(item.node.id)?.text ?? item.node.text }"),
+          "D2 editor seed is wired to the live document read")
+    check(projectSource("Sources/MindFlowKit/NodeView.swift")
+          .components(separatedBy: "editText = Self.editSeed(live: editSeed?(), snapshot: node.text)").count == 3,
+          "D2 editor draft is seeded through the live-store seed in both observers")
+}
+
+print("D2 PENDING: the on-screen editor-open seed timing is verified by the p1 GUI probe")
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

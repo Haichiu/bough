@@ -18,6 +18,10 @@ struct NodeView: View {
     var isSearchHit: Bool = false
     var colorTag: String? = nil
     var dimmed: Bool = false
+    /// Live-store seed for the editor draft (D2): the replacement lands in the
+    /// store before the editor opens, so the draft must be read from the live
+    /// document at seed time, never from a possibly pre-replacement snapshot.
+    var editSeed: (() -> String)? = nil
     let onCancelEdit: (String) -> Void
     /// Called when editing ends without an explicit Return — clicking away, or the
     /// selection moving on. Commits the text and nothing else.
@@ -37,6 +41,13 @@ struct NodeView: View {
     @State private var freshOpacity: Double = 1
     @FocusState private var editFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The editor's starting draft: the live document text when available, the
+    /// snapshot only as a fallback. Seeding from the snapshot alone resurrects
+    /// the pre-replacement text on commit (the D2 swallow bug).
+    static func editSeed(live: String?, snapshot: String) -> String {
+        live ?? snapshot
+    }
 
     var body: some View {
         let depth = layout.depth
@@ -90,13 +101,13 @@ struct NodeView: View {
                    value: isSelected || isHovered || isDropTarget)
         .onChange(of: isEditing) { editing in
             if editing {
-                editText = node.text
+                editText = Self.editSeed(live: editSeed?(), snapshot: node.text)
                 editFocused = true
             }
         }
         .onAppear {
             if isEditing {
-                editText = node.text
+                editText = Self.editSeed(live: editSeed?(), snapshot: node.text)
                 DispatchQueue.main.async { editFocused = true }
             }
             if isFresh && !reduceMotion {

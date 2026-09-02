@@ -246,6 +246,7 @@ struct MapCanvasView: View {
                  dragOffset: nil,
                  isSearchHit: vm.searchResults.contains(item.node.id),
                  colorTag: item.node.colorTag,
+                 editSeed: { vm.document.root.find(item.node.id)?.text ?? item.node.text },
                  onCancelEdit: { text in
                      vm.cancelNodeEditing(id: item.node.id, draft: text)
                  },
