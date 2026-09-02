@@ -6098,7 +6098,7 @@ do {
     }
 }
 
-print("T-049 PENDING: arrow-key node navigation needs a real keyboard and is not simulated headlessly")
+print("T-049 arrow-key navigation: GUI-verified by p1 (selection read out via the replacement target after navigate-and-type)")
 
 // MARK: - T-050: tab buttons carry the resolver label as their identifier
 // Governance (p1 rulings, recorded): the probe proved .accessibilityLabel does
