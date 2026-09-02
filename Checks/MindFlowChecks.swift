@@ -6402,6 +6402,69 @@ do {
 
 print("D2 PENDING: the on-screen editor-open seed timing is verified by the p1 GUI probe")
 
+// MARK: - T-051 S2: symlink storage write-through experiment
+
+// Question: does any save path write THROUGH a symlinked tab file into its
+// target? Measured headlessly on the two real save mechanisms — the TabStore
+// transaction (staging + directory exchange) and the user-document save
+// (vm.save → Data.write(options: .atomic)) — plus an iCloud-style storage
+// whose tabs directory is itself a symlink, recorded for the verdict.
+do {
+    let root = freshTabStoreRoot("t051-symlink")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let live = root.appendingPathComponent("tabs", isDirectory: true)
+
+    // A1: TabStore transaction save over a slot replaced by a symlink.
+    let store = TabStore(directory: live)
+    let seedID = UUID()
+    check(store.save([TabStore.Entry(id: seedID,
+                                     document: MindDocument(title: "seed", root: MindNode(text: "seed")))]).succeeded,
+          "S2 seed snapshot commits")
+    let target = root.appendingPathComponent("target.mindmap")
+    let originalTarget = encodedTabDocument(MindDocument(title: "victim", root: MindNode(text: "victim")))
+    try originalTarget.write(to: target, options: .atomic)
+    let slot = live.appendingPathComponent("\(seedID.uuidString).mindmap")
+    try FileManager.default.removeItem(at: slot)
+    try FileManager.default.createSymbolicLink(at: slot, withDestinationURL: target)
+    let outcome = store.save([TabStore.Entry(id: seedID,
+                                             document: MindDocument(title: "again", root: MindNode(text: "again")))])
+    check(outcome.succeeded, "S2 a save over a symlinked slot still commits")
+    let afterTarget = (try? Data(contentsOf: target)) ?? Data()
+    check(afterTarget == originalTarget, "S2 the symlinked slot's target bytes are unchanged after a save")
+    print("T-051 S2 A1: committed=\(outcome.succeeded) targetBytesBefore=\(originalTarget.count) targetBytesAfter=\(afterTarget.count) identical=\(afterTarget == originalTarget)")
+
+    // A2: the user-document save path against a symlinked document file.
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.newDocument()
+        let docTarget = root.appendingPathComponent("doc-target.mindmap")
+        let docOriginal = encodedTabDocument(vm.document)
+        try docOriginal.write(to: docTarget, options: .atomic)
+        let docLink = root.appendingPathComponent("document.mindmap")
+        try FileManager.default.createSymbolicLink(at: docLink, withDestinationURL: docTarget)
+        vm.filePath = docLink
+        vm.addChild(to: nil)
+        let saved = vm.save()
+        let afterDoc = (try? Data(contentsOf: docTarget)) ?? Data()
+        check(saved, "S2 vm.save through a symlinked path reports success")
+        check(afterDoc == docOriginal, "S2 the symlinked document's target bytes are unchanged after vm.save")
+        print("T-051 S2 A2: saved=\(saved) targetBytesBefore=\(docOriginal.count) targetBytesAfter=\(afterDoc.count) identical=\(afterDoc == docOriginal)")
+    }
+
+    // B: iCloud-style storage whose tabs directory is itself a symlink —
+    // recorded only; a fix that guards parent directories would break this.
+    let bRoot = freshTabStoreRoot("t051-symlink-dir")
+    defer { try? FileManager.default.removeItem(at: bRoot) }
+    let realTabs = bRoot.appendingPathComponent("real-tabs", isDirectory: true)
+    try FileManager.default.createDirectory(at: realTabs, withIntermediateDirectories: true)
+    let linkedTabs = bRoot.appendingPathComponent("tabs", isDirectory: true)
+    try FileManager.default.createSymbolicLink(at: linkedTabs, withDestinationURL: realTabs)
+    let bOutcome = TabStore(directory: linkedTabs)
+        .save([TabStore.Entry(id: UUID(), document: MindDocument(title: "cloud", root: MindNode(text: "cloud")))])
+    let stillSymlink = (try? FileManager.default.destinationOfSymbolicLink(atPath: linkedTabs.path)) != nil
+    print("T-051 S2 B: committed=\(bOutcome.succeeded) error=\(bOutcome.primaryError.map(String.init(describing:)) ?? "none") tabsPathStillSymlink=\(stillSymlink)")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
