@@ -62,7 +62,9 @@ public struct StaticMapView: View {
         let layouts = LayoutEngine.layout(root: document.root, direction: direction,
                                           offsets: document.offsets)
         let theme = Self.exportPalette
-        let bounds = LayoutEngine.contentBounds(of: layouts).insetBy(dx: -80, dy: -60)
+        let contentBounds = LayoutEngine.contentBounds(of: layouts)
+            .union(MarkedBadgeGeometry.screenBounds(for: document.root, layouts: layouts))
+        let bounds = contentBounds.insetBy(dx: -80, dy: -60)
         let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
         var items: [NodeItem] = []
         func walk(_ node: MindNode) {

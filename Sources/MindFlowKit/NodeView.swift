@@ -67,7 +67,7 @@ struct NodeView: View {
         .opacity(isDragging ? 0.6 : 1)
         .offset(x: dragOffset?.width ?? 0, y: dragOffset?.height ?? 0)
         .overlay(alignment: .trailing) { collapsedBadge }
-        .overlay(alignment: .leading) { markedBadge }
+        .overlay(alignment: .topLeading) { markedBadge }
         .overlay(alignment: .leading) { colorBar }
         .overlay(alignment: .topLeading) { noteBadge }
         .overlay(alignment: .topTrailing) { urlBadge }
@@ -233,10 +233,16 @@ struct NodeView: View {
     @ViewBuilder
     private var markedBadge: some View {
         if node.marked && !isEditing {
-            Image(systemName: "star.fill")
-                .font(.system(size: 9))
-                .foregroundStyle(palette.statusHighlight)
-                .offset(x: -10)
+            let footprint = MarkedBadgeGeometry.screenLocalFootprint(for: layout.frame)
+            ZStack(alignment: .topLeading) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: MarkedBadgeGeometry.screenFontSize))
+                    .foregroundStyle(palette.statusHighlight)
+                    .frame(width: footprint.width, height: footprint.height)
+                    .offset(x: footprint.minX, y: footprint.minY)
+            }
+            .frame(width: layout.frame.width, height: layout.frame.height,
+                   alignment: .topLeading)
         }
     }
 

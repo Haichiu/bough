@@ -3,6 +3,7 @@ import CoreGraphics
 import CoreText
 import Foundation
 import CryptoKit
+import SwiftUI
 import MindFlowKit
 
 setvbuf(stdout, nil, _IONBF, 0)
@@ -744,7 +745,8 @@ do {
     check(!svgRich.contains("#2e3b4f"), "the obsolete root literal is gone for good")
     check(svgRich.contains("stroke=\"none\""), "root rect has no stroke")
     check(svgRich.contains(">★</text>"), "svg draws star for marked nodes")
-    check(svgRich.contains("#f5c542"), "svg star is gold")
+    check(svgRich.contains(Palette.light.statusHighlightRGB.hex),
+          "svg star uses the resolved Palette status highlight")
     check(svgRich.contains("備註：有備註"), "svg embeds note as tooltip title")
     check(svgRich.contains("<a href=\"https://example.com\">"), "svg wraps linked node in anchor")
     // Red color tag is defined as Color(hex: 0xE05252) in Theme.colorTags.
@@ -5268,14 +5270,17 @@ let t043Check: () -> Void = {
     check(positions.count == moreActions.count
           && zip(positions, positions.dropFirst()).allSatisfy { $0 <= $1 },
           "More action order ends with Delete")
-    check(more.contains("Divider()\n                    Button(\"刪除\""),
-          "More separates the final Delete action from non-destructive actions")
-    if let delete = more.range(of: "Button(\"刪除\"") {
+    if let divider = more.range(of: "Divider()", options: .backwards),
+       let delete = more.range(of: "Button(\"刪除\"") {
+        let between = String(more[divider.upperBound..<delete.lowerBound])
+        check(divider.lowerBound < delete.lowerBound
+              && !between.contains("Button(") && !between.contains("Menu("),
+              "More separates the final Delete action from non-destructive actions")
         let afterDelete = String(more[delete.upperBound...])
         check(!afterDelete.contains("Button(") && !afterDelete.contains("Menu("),
               "Delete is the final More action")
     } else {
-        check(false, "Delete is present for final-action validation")
+        check(false, "Divider and Delete are present for final-action validation")
     }
 
     check(source.contains("NotificationCenter.default.post(name: .mindFlowFit")
@@ -5292,7 +5297,575 @@ let t043Check: () -> Void = {
           && appCommands.contains("vm.resetAllOffsets()"),
           "keyboard and App menu alternatives remain reachable")
 }
+
+
 t043Check()
+
+// MARK: - T-048: marked badge shared bottom-center geometry
+// Screen/PNG/PDF retain SF Symbol star.fill; SVG retains ★. Only their placement is shared.
+func t048PointEqual(_ lhs: CGPoint, _ rhs: CGPoint, tolerance: CGFloat = 0.0001) -> Bool {
+    abs(lhs.x - rhs.x) <= tolerance && abs(lhs.y - rhs.y) <= tolerance
+}
+
+func t048Attribute(_ name: String, in line: String) -> String? {
+    let marker = name + "=\""
+    guard let start = line.range(of: marker) else { return nil }
+    let valueStart = start.upperBound
+    guard let end = line[valueStart...].firstIndex(of: "\"") else { return nil }
+    return String(line[valueStart..<end])
+}
+
+func t048ViewBox(_ svg: String) -> CGRect? {
+    guard let line = svg.split(separator: "\n").map(String.init).first(where: { $0.contains("viewBox=\"") }),
+          let raw = t048Attribute("viewBox", in: line) else { return nil }
+    let values = raw.split(whereSeparator: { $0 == " " || $0 == "\t" }).compactMap { Double($0) }
+    guard values.count == 4 else { return nil }
+    return CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
+}
+
+let t048Frame = CGRect(x: 100, y: 200, width: 64, height: 32)
+let t048Anchor = MarkedBadgeGeometry.anchor(for: t048Frame)
+let t048Screen = MarkedBadgeGeometry.screenFootprint(for: t048Frame)
+let t048ScreenLocal = MarkedBadgeGeometry.screenLocalFootprint(for: t048Frame)
+let t048ScreenMap = CGPoint(x: t048ScreenLocal.midX + t048Frame.minX,
+                            y: t048ScreenLocal.midY + t048Frame.minY)
+let t048SVG = MarkedBadgeGeometry.svgEmBox(for: t048Frame)
+let t048SVGMap = CGPoint(x: t048SVG.midX, y: t048SVG.midY)
+
+print(String(format: "T-048 anchor frame=(%.1f,%.1f,%.1fx%.1f) anchor=(%.1f,%.1f) screen=(%.1fx%.1f) svg=(%.1fx%.1f)",
+             t048Frame.minX, t048Frame.minY, t048Frame.width, t048Frame.height,
+             t048Anchor.x, t048Anchor.y, t048Screen.width, t048Screen.height,
+             t048SVG.width, t048SVG.height))
+check(t048PointEqual(t048Anchor, t048ScreenMap)
+      && t048PointEqual(t048Anchor, t048SVGMap),
+      "screen local and SVG conversions return the same map-space anchor")
+check(t048Screen.minY > t048Frame.maxY && !t048Screen.intersects(t048Frame),
+      "screen SF Symbol footprint is completely below the card")
+check(t048SVG.minY > t048Frame.maxY && !t048SVG.intersects(t048Frame),
+      "SVG star em-box is completely below the card")
+let t048IndependentSVGAnchor = CGPoint(x: t048Anchor.x + 1, y: t048Anchor.y)
+check(!t048PointEqual(t048Anchor, t048IndependentSVGAnchor),
+      "negative control: independent renderer anchors are rejected")
+
+// The old leading overlay sat on the child connector entry. Keep that exact failure
+// observable while the production badge is checked against the same entry zone.
+let t048ConnectorEntryZone = CGRect(x: t048Frame.minX - 2, y: t048Frame.midY - 2,
+                                    width: 4, height: 4)
+let t048OldLeading = CGRect(x: t048Frame.minX - 10, y: t048Frame.midY - 4.5,
+                            width: 9, height: 9)
+let t048OldLeadingClear = !t048OldLeading.intersects(t048Frame)
+    && !t048OldLeading.intersects(t048ConnectorEntryZone)
+print("T-048 old leading clearance=\(t048OldLeadingClear)")
+check(!t048OldLeadingClear,
+      "negative control: old leading-center badge collides with card/connector clearance")
+check(!t048Screen.intersects(t048ConnectorEntryZone),
+      "bottom-center screen badge clears the connector entry zone")
+
+let t048OldSVGEmBox = CGRect(x: t048Frame.minX + 1, y: t048Frame.minY + 4,
+                             width: MarkedBadgeGeometry.svgAdvance,
+                             height: MarkedBadgeGeometry.svgAscent + MarkedBadgeGeometry.svgDescent)
+print("T-048 old SVG em-box intersects card=\(t048OldSVGEmBox.intersects(t048Frame))")
+check(t048OldSVGEmBox.intersects(t048Frame),
+      "negative control: old SVG minX+6/minY+14 star is inside the card")
+
+let t048FixedGold = Palette.RGB(hex: 0xF5C542).quantized8
+let t048LightHighlight = Palette.light.statusHighlightRGB.quantized8
+let t048DarkHighlight = Palette.dark.statusHighlightRGB.quantized8
+let t048LightHighlightRatios = [
+    t048LightHighlight.contrastRatio(with: Palette.light.canvasRGB),
+    t048LightHighlight.contrastRatio(with: Palette.light.cardRGB)
+]
+let t048DarkHighlightRatios = [
+    t048DarkHighlight.contrastRatio(with: Palette.dark.canvasRGB),
+    t048DarkHighlight.contrastRatio(with: Palette.dark.cardRGB)
+]
+let t048FixedGoldRatios = [
+    t048FixedGold.contrastRatio(with: Palette.light.canvasRGB),
+    t048FixedGold.contrastRatio(with: Palette.light.cardRGB)
+]
+print(String(format: "T-048 status highlight light=%@ range %.4f...%.4f dark=%@ range %.4f...%.4f fixed-gold range %.4f...%.4f",
+             t048LightHighlight.hex, t048LightHighlightRatios.min() ?? 0,
+             t048LightHighlightRatios.max() ?? 0, t048DarkHighlight.hex,
+             t048DarkHighlightRatios.min() ?? 0, t048DarkHighlightRatios.max() ?? 0,
+             t048FixedGoldRatios.min() ?? 0, t048FixedGoldRatios.max() ?? 0))
+check(t048LightHighlightRatios.allSatisfy { $0 >= 3.1 },
+      "light status highlight Palette quantized sample clears canvas and card at 3.1:1")
+check(t048DarkHighlightRatios.allSatisfy { $0 >= 3.1 },
+      "dark status highlight Palette quantized sample clears canvas and card at 3.1:1")
+
+@MainActor
+func t048RenderedRGB(_ color: Color, scheme: ColorScheme) -> Palette.RGB? {
+    let renderer = ImageRenderer(content:
+        Rectangle()
+            .fill(color)
+            .frame(width: 12, height: 12)
+            .environment(\.colorScheme, scheme)
+    )
+    renderer.scale = 1
+    renderer.colorMode = .nonLinear
+    guard let image = renderer.nsImage else { return nil }
+    var proposed = CGRect(origin: .zero, size: image.size)
+    guard let cgImage = image.cgImage(forProposedRect: &proposed, context: nil, hints: nil),
+          let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+    let width = cgImage.width
+    let height = cgImage.height
+    var pixels = [UInt8](repeating: 0, count: width * height * 4)
+    let rendered = pixels.withUnsafeMutableBytes { bytes -> Bool in
+        guard let context = CGContext(data: bytes.baseAddress,
+                                      width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: colorSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return false }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return true
+    }
+    guard rendered else { return nil }
+    let index = ((height / 2) * width + width / 2) * 4
+    return Palette.RGB(red: Double(pixels[index]) / 255,
+                       green: Double(pixels[index + 1]) / 255,
+                       blue: Double(pixels[index + 2]) / 255)
+}
+
+for (name, scheme) in [
+    ("light", ColorScheme.light),
+    ("dark", ColorScheme.dark),
+] {
+    guard let highlight = await t048RenderedRGB(Palette.screen.statusHighlight, scheme: scheme),
+          let canvas = await t048RenderedRGB(Palette.screen.canvasBackground, scheme: scheme),
+          let card = await t048RenderedRGB(Palette.screen.card, scheme: scheme) else {
+        check(false, "T-048 \(name) final SwiftUI raster is sampleable")
+        continue
+    }
+    let ratios = [highlight.contrastRatio(with: canvas), highlight.contrastRatio(with: card)]
+    print(String(format: "T-048 %@ rendered status=%@ canvas=%@ card=%@ range %.4f...%.4f",
+                 name, highlight.hex, canvas.hex, card.hex,
+                 ratios.min() ?? 0, ratios.max() ?? 0))
+    check(ratios.allSatisfy { $0 >= 3.1 },
+          "T-048 \(name) final SwiftUI raster clears canvas and card at 3.1:1")
+}
+if let fixedRaster = await t048RenderedRGB(Palette.RGB(hex: 0xF5C542).color, scheme: .light),
+   let lightCanvasRaster = await t048RenderedRGB(Palette.screen.canvasBackground, scheme: .light) {
+    check(fixedRaster.contrastRatio(with: lightCanvasRaster) < 3.1,
+          "negative control: fixed-gold final raster fails the light canvas")
+} else {
+    check(false, "T-048 fixed-gold raster mutation is sampleable")
+}
+
+check(t048FixedGoldRatios.contains { $0 < 3.1 },
+      "negative control: fixed F5C542 fails light status-highlight contrast")
+let t048SourceOKLCh = Palette.statusHighlightSourceOKLCh
+let t048LightOKLCh = Palette.light.statusHighlightOKLCh
+let t048HueDelta = min(abs(t048LightOKLCh.hue - t048SourceOKLCh.hue),
+                       360 - abs(t048LightOKLCh.hue - t048SourceOKLCh.hue))
+print(String(format: "T-048 light status OKLCh source L=%.5f C=%.5f h=%.2f -> L=%.5f C=%.5f h=%.2f",
+             t048SourceOKLCh.lightness, t048SourceOKLCh.chroma, t048SourceOKLCh.hue,
+             t048LightOKLCh.lightness, t048LightOKLCh.chroma, t048LightOKLCh.hue))
+check(t048LightOKLCh.lightness < t048SourceOKLCh.lightness
+      && t048LightOKLCh.chroma <= t048SourceOKLCh.chroma + 0.003
+      && t048HueDelta <= 1.0,
+      "light status highlight derives from source gold by lowering L without hue drift")
+
+let t048Deep = MindNode(text: "深層", marked: true)
+let t048Right = MindNode(text: "右分支", note: "長備註", marked: true,
+                         url: "https://example.com", children: [t048Deep])
+let t048Left = MindNode(text: "左分支", marked: true)
+let t048Root = MindNode(text: "T-048 根", marked: true, children: [t048Right, t048Left])
+let t048MarkedNodes = [t048Root, t048Right, t048Deep, t048Left]
+let t048Directions: [MapDirection] = [.logicRight, .balanced, .fishbone, .bracket]
+
+for direction in t048Directions {
+    let layouts = LayoutEngine.layout(root: t048Root, direction: direction)
+    let document = MindDocument(title: "T-048", directionName: direction.rawValue, root: t048Root)
+    let strokes = ConnectionGeometry.strokes(root: t048Root, layouts: layouts,
+                                             direction: direction)
+    var cardContentBounds = CGRect.null
+    for layout in layouts.values { cardContentBounds = cardContentBounds.union(layout.frame) }
+    let contentBounds = cardContentBounds
+        .union(MarkedBadgeGeometry.screenBounds(for: t048Root, layouts: layouts))
+    let cmdZeroBounds = contentBounds.insetBy(dx: -180, dy: -140)
+    var minimumFitMargin = CGFloat.greatestFiniteMagnitude
+    for node in t048MarkedNodes {
+        guard let layout = layouts[node.id] else {
+            check(false, "T-048 \(direction.rawValue) lays out marked node \(node.text)")
+            continue
+        }
+        let screen = MarkedBadgeGeometry.screenFootprint(for: layout.frame)
+        let svgBox = MarkedBadgeGeometry.svgEmBox(for: layout.frame)
+        check(screen.minY > layout.frame.maxY && !screen.intersects(layout.frame),
+              "T-048 \(direction.rawValue) screen badge clears \(node.text) card")
+        check(svgBox.minY > layout.frame.maxY && !svgBox.intersects(layout.frame),
+              "T-048 \(direction.rawValue) SVG badge clears \(node.text) card")
+        let margins = [screen.minX - cmdZeroBounds.minX,
+                       screen.minY - cmdZeroBounds.minY,
+                       cmdZeroBounds.maxX - screen.maxX,
+                       cmdZeroBounds.maxY - screen.maxY]
+        minimumFitMargin = min(minimumFitMargin, margins.min() ?? 0)
+        check(margins.allSatisfy { $0 >= 1 },
+              "T-048 \(direction.rawValue) Cmd+0 badge has one-device-pixel fit margin")
+        for stroke in strokes where stroke.targetID == node.id {
+            let endpoint: CGPoint?
+            switch stroke.shape {
+            case let .cubic(_, _, _, to): endpoint = to
+            case let .polyline(points): endpoint = points.last
+            }
+            if let endpoint {
+                let zone = CGRect(x: endpoint.x - 3, y: endpoint.y - 3, width: 6, height: 6)
+                check(!screen.intersects(zone),
+                      "T-048 \(direction.rawValue) badge clears connector endpoint for \(node.text)")
+            }
+        }
+    }
+    print(String(format: "T-048 %@ Cmd+0 minimum badge margin %.2f", direction.rawValue,
+                 Double(minimumFitMargin)))
+
+    let svg = MapExporter.svg(document)
+    let starLines = svg.split(separator: "\n").map(String.init).filter { $0.contains(">★</text>") }
+    check(starLines.count == t048MarkedNodes.count,
+          "T-048 \(direction.rawValue) SVG emits one star per marked node")
+    if let viewBox = t048ViewBox(svg) {
+        for node in t048MarkedNodes {
+            if let layout = layouts[node.id] {
+                let badge = MarkedBadgeGeometry.svgEmBox(for: layout.frame)
+                check(viewBox.contains(CGPoint(x: badge.minX, y: badge.minY))
+                      && viewBox.contains(CGPoint(x: badge.maxX, y: badge.maxY)),
+                      "T-048 \(direction.rawValue) SVG viewBox contains \(node.text) badge")
+                let expectedCoordinates = "x=\"\(badge.midX)\" y=\"\(MarkedBadgeGeometry.svgBaseline(for: layout.frame))\""
+                check(svg.contains(expectedCoordinates),
+                      "T-048 \(direction.rawValue) SVG star derives its coordinates from the shared anchor")
+            }
+        }
+    } else {
+        check(false, "T-048 \(direction.rawValue) SVG exposes a parseable viewBox")
+    }
+    check(svg.contains(Palette.light.statusHighlightRGB.hex),
+          "T-048 \(direction.rawValue) SVG star uses the resolved light status token")
+}
+
+let t048NoteBox = CGRect(x: t048Frame.minX - 9, y: t048Frame.minY - 9, width: 9, height: 9)
+let t048URLBox = CGRect(x: t048Frame.maxX - 15, y: t048Frame.minY - 6, width: 9, height: 9)
+check(!t048Screen.intersects(t048NoteBox) && !t048Screen.intersects(t048URLBox)
+      && !t048NoteBox.intersects(t048URLBox),
+      "minimum 64x32 note+URL+marked node keeps all three badges separate")
+
+let t048NodeSource = projectSource("Sources/MindFlowKit/NodeView.swift")
+let t048ExporterSource = projectSource("Sources/MindFlowKit/MapExporter.swift")
+let t048StaticSource = projectSource("Sources/MindFlowKit/StaticMapView.swift")
+check(t048NodeSource.contains("MarkedBadgeGeometry.screenLocalFootprint")
+      && t048NodeSource.contains("star.fill")
+      && !t048NodeSource.contains(".offset(x: -10)"),
+      "NodeView uses the shared screen anchor instead of the old leading offset")
+check(t048ExporterSource.contains("MarkedBadgeGeometry.svgEmBox")
+      && t048ExporterSource.contains("MarkedBadgeGeometry.svgBaseline")
+      && !t048ExporterSource.contains("f.minX + 6")
+      && !t048ExporterSource.contains("f.minY + 14"),
+      "MapExporter uses the shared SVG anchor instead of the old in-card position")
+check(t048StaticSource.contains("interactionScale: 1.0")
+      && t048StaticSource.contains("NodeView(node: item.node"),
+      "StaticMapView inherits the shared badge renderer at explicit scale one")
+
+// T-048 follow-up: badge reservation is a pure second stage after card-only placement.
+// It keeps marked cards stable, moves only later colliding sibling subtrees, and never recentres
+// a parent; any parent displacement is bounded by the cumulative shifts in its sibling group.
+let t048ReflowRootID = UUID(uuidString: "00000000-0000-4000-8000-000000000101")!
+let t048ReflowRightID = UUID(uuidString: "00000000-0000-4000-8000-000000000102")!
+let t048ReflowLaterID = UUID(uuidString: "00000000-0000-4000-8000-000000000103")!
+let t048ReflowDescendantID = UUID(uuidString: "00000000-0000-4000-8000-000000000104")!
+let t048PlainRight = MindNode(id: t048ReflowRightID, text: "R")
+let t048MarkedRight = MindNode(id: t048ReflowRightID, text: "R", marked: true)
+let t048PlainLater = MindNode(
+    id: t048ReflowLaterID, text: "L",
+    children: [MindNode(id: t048ReflowDescendantID, text: "L1")])
+let t048MarkedLater = t048PlainLater
+let t048PlainRoot = MindNode(id: t048ReflowRootID, text: "P",
+                             children: [t048PlainRight, t048PlainLater])
+let t048MarkedRoot = MindNode(id: t048ReflowRootID, text: "P",
+                              children: [t048MarkedRight, t048MarkedLater])
+let t048CardOnly = LayoutEngine.layout(root: t048PlainRoot, direction: .logicRight)
+let t048Resolved = LayoutEngine.layout(root: t048MarkedRoot, direction: .logicRight)
+let t048ResolvedAgain = LayoutEngine.resolveMarkedBadgeCollisions(
+    root: t048MarkedRoot, direction: .logicRight, layouts: t048Resolved)
+let t048NoMarkedResolved = LayoutEngine.resolveMarkedBadgeCollisions(
+    root: t048PlainRoot, direction: .logicRight, layouts: t048CardOnly)
+
+let t048StableRoot = t048Resolved[t048ReflowRootID]!.frame == t048CardOnly[t048ReflowRootID]!.frame
+let t048StableMarkedCard = t048Resolved[t048ReflowRightID]!.frame == t048CardOnly[t048ReflowRightID]!.frame
+let t048LaterShift = t048Resolved[t048ReflowLaterID]!.frame.minY
+    - t048CardOnly[t048ReflowLaterID]!.frame.minY
+let t048Reserved = MarkedBadgeGeometry.layoutReservedFootprint(
+    for: t048Resolved[t048ReflowRightID]!.frame)
+let t048LaterCard = t048Resolved[t048ReflowLaterID]!.frame
+print(String(format: "T-048 reflow logicRight laterShift=%.3f reserved=(%.1f,%.1f,%.1fx%.1f)",
+             Double(t048LaterShift), Double(t048Reserved.minX), Double(t048Reserved.minY),
+             Double(t048Reserved.width), Double(t048Reserved.height)))
+check(t048StableRoot && t048StableMarkedCard,
+      "T-048 marked card and parent remain at card-only frames")
+check(t048LaterShift > 0 && !t048Reserved.intersects(t048LaterCard),
+      "T-048 marked badge pushes only the later sibling subtree clear")
+let t048DescendantShift = t048Resolved[t048ReflowDescendantID]!.frame.minY
+    - t048CardOnly[t048ReflowDescendantID]!.frame.minY
+check(abs(t048DescendantShift - t048LaterShift) <= 0.0001,
+      "T-048 later sibling reflow is inherited by every descendant")
+check(t048Resolved == t048ResolvedAgain,
+      "T-048 pure resolver is idempotent on already-resolved layouts")
+check(t048NoMarkedResolved == t048CardOnly,
+      "T-048 no-marked resolver leaves card-only layouts bit-for-bit unchanged")
+let t048ScreenReserved = MarkedBadgeGeometry.screenFootprint(for: t048Resolved[t048ReflowRightID]!.frame)
+let t048SVGReserved = MarkedBadgeGeometry.svgEmBox(for: t048Resolved[t048ReflowRightID]!.frame)
+let t048Contains = { (outer: CGRect, inner: CGRect) in
+    outer.minX <= inner.minX && outer.minY <= inner.minY
+        && outer.maxX >= inner.maxX && outer.maxY >= inner.maxY
+}
+check(t048Contains(t048Reserved, t048ScreenReserved)
+      && t048Contains(t048Reserved, t048SVGReserved),
+      "T-048 layoutReservedFootprint contains screen and SVG footprints per dimension")
+check(t048Resolved[t048ReflowRootID]!.frame == t048CardOnly[t048ReflowRootID]!.frame
+      && t048LaterShift >= 0,
+      "T-048 resolver does not recenter the parent and parent drift stays within sibling shifts")
+
+let t048Offsets: [String: CGPoint] = [
+    t048ReflowRootID.uuidString: CGPoint(x: 10, y: -4),
+    t048ReflowRightID.uuidString: CGPoint(x: 0, y: 20),
+]
+let t048OffsetLayouts = LayoutEngine.layout(root: t048MarkedRoot, direction: .logicRight,
+                                              offsets: t048Offsets)
+func t048OffsetDelta(_ node: MindNode, inherited: CGPoint,
+                     into deltas: inout [UUID: CGPoint]) {
+    let local = t048Offsets[node.id.uuidString] ?? .zero
+    let total = CGPoint(x: inherited.x + local.x, y: inherited.y + local.y)
+    deltas[node.id] = total
+    for child in node.children { t048OffsetDelta(child, inherited: total, into: &deltas) }
+}
+var t048ExpectedDeltas: [UUID: CGPoint] = [:]
+t048OffsetDelta(t048MarkedRoot, inherited: .zero, into: &t048ExpectedDeltas)
+var t048OffsetsPreserveInheritance = true
+for (id, delta) in t048ExpectedDeltas {
+    guard let shifted = t048OffsetLayouts[id], let resolved = t048Resolved[id] else {
+        t048OffsetsPreserveInheritance = false
+        continue
+    }
+    let expected = resolved.frame.offsetBy(dx: delta.x, dy: delta.y)
+    t048OffsetsPreserveInheritance = t048OffsetsPreserveInheritance && shifted.frame == expected
+}
+check(t048OffsetsPreserveInheritance && t048Offsets.count == 2
+      && t048Offsets[t048ReflowRootID.uuidString] == CGPoint(x: 10, y: -4)
+      && t048Offsets[t048ReflowRightID.uuidString] == CGPoint(x: 0, y: 20),
+      "T-048 manual offsets remain unchanged and are applied after reflow with inheritance")
+
+for direction in [MapDirection.logicRight, .balanced, .fishbone, .bracket] {
+    let cardOnly = LayoutEngine.layout(root: t048PlainRoot, direction: direction)
+    let resolved = LayoutEngine.layout(root: t048MarkedRoot, direction: direction)
+    let markedFrame = resolved[t048ReflowRightID]!.frame
+    let cardFrame = cardOnly[t048ReflowRightID]!.frame
+    check(markedFrame == cardFrame,
+          "T-048 \(direction.rawValue) marked node frame stays card-only stable")
+    let reserved = MarkedBadgeGeometry.layoutReservedFootprint(for: markedFrame)
+    let laterFrame = resolved[t048ReflowLaterID]!.frame
+    let cardLaterFrame = cardOnly[t048ReflowLaterID]!.frame
+    if direction == .balanced {
+        check(laterFrame == cardLaterFrame,
+              "T-048 balanced keeps opposite-side siblings independent")
+    } else if direction == .fishbone {
+        if reserved.intersects(cardLaterFrame) {
+            check(!reserved.intersects(laterFrame),
+                  "T-048 fishbone separates only a true visual subtree intersection")
+        } else {
+            check(laterFrame == cardLaterFrame,
+                  "T-048 fishbone leaves nonintersecting branches in place")
+        }
+    } else {
+        check(!reserved.intersects(laterFrame),
+              "T-048 \(direction.rawValue) later sibling clears reserved badge")
+    }
+}
+
+let t048MapSource = projectSource("Sources/MindFlowKit/MapCanvasView.swift")
+check(t048MapSource.contains("MarkedBadgeGeometry.screenBounds"),
+      "T-048 MapCanvas content bounds include screen badge footprints")
+
+// T-048 follow-up 2: only an actually intersecting marked upper fishbone rib is rerouted.
+// The visible corridor ends at a card-perimeter attachment; its final segment to the centre
+// is behind the card. Lower ribs and every unrelated primitive remain the old point sequence.
+func t048RerouteLegacyFishbone(_ root: MindNode,
+                               layouts: [UUID: NodeLayout]) -> [ConnectionStroke] {
+    guard let rootLayout = layouts[root.id] else { return [] }
+    let branches: [(node: MindNode, layout: NodeLayout)] = root.children.compactMap { node in
+        guard let layout = layouts[node.id] else { return nil }
+        return (node: node, layout: layout)
+    }.sorted { $0.layout.frame.minX < $1.layout.frame.minX }
+    let spineY = rootLayout.center.y
+    let startX = rootLayout.frame.maxX
+    let farthestX = branches.map { $0.layout.center.x + 60 }.max() ?? startX + 120
+    let endX = max(startX + 120, farthestX)
+    var result = [ConnectionStroke(
+        shape: .polyline([CGPoint(x: startX, y: spineY), CGPoint(x: endX, y: spineY)]),
+        colorIndex: 0, lineWidth: 4, opacity: 0.35)]
+    for branch in branches {
+        result.append(ConnectionStroke(
+            shape: .polyline([
+                CGPoint(x: branch.layout.center.x, y: spineY),
+                branch.layout.center,
+            ]),
+            colorIndex: branch.layout.colorIndex, lineWidth: 2.5))
+    }
+    func visit(_ node: MindNode) {
+        guard !node.collapsed, let parentLayout = layouts[node.id] else { return }
+        for child in node.children {
+            guard let childLayout = layouts[child.id] else { continue }
+            result.append(ConnectionStroke(
+                shape: .polyline([parentLayout.center, childLayout.center]),
+                colorIndex: childLayout.colorIndex,
+                lineWidth: parentLayout.depth == 0 ? 3 : 2,
+                sourceID: node.id, targetID: child.id))
+            visit(child)
+        }
+    }
+    visit(root)
+    return result
+}
+
+func t048ReroutePoints(_ stroke: ConnectionStroke) -> [CGPoint] {
+    guard case let .polyline(points) = stroke.shape else { return [] }
+    return points
+}
+
+func t048RerouteSegmentIntersects(_ from: CGPoint, _ to: CGPoint,
+                                  _ rectangle: CGRect) -> Bool {
+    guard !rectangle.isNull, !rectangle.isEmpty else { return false }
+    let dx = to.x - from.x
+    let dy = to.y - from.y
+    var lower: CGFloat = 0
+    var upper: CGFloat = 1
+    let constraints: [(CGFloat, CGFloat)] = [
+        (-dx, from.x - rectangle.minX),
+        ( dx, rectangle.maxX - from.x),
+        (-dy, from.y - rectangle.minY),
+        ( dy, rectangle.maxY - from.y),
+    ]
+    for (p, q) in constraints {
+        if p == 0 {
+            if q < 0 { return false }
+        } else {
+            let ratio = q / p
+            if p < 0 {
+                if ratio > upper { return false }
+                lower = max(lower, ratio)
+            } else {
+                if ratio < lower { return false }
+                upper = min(upper, ratio)
+            }
+        }
+    }
+    return lower <= upper
+}
+
+func t048RerouteCorridorIntersects(_ from: CGPoint, _ to: CGPoint,
+                                   _ footprint: CGRect) -> Bool {
+    let radius: CGFloat = 2.5 / 2 + 1
+    return t048RerouteSegmentIntersects(from, to,
+                                        footprint.insetBy(dx: -radius, dy: -radius))
+}
+
+do {
+    let markedLayouts = LayoutEngine.layout(root: t048Root, direction: .fishbone)
+    let markedStrokes = ConnectionGeometry.strokes(root: t048Root, layouts: markedLayouts,
+                                                    direction: .fishbone)
+    let oldStrokes = t048RerouteLegacyFishbone(t048Root, layouts: markedLayouts)
+    let rootRibCount = t048Root.children.count
+    let markedRibs = Array(markedStrokes.dropFirst().prefix(rootRibCount))
+    let oldRibs = Array(oldStrokes.dropFirst().prefix(rootRibCount))
+    let sortedChildren = t048Root.children.compactMap { child -> (MindNode, NodeLayout)? in
+        guard let layout = markedLayouts[child.id] else { return nil }
+        return (child, layout)
+    }.sorted { $0.1.frame.minX < $1.1.frame.minX }
+    let upperIndex = sortedChildren.firstIndex { $0.1.center.y < markedLayouts[t048Root.id]!.center.y }
+    let lowerIndex = sortedChildren.firstIndex { $0.1.center.y > markedLayouts[t048Root.id]!.center.y }
+
+    if let upperIndex, let lowerIndex,
+       markedRibs.count == rootRibCount, oldRibs.count == rootRibCount {
+        let upperLayout = sortedChildren[upperIndex].1
+        let upperReserved = MarkedBadgeGeometry.layoutReservedFootprint(for: upperLayout.frame)
+        let oldUpper = t048ReroutePoints(oldRibs[upperIndex])
+        let actualUpper = t048ReroutePoints(markedRibs[upperIndex])
+        let oldCorridor = oldUpper.count >= 2
+            && t048RerouteCorridorIntersects(oldUpper[0], oldUpper[1], upperReserved)
+        check(oldCorridor,
+              "T-048 fishbone old upper centre attachment intersects marked badge corridor")
+
+        let visibleEnd: CGPoint? = actualUpper.count == 3 ? actualUpper[1] : actualUpper.last
+        let actualCorridorClear = actualUpper.count == 3
+            && visibleEnd.map { !t048RerouteCorridorIntersects(actualUpper[0], $0, upperReserved) } == true
+        check(actualCorridorClear,
+              "T-048 fishbone rerouted upper visible corridor clears marked badge")
+        if actualUpper.count == 3 {
+            let attachment = actualUpper[1]
+            let distance = abs(attachment.x - upperLayout.frame.midX)
+            let probes = [attachment.x - 1, attachment.x, attachment.x + 1]
+            let probeClear = probes.allSatisfy {
+                $0 >= upperLayout.frame.minX && $0 <= upperLayout.frame.maxX
+                    && !t048RerouteCorridorIntersects(
+                        actualUpper[0], CGPoint(x: $0, y: upperLayout.frame.maxY), upperReserved)
+            }
+            let mirrorX = upperLayout.frame.midX + distance
+            let mirrorClear = mirrorX <= upperLayout.frame.maxX
+                && !t048RerouteCorridorIntersects(
+                    actualUpper[0], CGPoint(x: mirrorX, y: upperLayout.frame.maxY), upperReserved)
+            print(String(format: "T-048 fishbone upper attachment x=%.3f frame=[%.3f,%.3f] y=%.3f distance=%.3f mirrorClear=%@",
+                         Double(attachment.x), Double(upperLayout.frame.minX),
+                         Double(upperLayout.frame.maxX), Double(attachment.y), Double(distance),
+                         mirrorClear ? "true" : "false"))
+            check(attachment.y == upperLayout.frame.maxY
+                  && attachment.x >= upperLayout.frame.minX
+                  && attachment.x <= upperLayout.frame.maxX,
+                  "T-048 fishbone attachment stays on the card bottom edge")
+            check(distance >= 1 && distance.rounded() == distance
+                  && attachment.x < upperLayout.frame.midX && mirrorClear,
+                  "T-048 fishbone equal-distance tie chooses the leading attachment")
+            check(probeClear,
+                  "T-048 fishbone attachment and both one-unit probes clear")
+        } else {
+            check(false, "T-048 fishbone upper reroute exposes an attachment point")
+        }
+
+        let lowerLayout = sortedChildren[lowerIndex].1
+        let lowerReserved = MarkedBadgeGeometry.layoutReservedFootprint(for: lowerLayout.frame)
+        let oldLower = t048ReroutePoints(oldRibs[lowerIndex])
+        check(oldLower.count == 2
+              && !t048RerouteCorridorIntersects(oldLower[0], oldLower[1], lowerReserved),
+              "T-048 fishbone lower top-entry corridor misses bottom badge")
+        check(markedRibs[lowerIndex] == oldRibs[lowerIndex],
+              "T-048 fishbone nonintersecting lower rib is bit-for-bit unchanged")
+
+        var onlyUpperChanged = true
+        for index in markedRibs.indices where index != upperIndex {
+            onlyUpperChanged = onlyUpperChanged && markedRibs[index] == oldRibs[index]
+        }
+        check(onlyUpperChanged,
+              "T-048 fishbone only the intersecting upper root rib changes")
+    } else {
+        check(false, "T-048 fishbone fixture has identifiable upper and lower root ribs")
+    }
+
+    let repeated = ConnectionGeometry.strokes(root: t048Root, layouts: markedLayouts,
+                                               direction: .fishbone)
+    check(repeated == markedStrokes,
+          "T-048 fishbone connector output is idempotent")
+
+    let unmarkedRoot = MindNode(
+        id: t048Root.id, text: t048Root.text,
+        children: [
+            MindNode(id: t048Right.id, text: t048Right.text, note: t048Right.note,
+                     url: t048Right.url, children: [MindNode(id: t048Deep.id, text: t048Deep.text)]),
+            MindNode(id: t048Left.id, text: t048Left.text),
+        ])
+    let unmarkedLayouts = LayoutEngine.layout(root: unmarkedRoot, direction: .fishbone)
+    let unmarkedStrokes = ConnectionGeometry.strokes(root: unmarkedRoot, layouts: unmarkedLayouts,
+                                                      direction: .fishbone)
+    let unmarkedOld = t048RerouteLegacyFishbone(unmarkedRoot, layouts: unmarkedLayouts)
+    check(unmarkedStrokes == unmarkedOld,
+          "T-048 fishbone unmarked fixture remains bit-for-bit legacy geometry")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

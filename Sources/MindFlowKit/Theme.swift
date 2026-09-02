@@ -145,6 +145,11 @@ public struct Palette {
     public var creamTextRGB: RGB { resolvedValues.creamText }
     public var secondarySurfaceRGB: RGB { resolvedValues.secondarySurface }
     public var statusHighlightRGB: RGB { resolvedValues.statusHighlight }
+    public var statusHighlightOKLCh: OKLCh { resolvedValues.statusHighlight.oklch }
+    public static var statusHighlightSourceRGB: RGB { statusHighlightSourceRGBValue }
+    public static var statusHighlightSourceOKLCh: OKLCh { statusHighlightSourceOKLChValue }
+    public static var lightStatusHighlightOKLCh: OKLCh { lightStatusHighlightSample.oklch }
+    public static var darkStatusHighlightOKLCh: OKLCh { darkStatusHighlightSample.oklch }
     public var branchRGB: [RGB] { resolvedValues.branches.map(\.rgb) }
     public var branchOKLCh: [OKLCh] { resolvedValues.branches.map(\.oklch) }
     public static var accentOKLCh: OKLCh { baseOKLCh }
@@ -198,6 +203,10 @@ public struct Palette {
         })
     }
 
+    private static let statusHighlightSourceRGBValue = RGB(hex: 0xF5C542)
+    private static let statusHighlightSourceOKLChValue = rgbToOKLCh(statusHighlightSourceRGBValue)
+    private static let lightCanvasRGBValue = RGB(hex: 0xF2EFE7)
+    private static let lightCardRGBValue = RGB(hex: 0xFFFFFF)
     private static let accentRGBValue = RGB(hex: 0x3368A0)
     private static let baseOKLCh = rgbToOKLCh(accentRGBValue)
     private static let darkCanvasRGBValue = RGB(hex: 0x101819)
@@ -209,6 +218,10 @@ public struct Palette {
 
     private static let lightBranchSamples = makeBranchSamples(dark: false)
     private static let darkBranchSamples = makeBranchSamples(dark: true)
+    private static let lightStatusHighlightSample = makeLightStatusHighlightSample()
+    private static let darkStatusHighlightSample = Sample(
+        oklch: statusHighlightSourceOKLChValue,
+        rgb: statusHighlightSourceRGBValue)
 
     private static let lightValues = Values(
         canvas: RGB(hex: 0xF2EFE7),
@@ -218,7 +231,7 @@ public struct Palette {
         accent: accentRGBValue,
         creamText: RGB(hex: 0xF2EFE7),
         secondarySurface: RGB(hex: 0xC8DFDB),
-        statusHighlight: RGB(hex: 0xF5C542),
+        statusHighlight: lightStatusHighlightSample.rgb,
         branches: lightBranchSamples
     )
 
@@ -230,9 +243,36 @@ public struct Palette {
         accent: accentRGBValue,
         creamText: RGB(hex: 0xF2EFE7),
         secondarySurface: RGB(hex: 0xC8DFDB),
-        statusHighlight: RGB(hex: 0xF5C542),
+        statusHighlight: darkStatusHighlightSample.rgb,
         branches: darkBranchSamples
     )
+
+    private static func makeLightStatusHighlightSample() -> Sample {
+        let source = statusHighlightSourceOKLChValue
+        func passes(_ sample: Sample) -> Bool {
+            sample.rgb.contrastRatio(with: lightCanvasRGBValue) >= 3.1
+                && sample.rgb.contrastRatio(with: lightCardRGBValue) >= 3.1
+        }
+        let initial = gamutMapped(lightness: source.lightness,
+                                  chroma: source.chroma, hue: source.hue)
+        guard !passes(initial) else { return initial }
+
+        // Keep source hue/chroma, search only lower L, and let the shared mapper lower C
+        // only when the requested OKLCh sample leaves sRGB.
+        var low = 0.0
+        var high = source.lightness
+        for _ in 0..<48 {
+            let middle = (low + high) / 2
+            let probe = gamutMapped(lightness: middle,
+                                    chroma: source.chroma, hue: source.hue)
+            if passes(probe) {
+                low = middle
+            } else {
+                high = middle
+            }
+        }
+        return gamutMapped(lightness: low, chroma: source.chroma, hue: source.hue)
+    }
 
     private static func makeBranchSamples(dark: Bool) -> [Sample] {
         let base = baseOKLCh

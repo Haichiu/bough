@@ -80,7 +80,9 @@ struct MapCanvasView: View {
                                               offsets: vm.document.offsets)
             // (offsets already applied here — single source of truth)
             let theme = Theme.named(vm.document.themeName)
-            let bounds = LayoutEngine.contentBounds(of: layouts).insetBy(dx: -180, dy: -140)
+            let contentBounds = LayoutEngine.contentBounds(of: layouts)
+                .union(MarkedBadgeGeometry.screenBounds(for: vm.document.root, layouts: layouts))
+            let bounds = contentBounds.insetBy(dx: -180, dy: -140)
             let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
             let draggedIDs: Set<UUID> = drag?.draggedIDs ?? []
             let renderedLayouts = layoutsDuringDrag(layouts, draggedIDs: draggedIDs)

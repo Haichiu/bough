@@ -109,6 +109,7 @@ public enum MapExporter {
 
         var bounds = CGRect.null
         for l in layouts.values { bounds = bounds.union(l.frame) }
+        bounds = bounds.union(MarkedBadgeGeometry.svgBounds(for: document.root, layouts: layouts))
         let pad: CGFloat = 40
         bounds = bounds.insetBy(dx: -pad, dy: -pad)
         let width = max(bounds.width, 1), height = max(bounds.height, 1)
@@ -207,7 +208,8 @@ public enum MapExporter {
                 parts.append("<image href=\"\(esc(imageDataURL))\" x=\"\(f.minX + 7)\" y=\"\(f.minY + 6)\" width=\"\(max(f.width - 14, 1))\" height=\"\(max(imgH - 10, 1))\" preserveAspectRatio=\"xMidYMid meet\"/>")
             }
             if node.marked {
-                parts.append("<text x=\"\(f.minX + 6)\" y=\"\(f.minY + 14)\" font-size=\"10\" fill=\"\(hex(palette.statusHighlight))\">★</text>")
+                let badge = MarkedBadgeGeometry.svgEmBox(for: f)
+                parts.append("<text x=\"\(badge.midX)\" y=\"\(MarkedBadgeGeometry.svgBaseline(for: f))\" font-size=\"\(MarkedBadgeGeometry.svgFontSize)\" fill=\"\(palette.statusHighlightRGB.hex)\" text-anchor=\"middle\">★</text>")
             }
             let lines = style.wrappedLines(for: node.text)
             let lineHeight = style.lineHeight

@@ -90,12 +90,14 @@ public enum ConnectionGeometry {
     private static func fishbone(root: MindNode, layouts: [UUID: NodeLayout],
                                  origin: CGPoint) -> [ConnectionStroke] {
         guard let rootLayout = layouts[root.id] else { return [] }
-        let branchRoots = root.children.compactMap { layouts[$0.id] }
-            .sorted { $0.frame.minX < $1.frame.minX }
+        let branchRoots: [(node: MindNode, layout: NodeLayout)] = root.children.compactMap { node in
+            guard let layout = layouts[node.id] else { return nil }
+            return (node: node, layout: layout)
+        }.sorted { $0.layout.frame.minX < $1.layout.frame.minX }
 
         let spineY = rootLayout.center.y
         let startX = rootLayout.frame.maxX
-        let farthestBranchX = branchRoots.map { $0.center.x + 60 }.max() ?? startX + 120
+        let farthestBranchX = branchRoots.map { $0.layout.center.x + 60 }.max() ?? startX + 120
         let endX = max(startX + 120, farthestBranchX)
         var result: [ConnectionStroke] = [ConnectionStroke(
             shape: .polyline([
@@ -106,13 +108,13 @@ public enum ConnectionGeometry {
             lineWidth: 4,
             opacity: 0.35)]
 
-        for branchLayout in branchRoots {
+        for branch in branchRoots {
+            let from = CGPoint(x: branch.layout.center.x, y: spineY)
+            let shape = fishboneRootRib(node: branch.node, layout: branch.layout,
+                                         from: from, to: branch.layout.center, spineY: spineY)
             result.append(ConnectionStroke(
-                shape: .polyline([
-                    translated(CGPoint(x: branchLayout.center.x, y: spineY), by: origin),
-                    translated(branchLayout.center, by: origin),
-                ]),
-                colorIndex: branchLayout.colorIndex,
+                shape: translated(shape, by: origin),
+                colorIndex: branch.layout.colorIndex,
                 lineWidth: 2.5))
         }
 
@@ -135,6 +137,107 @@ public enum ConnectionGeometry {
 
         visit(root)
         return result
+    }
+
+    // Only an upper marked branch can have its spine-to-centre rib pass through
+    // its bottom badge. The final centre-to-card segment is behind the card.
+    private static func fishboneRootRib(node: MindNode, layout: NodeLayout,
+                                        from: CGPoint, to: CGPoint,
+                                        spineY: CGFloat) -> ConnectionShape {
+        let original = ConnectionShape.polyline([from, to])
+        guard node.marked, layout.center.y < spineY else { return original }
+
+        let reserved = MarkedBadgeGeometry.layoutReservedFootprint(for: layout.frame)
+        guard fishboneCorridorIntersects(from: from, to: to, footprint: reserved,
+                                         lineWidth: 2.5) else { return original }
+        guard let attachmentX = fishboneAttachmentX(frame: layout.frame, from: from,
+                                                     footprint: reserved, lineWidth: 2.5)
+        else { return original }
+
+        return .polyline([
+            from,
+            CGPoint(x: attachmentX, y: layout.frame.maxY),
+            to,
+        ])
+    }
+
+    // The corridor is the visible segment expanded by its half stroke width and
+    // one design unit of clearance. A missing in-card candidate intentionally
+    // leaves the old shape so checks can stop rather than route outside the card.
+    private static func fishboneAttachmentX(frame: CGRect, from: CGPoint,
+                                             footprint: CGRect, lineWidth: CGFloat) -> CGFloat? {
+        guard frame.minX.isFinite, frame.maxX.isFinite, frame.width >= 0 else { return nil }
+        let maxDistance = max(0, Int(ceil(frame.width / 2)))
+        for distance in 0...maxDistance {
+            let offsets: [CGFloat] = distance == 0 ? [0] : [-1, 1]
+            for offset in offsets {
+                let x = frame.midX + CGFloat(distance) * offset
+                guard x >= frame.minX, x <= frame.maxX else { continue }
+                let probes = [-1, 0, 1].map { x + CGFloat($0) }
+                guard probes.allSatisfy({ probe in
+                    probe >= frame.minX && probe <= frame.maxX
+                        && !fishboneCorridorIntersects(
+                            from: from,
+                            to: CGPoint(x: probe, y: frame.maxY),
+                            footprint: footprint,
+                            lineWidth: lineWidth)
+                }) else { continue }
+                return x
+            }
+        }
+        return nil
+    }
+
+    private static func fishboneCorridorIntersects(from: CGPoint, to: CGPoint,
+                                                   footprint: CGRect,
+                                                   lineWidth: CGFloat) -> Bool {
+        let radius = lineWidth / 2 + 1
+        return segmentIntersects(from: from, to: to,
+                                 rectangle: footprint.insetBy(dx: -radius, dy: -radius))
+    }
+
+    // Liang–Barsky keeps this renderer-neutral and tests the whole expanded
+    // segment rather than only its endpoints.
+    private static func segmentIntersects(from: CGPoint, to: CGPoint,
+                                          rectangle: CGRect) -> Bool {
+        guard !rectangle.isNull, !rectangle.isEmpty else { return false }
+        let dx = to.x - from.x
+        let dy = to.y - from.y
+        var lower: CGFloat = 0
+        var upper: CGFloat = 1
+        let constraints: [(CGFloat, CGFloat)] = [
+            (-dx, from.x - rectangle.minX),
+            ( dx, rectangle.maxX - from.x),
+            (-dy, from.y - rectangle.minY),
+            ( dy, rectangle.maxY - from.y),
+        ]
+        for (p, q) in constraints {
+            if p == 0 {
+                if q < 0 { return false }
+            } else {
+                let ratio = q / p
+                if p < 0 {
+                    if ratio > upper { return false }
+                    lower = max(lower, ratio)
+                } else {
+                    if ratio < lower { return false }
+                    upper = min(upper, ratio)
+                }
+            }
+        }
+        return lower <= upper
+    }
+
+    private static func translated(_ shape: ConnectionShape, by origin: CGPoint) -> ConnectionShape {
+        switch shape {
+        case let .cubic(from, control1, control2, to):
+            return .cubic(from: translated(from, by: origin),
+                          control1: translated(control1, by: origin),
+                          control2: translated(control2, by: origin),
+                          to: translated(to, by: origin))
+        case let .polyline(points):
+            return .polyline(points.map { translated($0, by: origin) })
+        }
     }
 
     private static func translated(_ point: CGPoint, by origin: CGPoint) -> CGPoint {

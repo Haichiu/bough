@@ -163,6 +163,9 @@ public enum LayoutEngine {
                               innerX: -rootSize.width / 2 - gap, centerY: 0)
             }
         }
+        // Badge reflow is deliberately complete before manual offsets are inherited.
+        result = resolveMarkedBadgeCollisions(root: root, direction: direction, layouts: result)
+
         // Manual placement is inherited: moving a branch moves its whole subtree.
         if !offsets.isEmpty {
             let offsetsByID = offsets.reduce(into: [UUID: CGPoint]()) { values, entry in
@@ -182,6 +185,98 @@ public enum LayoutEngine {
             }
             applyOffsets(root, inherited: .zero)
         }
+        return result
+    }
+
+    /// Separates only visual subtree collisions caused by marked-node badges.
+    /// Card-only placement remains the baseline; later siblings move, never the marked
+    /// card that caused the collision. Manual offsets are applied by the caller afterward.
+    public static func resolveMarkedBadgeCollisions(root: MindNode, direction: MapDirection,
+                                                     layouts: [UUID: NodeLayout]) -> [UUID: NodeLayout] {
+        func containsMarked(_ node: MindNode) -> Bool {
+            node.marked || node.children.contains(where: containsMarked)
+        }
+        guard containsMarked(root) else { return layouts }
+
+        var result = layouts
+        var subtreeBounds: [UUID: CGRect] = [:]
+
+        func moveSubtree(_ node: MindNode, dy: CGFloat) {
+            if let layout = result[node.id] {
+                result[node.id] = NodeLayout(
+                    id: layout.id,
+                    frame: layout.frame.offsetBy(dx: 0, dy: dy),
+                    depth: layout.depth,
+                    colorIndex: layout.colorIndex,
+                    side: layout.side
+                )
+            }
+            for child in node.children { moveSubtree(child, dy: dy) }
+        }
+
+        func ordered(_ children: [MindNode], by coordinate: (CGRect) -> CGFloat) -> [MindNode] {
+            children.enumerated()
+                .filter { result[$0.element.id] != nil }
+                .sorted {
+                    let lhs = coordinate(result[$0.element.id]!.frame)
+                    let rhs = coordinate(result[$1.element.id]!.frame)
+                    return lhs == rhs ? $0.offset < $1.offset : lhs < rhs
+                }
+                .map(\.element)
+        }
+
+        func resolveGroup(_ children: [MindNode], fishbone: Bool) {
+            let orderedChildren = ordered(children) { fishbone ? $0.minX : $0.minY }
+            var previous: CGRect?
+            for child in orderedChildren {
+                guard var current = subtreeBounds[child.id] else { continue }
+                if let previous {
+                    let intersects = fishbone
+                        ? previous.intersects(current)
+                        : previous.maxY > current.minY
+                    if intersects {
+                        let dy = previous.maxY - current.minY
+                        if dy > 0 {
+                            moveSubtree(child, dy: dy)
+                            current = current.offsetBy(dx: 0, dy: dy)
+                            subtreeBounds[child.id] = current
+                        }
+                    }
+                }
+                previous = previous.map { $0.union(current) } ?? current
+            }
+        }
+
+        func resolve(_ node: MindNode) {
+            // Bottom-up: descendants settle before their containing sibling group.
+            for child in node.children { resolve(child) }
+
+            switch direction {
+            case .logicRight, .bracket:
+                resolveGroup(node.children, fishbone: false)
+            case .balanced:
+                let right = node.children.filter { result[$0.id]?.side == .right }
+                let left = node.children.filter { result[$0.id]?.side == .left }
+                resolveGroup(right, fishbone: false)
+                resolveGroup(left, fishbone: false)
+            case .fishbone:
+                // Fishbone alternates vertical sides; never use Side as a grouping rule.
+                resolveGroup(node.children, fishbone: true)
+            }
+
+            var bounds = result[node.id]?.frame ?? .null
+            if node.marked, let layout = result[node.id] {
+                bounds = bounds.union(MarkedBadgeGeometry.layoutReservedFootprint(for: layout.frame))
+            }
+            for child in node.children {
+                if let childBounds = subtreeBounds[child.id] {
+                    bounds = bounds.union(childBounds)
+                }
+            }
+            subtreeBounds[node.id] = bounds
+        }
+
+        resolve(root)
         return result
     }
 
