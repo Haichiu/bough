@@ -4705,42 +4705,63 @@ func iconInkSamplePoints(for band: AppIconArtwork.SizeBand) -> [(CGPoint, String
     ]
 }
 
-func iconLeafComponentCount(_ image: NSBitmapImageRep, slot: AppIconArtwork.Slot) -> Int? {
+struct IconInkMask {
+    let bbox: CGRect
+    let inkCount: Int
+    let contains: (Int, Int) -> Bool
+}
+
+func iconInkMask(_ image: NSBitmapImageRep) -> IconInkMask? {
     guard image.pixelsWide > 0, image.pixelsHigh > 0 else { return nil }
-    let geometry = AppIconArtwork.geometry(for: slot.band)
-    let pixelSize = image.pixelsWide
-    // Crop right of the connector zone: from the midpoint between the root card's
-    // right edge and the nearer child's left edge rightward, so the counted ink
-    // regions are the child cards (with at most their own elbow tips attached).
-    let cropDesignX = (geometry.root.rect.maxX
-        + min(geometry.upperChild.rect.minX, geometry.lowerChild.rect.minX)) / 2
-    // Round up so the crop never includes the root card's right edge at coarse sizes.
-    let cropColumn = min(max(0, Int(ceil((cropDesignX + geometry.translationX)
-        * CGFloat(pixelSize) / 1024))), pixelSize - 1)
-    func isInk(_ x: Int, _ y: Int) -> Bool {
-        guard let color = iconRasterColor(image, x: x, y: y) else { return false }
-        return iconInkScore(color) > 470
-    }
-    var visited = Set<Int>()
-    var components = 0
-    for y in 0..<pixelSize {
-        for x in cropColumn..<pixelSize where isInk(x, y) && !visited.contains(y * pixelSize + x) {
-            components += 1
-            var queue = [(x, y)]
-            visited.insert(y * pixelSize + x)
-            while let (cx, cy) = queue.popLast() {
-                for neighbor in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)] {
-                    let nx = neighbor.0
-                    let ny = neighbor.1
-                    guard nx >= cropColumn, nx < pixelSize, ny >= 0, ny < pixelSize,
-                          !visited.contains(ny * pixelSize + nx), isInk(nx, ny) else { continue }
-                    visited.insert(ny * pixelSize + nx)
-                    queue.append((nx, ny))
-                }
+    let width = image.pixelsWide
+    var ink = Set<Int>()
+    var minX = Int.max, maxX = -1, minY = Int.max, maxY = -1
+    for y in 0..<image.pixelsHigh {
+        for x in 0..<image.pixelsWide {
+            guard let color = iconRasterColor(image, x: x, y: y) else { return nil }
+            if iconInkScore(color) > 470 {
+                ink.insert(y * width + x)
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
             }
         }
     }
-    return components
+    guard !ink.isEmpty else { return nil }
+    return IconInkMask(
+        bbox: CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1),
+        inkCount: ink.count,
+        contains: { x, y in ink.contains(y * width + x) })
+}
+
+// p1's revised symmetry gate: flip the rendered ink mask about the ink bbox's
+// horizontal midline and require the silhouette to differ from its own mirror;
+// mismatch/union, measured on the final raster.
+func iconFlipMismatch(_ image: NSBitmapImageRep) -> Double? {
+    guard let mask = iconInkMask(image) else { return nil }
+    var mismatch = 0
+    var union = 0
+    for y in Int(mask.bbox.minY)...Int(mask.bbox.maxY) {
+        let flippedY = Int(mask.bbox.minY + mask.bbox.maxY) - y
+        for x in Int(mask.bbox.minX)...Int(mask.bbox.maxX) {
+            let here = mask.contains(x, y)
+            let mirrored = mask.contains(x, flippedY)
+            if here || mirrored { union += 1 }
+            if here != mirrored { mismatch += 1 }
+        }
+    }
+    guard union > 0 else { return nil }
+    return Double(mismatch) / Double(union)
+}
+
+// p1's revised solidity gate: share of the ink bbox the ink actually fills,
+// measured on the final raster.
+func iconFillRatio(_ image: NSBitmapImageRep) -> Double? {
+    guard let mask = iconInkMask(image) else { return nil }
+    let area = Int(mask.bbox.width) * Int(mask.bbox.height)
+    guard area > 0 else { return nil }
+    return Double(mask.inkCount) / Double(area)
 }
 
 let expectedIconSlotNames: Set<String> = [
@@ -4793,28 +4814,12 @@ for slot in iconSlots {
     }
 }
 
-// MARK: - T-047: card-tree geometry gates (asymmetry, hierarchy, canvas fit)
+// MARK: - T-047: hierarchy and canvas fit (the symmetry gate measures the render)
 for band in [AppIconArtwork.SizeBand.small, .mid, .large] {
     let geometry = AppIconArtwork.geometry(for: band)
     let bandLabel = "T-047 " + band.rawValue
     let upper = geometry.upperChild.rect
     let lower = geometry.lowerChild.rect
-    let areaDelta = abs(upper.width * upper.height - lower.width * lower.height)
-    let heightDelta = abs(upper.height - lower.height)
-    let widthDelta = abs(upper.width - lower.width)
-    let elbowDelta = abs(geometry.upperElbow.polylineLength - geometry.lowerElbow.polylineLength)
-    check(areaDelta >= 6000,
-          bandLabel + " child cards differ in area by at least 6000 design units")
-    check(heightDelta >= 12,
-          bandLabel + " child cards differ in height by at least 12 design units")
-    check(widthDelta >= 20,
-          bandLabel + " child cards differ in width by at least 20 design units")
-    check(elbowDelta >= 40,
-          bandLabel + " child elbow lengths differ by at least 40 design units")
-    let mirrored = abs(upper.width - lower.width) < 0.5 && abs(upper.height - lower.height) < 0.5
-        && abs(upper.minX - lower.minX) < 0.5 && abs(upper.maxX - lower.maxX) < 0.5
-        && abs(upper.minY + lower.maxY - 1024) < 0.5 && abs(upper.maxY + lower.minY - 1024) < 0.5
-    check(!mirrored, bandLabel + " child cards are not horizontal mirrors")
     let rootArea = geometry.root.rect.width * geometry.root.rect.height
     let largestChildArea = max(upper.width * upper.height, lower.width * lower.height)
     check(rootArea * 10 >= 21 * largestChildArea,
@@ -4827,21 +4832,36 @@ for band in [AppIconArtwork.SizeBand.small, .mid, .large] {
           bandLabel + " rendered ink silhouette stays 16 design units inside the canvas")
 }
 
-// MARK: - T-047: the minimal band's leaf silhouette keeps separated components
+// MARK: - T-047 (p1 revision): rendered-silhouette gates, measured on the final
+// rasters, never on source constants.
+//
+// p1 anchors: the previous icon fills 0.469 of its 16px ink bbox and its
+// horizontal-mirror mismatch is 0.000 on every measured band (a ready negative
+// control — any positive floor rejects it), while a solid rounded card fills
+// about 0.9 of its bbox.
+let iconFillRatioCeiling = 0.70
+let iconFlipMismatchFloor = 0.10
 let iconSmallSlots = iconSlots.filter { $0.band == .small }
 check(iconSmallSlots.count == 2, "T-047 small band covers both minimal slots")
 for slot in iconSmallSlots {
-    guard let image = iconImages[slot.fileName] else {
-        check(false, "T-047 " + slot.fileName + " raster available for leaf separation")
+    guard let image = iconImages[slot.fileName],
+          let fill = iconFillRatio(image) else {
+        check(false, "T-047 " + slot.fileName + " fill ratio is readable")
         continue
     }
-    guard let components = iconLeafComponentCount(image, slot: slot) else {
-        check(false, "T-047 " + slot.fileName + " leaf separation scan is readable")
+    print(String(format: "T-047 %@ fill=%.4f", slot.fileName, fill))
+    check(fill <= iconFillRatioCeiling,
+          "T-047 " + slot.fileName + " ink fills at most 70% of its bounding box")
+}
+for slot in iconSlots {
+    guard let image = iconImages[slot.fileName],
+          let mismatch = iconFlipMismatch(image) else {
+        check(false, "T-047 " + slot.fileName + " flip mismatch is readable")
         continue
     }
-    print("T-047 " + slot.fileName + " leaf components: " + String(components))
-    check(components >= 2,
-          "T-047 " + slot.fileName + " leaf silhouette keeps at least two separated ink components")
+    print(String(format: "T-047 %@ flip mismatch=%.4f", slot.fileName, mismatch))
+    check(mismatch >= iconFlipMismatchFloor,
+          "T-047 " + slot.fileName + " silhouette differs from its vertical mirror")
 }
 
 for slot in iconSlots {
