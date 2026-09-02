@@ -58,7 +58,7 @@ Owner 裁定迭代 50 輪。本檔是唯一進度來源；唤醒後先讀這裡�
 | 14 | 工具列精簡（主列只留子主題／兄弟／檢閱器，餘進 More）| 選單項目帶九條：Divider 在 y384…385（高2、色113,114,113）、刪除置底；工具列無垂直分隔線。**發現 destructive 在 macOS 選單不渲染紅色**，oracle 改守可觀察三件 | `30cca8f` `3df5f27` |
 | 15 | 星標幾何：bottom-center + layout 預留 + fishbone reroute | 主 agent 親量四版面×light／dark **32/32 CLEAR**，墨色一致（light 119／dark 120）；fishbone 由 FOREIGN 18px→0；association 僅擦過 padding（foreign 全在 ink bbox 下一列） | `6ca883a` |
 | 16 | T-044 分頁標題（16-grapheme、active live、最終字串唯一）＋T-049 節點層建立＋D2 吞字修復＋T-050 驗收管道 |
-| 17 | T-047 icon 字形重設計（方向 A 卡片樹＋強制破對稱）| `da2aaa2` glyph：root 填充卡（≥2.1×）＋兩張描邊子卡（不互為鏡像）＋圓角肘線；`a2128e4` gates（p1 修正版，渲染完成品上量）：非實心（16px fill=0.6042 ≤ 0.70；錨點舊=0.469 過／實心≈0.9 拒）＋flip-mismatch ≥0.10 全 10 slots（本 glyph 最低 0.2055@64px；**舊 icon 0.000 被拒＝陰性對照**）；內點 ±1 design unit 全綠；mutation 鏡像子卡／填實心各 rc=1 首敗；掃描先斷言、對比≥3.0、光學置中不變全過。**Pending**：p1 三尺寸帶實拍美學判讀（p1 自述意向：accept＋flag 16px known limitation——小 band 觀感待 owner 下次啟動最終裁；blob 計數已證偽「崩解」疑慮：16/32/32@2x 新舊皆單一連通、新墨量約 2×）| `da2aaa2` `a2128e4` | resolver headless 全綠＋12/14 boundary mutation 有牙；GUI：p1 量 AXIdentifier 與 resolver 輸出在**量出的 reverse-mtime 順序**上逐字相等（截斷後才碰撞、使用者字串被讓開、8+1+7=16），陰性對照實測；T-049 四路徑 node-level＋方向鍵導航（以取代目標反推選取）PASS；D2 吞字（`6d74a8a` live-store seed）雙情境 PASS；T-050 原目標降級 backlog（實測 `.accessibilityLabel` 在普通內容區不產生屬性），identifier 僅驗收管道 | `7f3404a` `7056f10` `68bd471` `6d74a8a` `a6ea038` |
+| 17 | T-047 icon 字形重設計（方向 A 卡片樹＋強制破對稱）| `da2aaa2` glyph：root 填充卡（≥2.1×）＋兩張描邊子卡（不互為鏡像）＋圓角肘線；`a2128e4` gates（p1 修正版，渲染完成品上量）：非實心（16px fill=0.6042 ≤ 0.70；錨點舊=0.469 過／實心≈0.9 拒）＋flip-mismatch ≥0.10 全 10 slots（本 glyph 最低 0.2055@64px；**舊 icon 0.000 被拒＝陰性對照**）；內點 ±1 design unit 全綠；mutation 鏡像子卡／填實心各 rc=1 首敗；掃描先斷言、對比≥3.0、光學置中不變全過。**美學裁決（p1，2026-09-03）：accept。**`/tmp/iconsym` 獨立實測：flip-mismatch 新 0.184–0.292（四 band，門檻 0.10）、fill 0.412–0.495（門檻 0.70）；舊 icon 全 band 0.000 被拒——陰性對照實測。64px ASCII 判讀「讀得出卡片樹而非抽象網路圖」。**已知取捨**：16px 是最弱 band——描邊子卡在該尺寸已填成實面，root 填充 vs 子卡描邊的層級感知不到（墨量 30→40、bbox 8x8→8x11；結構未崩解，blobs 皆 1）。**未行使選項**：小 band 改填充子卡——原樣記錄、現在不做；16px 只出現在 Finder 列表與選單，Dock/切換器 ≥64px；owner 看了說 16px 不行再行使| `da2aaa2` `a2128e4` | resolver headless 全綠＋12/14 boundary mutation 有牙；GUI：p1 量 AXIdentifier 與 resolver 輸出在**量出的 reverse-mtime 順序**上逐字相等（截斷後才碰撞、使用者字串被讓開、8+1+7=16），陰性對照實測；T-049 四路徑 node-level＋方向鍵導航（以取代目標反推選取）PASS；D2 吞字（`6d74a8a` live-store seed）雙情境 PASS；T-050 原目標降級 backlog（實測 `.accessibilityLabel` 在普通內容區不產生屬性），identifier 僅驗收管道 | `7f3404a` `7056f10` `68bd471` `6d74a8a` `a6ea038` |
 
 ### 這兩輪的教訓：文件漂移比沒文件更危險
 
@@ -87,6 +87,12 @@ T-050 三輪「改→全綠→實測仍空」之後才發現：拿來對照的�
 ### 手法記錄：以「取代目標」反推鍵盤選取
 
 選取本身不暴露在 AX，但**導航後打一個字、看哪個節點的內容被取代**，就能確定讀出選取落在哪個節點（D2 修好後打字可靠，讀數確定）。p1 用這招驗完 T-049 方向鍵導航（Right 進第一子節點、Down 走下一兄弟）。凡「狀態不暴露、但狀態會決定一個可觀察寫入」的場合都可套用。
+
+### 量具規則：閾值二值化必須對賬無閾值結構量測
+
+p1 以 tol=40 的 ASCII 逐像素列 16px icon，抗鋸齒中間調被切掉，子卡看似「斷成一截一截」，差一步把「16px 崩解」當產品缺陷回報——blob 連通性量測（新舊皆單一 blob、新墨量約 2×）擋下來。
+
+> **以閾值二值化做形狀判讀時，必須同時跟一個不依賴閾值的結構量測對賬**（連通元件、墨量、bbox）。「量到的不是以為的東西」第 15 例，第三次自己的量具差點變成對產品的誤判。
 
 同一輪的量具教訓：System Events 的 `description` 回的是 AXRoleDescription（所以全是「button」），不是 AXDescription；SwiftUI `.accessibilityLabel` 寫進後者。量具讀錯欄位，三輪修補全部白做。
 
