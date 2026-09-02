@@ -4600,56 +4600,147 @@ func iconInkScore(_ color: Palette.RGB) -> Int {
     Int(((color.red + color.green + color.blue) * 255).rounded())
 }
 
-func iconRunStats(_ image: NSBitmapImageRep,
-                  slot: AppIconArtwork.Slot,
-                  translationOverride: CGFloat? = nil) -> IconRasterRunStats? {
+func iconPixelCoordinate(_ coordinate: CGFloat, pixelSize: Int) -> Int {
+    let raw = Int(floor(coordinate * CGFloat(pixelSize) / 1024))
+    return min(max(raw, 0), pixelSize - 1)
+}
+
+// The raster is stored top-down while DESIGN space is y-up: row = 1024 - design y.
+// Verified against the background gradient itself: the accent stop, authored at
+// design y=1024, samples light at the image's top rows and dark at its bottom.
+func iconSampleRow(ofDesignY y: CGFloat, pixelSize: Int) -> Int {
+    iconPixelCoordinate(1024 - y, pixelSize: pixelSize)
+}
+
+func iconInkRowRange(ofDesignRect rect: CGRect, pixelSize: Int) -> ClosedRange<Int> {
+    let lowRow = iconSampleRow(ofDesignY: rect.maxY, pixelSize: pixelSize)
+    let highRow = iconSampleRow(ofDesignY: rect.minY, pixelSize: pixelSize)
+    return lowRow...highRow
+}
+
+struct IconStructureScan {
+    let column: Int
+    let stats: IconRasterRunStats
+    let expectedRuns: Int
+    let ownershipFailures: [String]
+}
+
+func iconStructureScan(_ image: NSBitmapImageRep, slot: AppIconArtwork.Slot) -> IconStructureScan? {
     guard image.pixelsWide > 0, image.pixelsHigh > 0 else { return nil }
-    let translationX = translationOverride
-        ?? AppIconArtwork.metrics(for: slot.band).translationX
-    let x = Int(floor(Double(image.pixelsWide)
-                      * (0.70 + Double(translationX) / 1024.0)))
+    let geometry = AppIconArtwork.geometry(for: slot.band)
+    let pixelSize = image.pixelsWide
+    let scale = Double(pixelSize) / 1024.0
+    // The structural scan column derives from the glyph bbox: the leaf column crosses
+    // only the two child cards once the raster resolves them (>= 32px); the two 16px
+    // slots fall back to the filled root column, the band's only pixel-robust feature
+    // at that size (the leaf structure there is covered by the leaf-separation gate).
+    let usesLeafColumn = pixelSize >= 32
+    let designColumn: CGFloat = usesLeafColumn
+        ? (max(geometry.upperChild.rect.minX, geometry.lowerChild.rect.minX)
+            + min(geometry.upperChild.rect.maxX, geometry.lowerChild.rect.maxX)) / 2
+        : geometry.root.rect.midX
+    let column = iconPixelCoordinate(designColumn + geometry.translationX, pixelSize: pixelSize)
+
+    let scannedCards = usesLeafColumn
+        ? [geometry.upperChild.rect, geometry.lowerChild.rect]
+        : [geometry.root.rect]
+    let allowedRows = scannedCards.map { iconInkRowRange(ofDesignRect: $0, pixelSize: pixelSize) }
+
     var peaks: [Int] = []
     var inRun = false
     var peak = 0
+    var ownershipFailures: [String] = []
     for y in 0..<image.pixelsHigh {
-        guard let color = iconRasterColor(image, x: x, y: y) else { return nil }
-        let ink = iconInkScore(color) > 470
+        guard let color = iconRasterColor(image, x: column, y: y) else { return nil }
+        let score = iconInkScore(color)
+        let ink = score > 470
+        // Assertion first: every ink pixel in the scan column must belong to the
+        // expected card bounds before the run count is allowed to mean anything.
+        if ink, !allowedRows.contains(where: { $0.contains(y) }) {
+            ownershipFailures.append("row " + String(y) + " score " + String(score))
+        }
         if ink {
             if !inRun {
                 inRun = true
                 peak = 0
             }
-            peak = max(peak, iconInkScore(color))
+            peak = max(peak, score)
         } else if inRun {
             peaks.append(peak)
             inRun = false
         }
     }
     if inRun { peaks.append(peak) }
-    return IconRasterRunStats(count: peaks.count, weakestPeak: peaks.min() ?? 0, peaks: peaks)
-}
 
-func iconPixelCoordinate(_ coordinate: CGFloat, pixelSize: Int) -> Int {
-    let raw = Int(floor(coordinate * CGFloat(pixelSize) / 1024))
-    return min(max(raw, 0), pixelSize - 1)
-}
-
-func iconExpectedEndpoints(for band: AppIconArtwork.SizeBand) -> [CGPoint] {
-    let translationX = AppIconArtwork.metrics(for: band).translationX
-    switch band {
-    case .small:
-        return [CGPoint(x: 742 + translationX, y: 712),
-                CGPoint(x: 766 + translationX, y: 512),
-                CGPoint(x: 742 + translationX, y: 312)]
-    case .mid:
-        return [CGPoint(x: 742 + translationX, y: 727),
-                CGPoint(x: 766 + translationX, y: 512),
-                CGPoint(x: 742 + translationX, y: 297)]
-    case .large:
-        return [CGPoint(x: 742 + translationX, y: 742),
-                CGPoint(x: 766 + translationX, y: 512),
-                CGPoint(x: 742 + translationX, y: 282)]
+    let expectedRuns: Int
+    if usesLeafColumn {
+        // A card whose hollow interior survives rasterization contributes its two
+        // stroke edges as runs; a stroke that self-merges contributes one.
+        expectedRuns = scannedCards.reduce(0) { total, rect in
+            let hole = rect.height - 2 * geometry.childStrokeWidth
+            return total + (hole * CGFloat(scale) >= 1.0 ? 2 : 1)
+        }
+    } else {
+        expectedRuns = 1
     }
+    return IconStructureScan(
+        column: column,
+        stats: IconRasterRunStats(count: peaks.count,
+                                  weakestPeak: peaks.min() ?? 0,
+                                  peaks: peaks),
+        expectedRuns: expectedRuns,
+        ownershipFailures: ownershipFailures)
+}
+
+func iconInkSamplePoints(for band: AppIconArtwork.SizeBand) -> [(CGPoint, String)] {
+    let geometry = AppIconArtwork.geometry(for: band)
+    return [
+        (CGPoint(x: geometry.root.rect.midX, y: geometry.root.rect.midY), "root fill"),
+        (CGPoint(x: geometry.upperChild.rect.midX,
+                 y: geometry.upperChild.rect.maxY - geometry.childStrokeWidth / 2),
+         "upper child stroke"),
+        (CGPoint(x: geometry.lowerChild.rect.minX + geometry.childStrokeWidth / 2,
+                 y: geometry.lowerChild.rect.midY),
+         "lower child stroke"),
+    ]
+}
+
+func iconLeafComponentCount(_ image: NSBitmapImageRep, slot: AppIconArtwork.Slot) -> Int? {
+    guard image.pixelsWide > 0, image.pixelsHigh > 0 else { return nil }
+    let geometry = AppIconArtwork.geometry(for: slot.band)
+    let pixelSize = image.pixelsWide
+    // Crop right of the connector zone: from the midpoint between the root card's
+    // right edge and the nearer child's left edge rightward, so the counted ink
+    // regions are the child cards (with at most their own elbow tips attached).
+    let cropDesignX = (geometry.root.rect.maxX
+        + min(geometry.upperChild.rect.minX, geometry.lowerChild.rect.minX)) / 2
+    // Round up so the crop never includes the root card's right edge at coarse sizes.
+    let cropColumn = min(max(0, Int(ceil((cropDesignX + geometry.translationX)
+        * CGFloat(pixelSize) / 1024))), pixelSize - 1)
+    func isInk(_ x: Int, _ y: Int) -> Bool {
+        guard let color = iconRasterColor(image, x: x, y: y) else { return false }
+        return iconInkScore(color) > 470
+    }
+    var visited = Set<Int>()
+    var components = 0
+    for y in 0..<pixelSize {
+        for x in cropColumn..<pixelSize where isInk(x, y) && !visited.contains(y * pixelSize + x) {
+            components += 1
+            var queue = [(x, y)]
+            visited.insert(y * pixelSize + x)
+            while let (cx, cy) = queue.popLast() {
+                for neighbor in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)] {
+                    let nx = neighbor.0
+                    let ny = neighbor.1
+                    guard nx >= cropColumn, nx < pixelSize, ny >= 0, ny < pixelSize,
+                          !visited.contains(ny * pixelSize + nx), isInk(nx, ny) else { continue }
+                    visited.insert(ny * pixelSize + nx)
+                    queue.append((nx, ny))
+                }
+            }
+        }
+    }
+    return components
 }
 
 let expectedIconSlotNames: Set<String> = [
@@ -4690,26 +4781,6 @@ for slot in iconSlots {
         iconImages[slot.fileName] = image
         check(image.pixelsWide == slot.pixelSize && image.pixelsHigh == slot.pixelSize,
               "icon " + slot.fileName + " has its declared final dimensions")
-        guard let stats = iconRunStats(image, slot: slot) else {
-            check(false, "icon " + slot.fileName + " has a readable final raster")
-            continue
-        }
-        print("Icon raster " + slot.fileName + ": " + String(image.pixelsWide) + "x"
-              + String(image.pixelsHigh) + " runs=" + String(stats.count)
-              + " peaks=" + String(describing: stats.peaks))
-        check(stats.count == 3, "icon " + slot.fileName + " has exactly three ink runs")
-        check(stats.weakestPeak >= 680, "icon " + slot.fileName + " weakest ink run reaches 680")
-        if let centroid = iconCentroidEvidence(image) {
-            print(String(format: "Icon centroid %@: dx=%.4f dy=%.4f tol=%.4f ink=%d",
-                         slot.fileName, centroid.deltaX, centroid.deltaY,
-                         centroid.tolerance, centroid.inkCount))
-            check(abs(centroid.deltaX) <= centroid.tolerance,
-                  "icon " + slot.fileName + " ink centroid x is board-balanced")
-            check(abs(centroid.deltaY) <= centroid.tolerance,
-                  "icon " + slot.fileName + " ink centroid y is board-balanced")
-        } else {
-            check(false, "icon " + slot.fileName + " has centroid evidence")
-        }
 
         let backgroundData = try AppIconArtwork.pngData(for: slot, backgroundOnly: true)
         guard let background = NSBitmapImageRep(data: backgroundData) else {
@@ -4719,6 +4790,88 @@ for slot in iconSlots {
         iconBackgrounds[slot.fileName] = background
     } catch {
         check(false, "icon " + slot.fileName + " renders without error")
+    }
+}
+
+// MARK: - T-047: card-tree geometry gates (asymmetry, hierarchy, canvas fit)
+for band in [AppIconArtwork.SizeBand.small, .mid, .large] {
+    let geometry = AppIconArtwork.geometry(for: band)
+    let bandLabel = "T-047 " + band.rawValue
+    let upper = geometry.upperChild.rect
+    let lower = geometry.lowerChild.rect
+    let areaDelta = abs(upper.width * upper.height - lower.width * lower.height)
+    let heightDelta = abs(upper.height - lower.height)
+    let widthDelta = abs(upper.width - lower.width)
+    let elbowDelta = abs(geometry.upperElbow.polylineLength - geometry.lowerElbow.polylineLength)
+    check(areaDelta >= 6000,
+          bandLabel + " child cards differ in area by at least 6000 design units")
+    check(heightDelta >= 12,
+          bandLabel + " child cards differ in height by at least 12 design units")
+    check(widthDelta >= 20,
+          bandLabel + " child cards differ in width by at least 20 design units")
+    check(elbowDelta >= 40,
+          bandLabel + " child elbow lengths differ by at least 40 design units")
+    let mirrored = abs(upper.width - lower.width) < 0.5 && abs(upper.height - lower.height) < 0.5
+        && abs(upper.minX - lower.minX) < 0.5 && abs(upper.maxX - lower.maxX) < 0.5
+        && abs(upper.minY + lower.maxY - 1024) < 0.5 && abs(upper.maxY + lower.minY - 1024) < 0.5
+    check(!mirrored, bandLabel + " child cards are not horizontal mirrors")
+    let rootArea = geometry.root.rect.width * geometry.root.rect.height
+    let largestChildArea = max(upper.width * upper.height, lower.width * lower.height)
+    check(rootArea * 10 >= 21 * largestChildArea,
+          bandLabel + " root card area is at least 2.1x the larger child card")
+    let inkBounds = geometry.root.rect
+        .union(geometry.upperChild.rect)
+        .union(geometry.lowerChild.rect)
+        .offsetBy(dx: geometry.translationX, dy: 0)
+    check(CGRect(x: 116, y: 116, width: 792, height: 792).contains(inkBounds),
+          bandLabel + " rendered ink silhouette stays 16 design units inside the canvas")
+}
+
+// MARK: - T-047: the minimal band's leaf silhouette keeps separated components
+let iconSmallSlots = iconSlots.filter { $0.band == .small }
+check(iconSmallSlots.count == 2, "T-047 small band covers both minimal slots")
+for slot in iconSmallSlots {
+    guard let image = iconImages[slot.fileName] else {
+        check(false, "T-047 " + slot.fileName + " raster available for leaf separation")
+        continue
+    }
+    guard let components = iconLeafComponentCount(image, slot: slot) else {
+        check(false, "T-047 " + slot.fileName + " leaf separation scan is readable")
+        continue
+    }
+    print("T-047 " + slot.fileName + " leaf components: " + String(components))
+    check(components >= 2,
+          "T-047 " + slot.fileName + " leaf silhouette keeps at least two separated ink components")
+}
+
+for slot in iconSlots {
+    guard let image = iconImages[slot.fileName] else {
+        check(false, "icon " + slot.fileName + " has a readable final raster")
+        continue
+    }
+    guard let scan = iconStructureScan(image, slot: slot) else {
+        check(false, "icon " + slot.fileName + " structure scan is readable")
+        continue
+    }
+    print("Icon raster " + slot.fileName + ": " + String(image.pixelsWide) + "x"
+          + String(image.pixelsHigh) + " column=" + String(scan.column)
+          + " runs=" + String(scan.stats.count) + "/" + String(scan.expectedRuns)
+          + " peaks=" + String(describing: scan.stats.peaks))
+    check(scan.ownershipFailures.isEmpty,
+          "icon " + slot.fileName + " scan column ink belongs to the expected cards")
+    check(scan.stats.count == scan.expectedRuns,
+          "icon " + slot.fileName + " scan finds its expected ink run count")
+    check(scan.stats.weakestPeak >= 680, "icon " + slot.fileName + " weakest ink run reaches 680")
+    if let centroid = iconCentroidEvidence(image) {
+        print(String(format: "Icon centroid %@: dx=%.4f dy=%.4f tol=%.4f ink=%d",
+                     slot.fileName, centroid.deltaX, centroid.deltaY,
+                     centroid.tolerance, centroid.inkCount))
+        check(abs(centroid.deltaX) <= centroid.tolerance,
+              "icon " + slot.fileName + " ink centroid x is board-balanced")
+        check(abs(centroid.deltaY) <= centroid.tolerance,
+              "icon " + slot.fileName + " ink centroid y is board-balanced")
+    } else {
+        check(false, "icon " + slot.fileName + " has centroid evidence")
     }
 }
 
@@ -4755,8 +4908,8 @@ check(zeroTranslationControlFailures.contains("icon_16x16.png"),
       "icon t=0 centroid control includes the 16px slot")
 
 let physical32Slots = iconSlots.filter { $0.pixelSize == 32 }
-check(AppIconArtwork.metrics(for: .small).lineWidth == 112,
-      "small icon stroke strength uses the DESIGN 112px value")
+check(AppIconArtwork.geometry(for: .small).connectorLineWidth == 112,
+      "small icon connector strength uses the DESIGN 112px value")
 check(physical32Slots.count == 2,
       "the two physical 32px slots are both represented")
 if let small32 = physical32Slots.first(where: { $0.band == .small }),
@@ -4765,8 +4918,8 @@ if let small32 = physical32Slots.first(where: { $0.band == .small }),
    let midData = iconData[mid32.fileName] {
     check(small32.band != mid32.band && small32.fileName != mid32.fileName,
           "physical 32px slots retain distinct logical size bands")
-    check(AppIconArtwork.metrics(for: small32.band) != AppIconArtwork.metrics(for: mid32.band),
-          "small and mid 32px slots use distinct artwork metrics")
+    check(AppIconArtwork.geometry(for: small32.band) != AppIconArtwork.geometry(for: mid32.band),
+          "small and mid 32px slots use distinct artwork geometry")
     check(smallData != midData,
           "small 32px and mid 32px final PNG bytes are not deduplicated")
 } else {
@@ -4791,11 +4944,18 @@ print(String(format: "Icon bottom OKLCh: L=%.6f C=%.6f h=%.3f", bottomCoordinate
              bottomCoordinates.chroma, bottomCoordinates.hue))
 check(iconAccent.hex == "#3368a0", "icon top stop comes from Palette light accent")
 check(iconCream.hex == "#f2efe7", "icon glyph ink comes from Palette light cream")
-if let largeImage = iconImages["icon_512x512@2x.png"],
-   let hubInk = iconRasterColor(largeImage, x: 355, y: 512) {
-    check(hubInk == iconCream, "icon final raster hub uses Palette cream ink")
-} else {
-    check(false, "icon final raster hub has a readable ink sample")
+do {
+    let largeGeometry = AppIconArtwork.geometry(for: .large)
+    if let largeImage = iconImages["icon_512x512@2x.png"],
+       let rootInk = iconRasterColor(
+        largeImage,
+        x: iconPixelCoordinate(largeGeometry.root.rect.midX + largeGeometry.translationX,
+                               pixelSize: 1024),
+        y: iconSampleRow(ofDesignY: largeGeometry.root.rect.midY, pixelSize: 1024)) {
+        check(rootInk == iconCream, "icon final raster root card uses Palette cream ink")
+    } else {
+        check(false, "icon final raster root card has a readable ink sample")
+    }
 }
 check(iconBottom.hex == "#003c71", "icon derived bottom stop has the expected final 8-bit value")
 check(abs(bottomCoordinates.lightness - accentCoordinates.lightness * 0.70) <= 0.000001,
@@ -4804,36 +4964,40 @@ check(wrappedHueDistance <= 1.0, "icon bottom preserves accent OKLCh hue")
 check(bottomCoordinates.chroma <= accentCoordinates.chroma + 0.000001,
       "icon gamut mapping only lowers OKLCh chroma")
 print(String(format: "Icon final bottom OKLCh: L=%.6f C=%.6f h=%.3f",
-             finalBottomCoordinates.lightness, finalBottomCoordinates.chroma, finalBottomCoordinates.hue))
+             finalBottomCoordinates.lightness,
+             finalBottomCoordinates.chroma, finalBottomCoordinates.hue))
 check(finalBottomWrappedHueDistance <= 1.0,
       "icon final 8-bit bottom preserves accent hue within rounding")
 check(finalBottomChromaDelta <= 0.002,
       "icon final 8-bit bottom preserves mapped chroma within rounding")
 
-var endpointContrasts: [Double] = []
+var inkSampleContrasts: [Double] = []
 for slot in iconSlots {
     guard let image = iconImages[slot.fileName],
           let background = iconBackgrounds[slot.fileName] else { continue }
-    for (index, endpoint) in iconExpectedEndpoints(for: slot.band).enumerated() {
-        let x = iconPixelCoordinate(endpoint.x, pixelSize: image.pixelsWide)
-        let y = iconPixelCoordinate(endpoint.y, pixelSize: image.pixelsHigh)
-        let endpointLabel = "icon " + slot.fileName + " endpoint " + String(index + 1)
+    let geometry = AppIconArtwork.geometry(for: slot.band)
+    for (index, sample) in iconInkSamplePoints(for: slot.band).enumerated() {
+        let x = iconPixelCoordinate(sample.0.x + geometry.translationX,
+                                    pixelSize: image.pixelsWide)
+        let y = iconSampleRow(ofDesignY: sample.0.y, pixelSize: image.pixelsHigh)
+        let sampleLabel = "icon " + slot.fileName + " " + sample.1
+            + " sample " + String(index + 1)
         guard let foreground = iconRasterColor(image, x: x, y: y),
               let localBackground = iconRasterColor(background, x: x, y: y) else {
-            check(false, endpointLabel + " has final-raster samples")
+            check(false, sampleLabel + " has final-raster samples")
             continue
         }
         let ratio = foreground.contrastRatio(with: localBackground)
-        endpointContrasts.append(ratio)
-        check(ratio >= 3.0, endpointLabel + " contrasts with its final local gradient")
+        inkSampleContrasts.append(ratio)
+        check(ratio >= 3.0, sampleLabel + " contrasts with its final local gradient")
     }
 }
-if let minimum = endpointContrasts.min(), let maximum = endpointContrasts.max() {
-    print(String(format: "Icon endpoint final-raster contrast range: %.4f...%.4f", minimum, maximum))
+if let minimum = inkSampleContrasts.min(), let maximum = inkSampleContrasts.max() {
+    print(String(format: "Icon ink sample final-raster contrast range: %.4f...%.4f",
+                 minimum, maximum))
 }
-check(endpointContrasts.count == iconSlots.count * 3,
-      "icon endpoint contrast covers every endpoint in every slot")
-
+check(inkSampleContrasts.count == iconSlots.count * 3,
+      "icon ink sample contrast covers three samples in every slot")
 
 // MARK: - T-037: shared connector geometry, branch continuity, and fishbone topology
 func connectorSVGAttribute(_ name: String, in line: String) -> String? {
