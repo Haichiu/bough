@@ -57,6 +57,7 @@ Owner 裁定迭代 50 輪。本檔是唯一進度來源；唤醒後先讀這裡�
 | 13 | 外殼語意色（去 Palette A）| 主 agent 量：**畫布本體 x0…1403 y171…1343 前後相異像素 = 0**（light／dark 皆然）；dirty 暖色像素 96→0／112→0；星標核心 `244,197,65` 前後相同 | `71d3784` |
 | 14 | 工具列精簡（主列只留子主題／兄弟／檢閱器，餘進 More）| 選單項目帶九條：Divider 在 y384…385（高2、色113,114,113）、刪除置底；工具列無垂直分隔線。**發現 destructive 在 macOS 選單不渲染紅色**，oracle 改守可觀察三件 | `30cca8f` `3df5f27` |
 | 15 | 星標幾何：bottom-center + layout 預留 + fishbone reroute | 主 agent 親量四版面×light／dark **32/32 CLEAR**，墨色一致（light 119／dark 120）；fishbone 由 FOREIGN 18px→0；association 僅擦過 padding（foreign 全在 ink bbox 下一列） | `6ca883a` |
+| 16 | T-044 分頁標題（16-grapheme、active live、最終字串唯一）＋T-049 節點層建立＋D2 吞字修復＋T-050 驗收管道 | resolver headless 全綠＋12/14 boundary mutation 有牙；GUI：p1 量 AXIdentifier 與 resolver 輸出在**量出的 reverse-mtime 順序**上逐字相等（截斷後才碰撞、使用者字串被讓開、8+1+7=16），陰性對照實測；T-049 四路徑 node-level＋方向鍵導航（以取代目標反推選取）PASS；D2 吞字（`6d74a8a` live-store seed）雙情境 PASS；T-050 原目標降級 backlog（實測 `.accessibilityLabel` 在普通內容區不產生屬性），identifier 僅驗收管道 | `7f3404a` `7056f10` `68bd471` `6d74a8a` `a6ea038` |
 
 ### 這兩輪的教訓：文件漂移比沒文件更危險
 
@@ -81,6 +82,10 @@ T-044/T-050 兩輪出現同一結構性現象：**「gates 全綠＋mutation 有
 T-050 三輪「改→全綠→實測仍空」之後才發現：拿來對照的兩顆工具列按鈕能浮現 label，**不是因為 Label 形狀，而是因為它們在 AXToolbar（NSToolbarItem 由 AppKit 取名）**——這個機制不存在於普通內容區。「跟它們逐字同形」從一開始就不可能成功。
 
 > **對照組必須先驗證「差異軸真的是我們比對的那個軸」，否則二分只是在錯誤的維度上排序。** 共用一部分特徵就假設共用全部，是「把宣稱當事實」的二分版。
+
+### 手法記錄：以「取代目標」反推鍵盤選取
+
+選取本身不暴露在 AX，但**導航後打一個字、看哪個節點的內容被取代**，就能確定讀出選取落在哪個節點（D2 修好後打字可靠，讀數確定）。p1 用這招驗完 T-049 方向鍵導航（Right 進第一子節點、Down 走下一兄弟）。凡「狀態不暴露、但狀態會決定一個可觀察寫入」的場合都可套用。
 
 同一輪的量具教訓：System Events 的 `description` 回的是 AXRoleDescription（所以全是「button」），不是 AXDescription；SwiftUI `.accessibilityLabel` 寫進後者。量具讀錯欄位，三輪修補全部白做。
 

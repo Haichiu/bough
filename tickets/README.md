@@ -183,6 +183,8 @@
 
 **邊界**：不順便改鍵位配置、不動第二次點擊進編輯（`MapCanvasView:467`）、不動 D2 本身。
 
+**結案記錄（2026-09-03）**：全款驗收完成。headless 部分 `68bd471`（四路徑 node-level＋預設文字「子主題」＋type-to-replace＋Tab×5＋陰性對照）；其下游 D2 吞字缺陷由 p1 GUI 量測發現、`6d74a8a`（editText live-store seed）修復並雙情境 GUI PASS。方向鍵導航由 p1 以「導航後打字、以被取代的節點反推選取」實測 PASS（Right 進第一子節點、Down 走下一兄弟，皆節點層移動）。
+
 ---
 
 ### T-050 分頁按鈕無障礙標籤（T-044 follow-up）
