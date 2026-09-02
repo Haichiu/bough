@@ -4824,6 +4824,140 @@ check(endpointContrasts.count == iconSlots.count * 3,
       "icon endpoint contrast covers every endpoint in every slot")
 
 
+// MARK: - T-037: shared connector geometry, branch continuity, and fishbone topology
+func connectorSVGAttribute(_ name: String, in line: String) -> String? {
+    let marker = name + "=\""
+    guard let start = line.range(of: marker) else { return nil }
+    let valueStart = start.upperBound
+    guard let end = line[valueStart...].firstIndex(of: "\"") else { return nil }
+    return String(line[valueStart..<end])
+}
+
+do {
+    let root = MindNode(text: "Connector root", children: (0..<6).map { index in
+        MindNode(text: "Branch \(index)", children: [MindNode(text: "Deep \(index)")])
+    })
+    let layouts = LayoutEngine.layout(root: root, direction: .logicRight)
+    let strokes = ConnectionGeometry.strokes(root: root, layouts: layouts, direction: .logicRight)
+    let rootEdges = strokes.filter { $0.sourceID == root.id }
+    let expectedIndices = Array(0..<6)
+    let oldParentIndices = rootEdges.map { _ in layouts[root.id]!.colorIndex }
+    print("T-037 logic root destination indices \(rootEdges.map(\.colorIndex))")
+    print("T-037 old parent-color mutation indices \(oldParentIndices)")
+    check(rootEdges.count == 6, "shared geometry emits six logicRight root edges")
+    check(rootEdges.map(\.colorIndex) == expectedIndices,
+          "logicRight root edges use each destination child branch color")
+    check(Set(oldParentIndices).count == 1 && oldParentIndices != expectedIndices,
+          "old parent-color root mutation is explicitly rejected")
+    check(rootEdges.allSatisfy { $0.lineWidth == 3.5 },
+          "logicRight root connector width remains 3.5")
+    check(strokes.filter { $0.sourceID != nil && $0.sourceID != root.id }
+        .allSatisfy { $0.lineWidth == 2.5 },
+          "logicRight deeper connector width remains 2.5")
+    check(strokes.allSatisfy {
+        if case .cubic = $0.shape { return true }
+        return false
+    }, "logicRight connectors retain cubic geometry")
+    let unchanged = LayoutEngine.layout(root: root, direction: .logicRight)
+    check(layouts == unchanged, "connector generation does not move node layouts")
+
+    let bracketLayouts = LayoutEngine.layout(root: root, direction: .bracket)
+    let bracketStrokes = ConnectionGeometry.strokes(root: root, layouts: bracketLayouts,
+                                                     direction: .bracket)
+    check(bracketStrokes.count == strokes.count,
+          "bracket emits the same edge count as logicRight")
+    check(bracketStrokes.allSatisfy {
+        if case let .polyline(points) = $0.shape { return points.count == 4 }
+        return false
+    }, "bracket connectors retain four-point right-angle geometry")
+    check(bracketStrokes.map(\.lineWidth) == strokes.map(\.lineWidth),
+          "bracket connector widths remain aligned with logicRight")
+
+    func nodeFillHex(_ index: Int) -> String {
+        let style = NodeStyle.of(depth: 1, palette: Palette.light,
+                                 branchColor: Palette.light.color(forIndex: index))
+        let ns = NSColor(style.fillBase).usingColorSpace(.sRGB) ?? NSColor.black
+        return String(format: "#%02x%02x%02x", Int(round(ns.redComponent * 255)),
+                      Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
+    }
+    let expectedFills = expectedIndices.map(nodeFillHex)
+    let svg = MapExporter.svg(MindDocument(title: "Connector", root: root))
+    let rootPathLines = svg.split(separator: "\n").map(String.init).filter {
+        $0.contains("<path d=\"") && $0.contains("stroke-width=\"3.5\"")
+    }
+    let svgRootColors = rootPathLines.compactMap { connectorSVGAttribute("stroke", in: $0) }
+    print("T-037 SVG root connector colors \(svgRootColors)")
+    check(svgRootColors == expectedFills,
+          "SVG root connector colors match destination NodeStyle branch fills")
+    check(expectedFills.allSatisfy {
+        svg.contains("fill=\"\($0)\" fill-opacity=\"1.0\"")
+    }, "SVG depth-one node fills match the connector branch colors")
+}
+
+do {
+    let fishRoot = MindNode(text: "Fishbone root", children: (0..<4).map { index in
+        MindNode(text: "Fish branch \(index)", children: [MindNode(text: "Fish leaf \(index)")])
+    })
+    let layouts = LayoutEngine.layout(root: fishRoot, direction: .fishbone)
+    let strokes = ConnectionGeometry.strokes(root: fishRoot, layouts: layouts, direction: .fishbone)
+    let rootLayout = layouts[fishRoot.id]!
+    let branchLayouts = fishRoot.children.compactMap { layouts[$0.id] }
+        .sorted { $0.frame.minX < $1.frame.minX }
+    let farthestBranchEnd = branchLayouts.map { $0.center.x + 60 }.max()!
+    let oldEnd = rootLayout.frame.maxX + 120
+    var spineEndX: CGFloat?
+    if case let .polyline(points) = strokes.first?.shape { spineEndX = points.last?.x }
+    print(String(format: "T-037 fishbone spine end %.1f, required %.1f, old %.1f",
+                 Double(spineEndX ?? -1), Double(farthestBranchEnd), Double(oldEnd)))
+    check(strokes.count == 13, "fishbone emits one spine, four ribs, and eight edge chains")
+    check(strokes.allSatisfy {
+        if case let .polyline(points) = $0.shape { return points.count >= 2 }
+        return false
+    }, "fishbone shared primitives contain no cubic shapes")
+    if let spineEndX {
+        check(spineEndX >= farthestBranchEnd,
+              "fishbone spine reaches the farthest depth-one branch")
+        check(spineEndX > oldEnd,
+              "fishbone spine endpoint exceeds the old start-plus-120 mutation")
+    } else {
+        check(false, "fishbone spine has a measurable endpoint")
+        check(false, "fishbone spine endpoint exceeds the old start-plus-120 mutation")
+    }
+    let ribs = Array(strokes.dropFirst().prefix(4))
+    check(ribs.map(\.colorIndex) == Array(0..<4),
+          "fishbone ribs use their destination branch colors in order")
+    let edgeIndices = strokes.filter { $0.sourceID != nil && $0.targetID != nil }
+        .map(\.colorIndex)
+    check(edgeIndices == [0, 0, 1, 1, 2, 2, 3, 3],
+          "fishbone edge chains use destination child branch colors")
+    check(strokes.first?.colorIndex == 0 && strokes.first?.opacity == 0.35
+          && strokes.first?.lineWidth == 4,
+          "fishbone spine keeps the index-zero 35-percent four-point style")
+
+    let document = MindDocument(title: "Fishbone", directionName: MapDirection.fishbone.rawValue,
+                                root: fishRoot)
+    let fishSVG = MapExporter.svg(document)
+    let fishPathLines = fishSVG.split(separator: "\n").map(String.init).filter {
+        $0.contains("<path d=\"")
+    }
+    check(fishPathLines.count == strokes.count,
+          "fishbone SVG serializes exactly the shared primitive count")
+    check(fishPathLines.allSatisfy { $0.contains(" d=\"M ") && !$0.contains(" C ") },
+          "fishbone SVG uses only shared polyline M/L path data")
+    check(fishSVG.contains("stroke-opacity=\"0.35\""),
+          "fishbone SVG preserves spine opacity")
+
+    // Pre-change MapExporter ignored fishbone and used the generic cubic tree path.
+    let oldGenericSVG = MapExporter.svg(MindDocument(title: "Fishbone baseline",
+                                                       directionName: MapDirection.logicRight.rawValue,
+                                                       root: fishRoot))
+    let oldGenericCubic = oldGenericSVG.contains(" C ")
+    let oldMissingSpine = !oldGenericSVG.contains("stroke-width=\"4.0\"")
+    print("T-037 old generic fishbone mutation cubic=\(oldGenericCubic) missingSpine=\(oldMissingSpine)")
+    check(oldGenericCubic && oldMissingSpine,
+          "old generic fishbone behavior remains a detectable negative control")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

@@ -12,82 +12,36 @@ struct MapConnectionsView: View {
 
     var body: some View {
         Canvas { context, _ in
-            if direction == .fishbone {
-                drawFishbone(context: &context, items: items, layouts: layouts, theme: theme, origin: origin)
-                return
-            }
-            for item in items where !item.node.collapsed {
-                for child in item.node.children {
-                    guard let childLayout = layouts[child.id] else { continue }
-                    if !focusIDs.isEmpty && !(focusIDs.contains(item.node.id) && focusIDs.contains(child.id)) { continue }
-                    let toLeft = childLayout.side == .left
-                    let from = CGPoint(x: (toLeft ? item.layout.frame.minX : item.layout.frame.maxX) + origin.x,
-                                       y: item.layout.frame.midY + origin.y)
-                    let to = CGPoint(x: (toLeft ? childLayout.frame.maxX : childLayout.frame.minX) + origin.x,
-                                     y: childLayout.frame.midY + origin.y)
-                    var path = Path()
-                    if direction == .bracket {
-                        // Right-angle elbow connectors.
-                        let midX = from.x + (to.x - from.x) / 2
-                        path.move(to: from)
-                        path.addLine(to: CGPoint(x: midX, y: from.y))
-                        path.addLine(to: CGPoint(x: midX, y: to.y))
-                        path.addLine(to: to)
-                    } else {
-                        let midX = (from.x + to.x) / 2
-                        path.move(to: from)
-                        path.addCurve(to: to,
-                                      control1: CGPoint(x: midX, y: from.y),
-                                      control2: CGPoint(x: midX, y: to.y))
-                    }
-                    let width: CGFloat = item.layout.depth == 0 ? 3.5 : 2.5
-                    context.stroke(path, with: .color(theme.color(forIndex: item.layout.colorIndex)), lineWidth: width)
+            guard let rootItem = items.first(where: { $0.layout.depth == 0 }) else { return }
+            let strokes = ConnectionGeometry.strokes(
+                root: rootItem.node, layouts: layouts, direction: direction, origin: origin)
+            for stroke in strokes {
+                if direction != .fishbone,
+                   !focusIDs.isEmpty,
+                   let sourceID = stroke.sourceID,
+                   let targetID = stroke.targetID,
+                   !(focusIDs.contains(sourceID) && focusIDs.contains(targetID)) {
+                    continue
                 }
+                let color = theme.color(forIndex: stroke.colorIndex).opacity(stroke.opacity)
+                context.stroke(path(for: stroke.shape), with: .color(color), lineWidth: stroke.lineWidth)
             }
         }
         .allowsHitTesting(false)
     }
 
-    /// Spine + ribs + diagonal chains for the fishbone layout.
-    private func drawFishbone(context: inout GraphicsContext, items: [NodeItem],
-                                     layouts: [UUID: NodeLayout], theme: Palette, origin: CGPoint) {
-        guard let rootItem = items.first(where: { $0.layout.depth == 0 }) else { return }
-        let spineY = rootItem.layout.center.y + origin.y
-        let startX = rootItem.layout.frame.maxX + origin.x
-        var endX = startX + 120
-
-        // Main spine.
-        var spine = Path()
-        spine.move(to: CGPoint(x: startX, y: spineY))
-        spine.addLine(to: CGPoint(x: endX, y: spineY))
-        context.stroke(spine, with: .color(theme.color(forIndex: 0).opacity(0.35)), lineWidth: 4)
-
-        // Branch roots sitting alternately above / below the spine.
-        let branchRoots = items.filter { $0.layout.depth == 1 }
-            .sorted { $0.layout.frame.minX < $1.layout.frame.minX }
-        for (index, branch) in branchRoots.enumerated() {
-            let bx = branch.layout.center.x + origin.x
-            let by = branch.layout.center.y + origin.y
-            endX = max(endX, bx + 60)
-            var rib = Path()
-            rib.move(to: CGPoint(x: bx, y: spineY))
-            rib.addLine(to: CGPoint(x: bx, y: by))
-            context.stroke(rib, with: .color(theme.color(forIndex: index)), lineWidth: 2.5)
+    private func path(for shape: ConnectionShape) -> Path {
+        var path = Path()
+        switch shape {
+        case let .cubic(from, control1, control2, to):
+            path.move(to: from)
+            path.addCurve(to: to, control1: control1, control2: control2)
+        case let .polyline(points):
+            guard let first = points.first else { return path }
+            path.move(to: first)
+            for point in points.dropFirst() { path.addLine(to: point) }
         }
-
-        // Diagonal chain segments parent -> child.
-        for item in items where item.node.collapsed == false {
-            for child in item.node.children {
-                guard let cl = layouts[child.id], let pl = layouts[item.node.id] else { continue }
-                let from = CGPoint(x: pl.center.x + origin.x, y: pl.center.y + origin.y)
-                let to = CGPoint(x: cl.center.x + origin.x, y: cl.center.y + origin.y)
-                var path = Path()
-                path.move(to: from)
-                path.addLine(to: to)
-                context.stroke(path, with: .color(theme.color(forIndex: pl.colorIndex)),
-                               lineWidth: pl.depth == 0 ? 3 : 2)
-            }
-        }
+        return path
     }
 }
 

@@ -134,33 +134,41 @@ public enum MapExporter {
         }
         parts.append("<title>\(esc(document.title))</title>")
 
-        // Connections (same shapes as on-screen rendering).
-        func connect(_ node: MindNode) {
-            guard !node.collapsed else { return }
-            guard let pl = layouts[node.id] else { return }
-            for child in node.children {
-                guard let cl = layouts[child.id] else { continue }
-                let toLeft = cl.side == .left
-                let from = CGPoint(x: toLeft ? pl.frame.minX : pl.frame.maxX, y: pl.frame.midY)
-                let to = CGPoint(x: toLeft ? cl.frame.maxX : cl.frame.minX, y: cl.frame.midY)
-                let color = hex(palette.color(forIndex: cl.colorIndex))
-                let w: CGFloat = cl.depth == 1 ? 3.5 : 2.5
-                if direction == .bracket {
-                    let midX = from.x + (to.x - from.x) / 2
-                    parts.append("<path d=\"M \(from.x) \(from.y) L \(midX) \(from.y) L \(midX) \(to.y) L \(to.x) \(to.y)\" fill=\"none\" stroke=\"\(color)\" stroke-width=\"\(w)\"/>")
-                } else {
-                    let midX = (from.x + to.x) / 2
-                    parts.append("<path d=\"M \(from.x) \(from.y) C \(midX) \(from.y) \(midX) \(to.y) \(to.x) \(to.y)\" fill=\"none\" stroke=\"\(color)\" stroke-width=\"\(w)\"/>")
-                }
-                if !childLinkLabel(child).isEmpty {
-                    let lx = 0.25 * from.x + 0.5 * ((from.x + to.x) / 2) + 0.25 * to.x
-                    let ly = 0.25 * from.y + 0.5 * ((from.y + to.y) / 2) + 0.25 * to.y - 14
-                    parts.append("<text x=\"\(lx)\" y=\"\(ly)\" font-size=\"11\" fill=\"\(hex(palette.textSecondary))\" text-anchor=\"middle\">\(esc(childLinkLabel(child)))</text>")
-                }
-                connect(child)
+        // Connections are serialized from the renderer-neutral source of truth.
+        func svgPath(_ shape: ConnectionShape) -> String {
+            switch shape {
+            case let .cubic(from, control1, control2, to):
+                return "M \(from.x) \(from.y) C \(control1.x) \(control1.y) \(control2.x) \(control2.y) \(to.x) \(to.y)"
+            case let .polyline(points):
+                guard let first = points.first else { return "" }
+                return "M \(first.x) \(first.y)" + points.dropFirst()
+                    .map { " L \($0.x) \($0.y)" }.joined()
             }
         }
-        connect(document.root)
+
+        let connectorStrokes = ConnectionGeometry.strokes(
+            root: document.root, layouts: layouts, direction: direction)
+        func endpoints(of shape: ConnectionShape) -> (CGPoint, CGPoint)? {
+            switch shape {
+            case let .cubic(from, _, _, to): return (from, to)
+            case let .polyline(points):
+                guard let first = points.first, let last = points.last else { return nil }
+                return (first, last)
+            }
+        }
+
+        for stroke in connectorStrokes {
+            let opacity = stroke.opacity == 1 ? "" : " stroke-opacity=\"\(stroke.opacity)\""
+            parts.append("<path d=\"\(svgPath(stroke.shape))\" fill=\"none\" stroke=\"\(hex(palette.color(forIndex: stroke.colorIndex)))\"\(opacity) stroke-width=\"\(stroke.lineWidth)\"/>")
+            guard let targetID = stroke.targetID,
+                  let target = document.root.find(targetID),
+                  let (from, to) = endpoints(of: stroke.shape),
+                  !childLinkLabel(target).isEmpty else { continue }
+            let mid = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
+            let lx = 0.25 * from.x + 0.5 * mid.x + 0.25 * to.x
+            let ly = 0.25 * from.y + 0.5 * mid.y + 0.25 * to.y - 14
+            parts.append("<text x=\"\(lx)\" y=\"\(ly)\" font-size=\"11\" fill=\"\(hex(palette.textSecondary))\" text-anchor=\"middle\">\(esc(childLinkLabel(target)))</text>")
+        }
 
         // Summary brackets (same geometry as on-screen rendering).
         for s in document.summaries {
