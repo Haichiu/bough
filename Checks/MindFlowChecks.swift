@@ -6100,14 +6100,16 @@ do {
 
 print("T-049 PENDING: arrow-key node navigation needs a real keyboard and is not simulated headlessly")
 
-// MARK: - T-050: tab buttons carry the toolbar Label shape
-// Governance (p1 ruling): a source gate carries ZERO information about whether
-// a label actually surfaces over AX — that acceptance closes with the p1 GUI
-// probe (five tab buttons' AX value verbatim equal to the resolver labels, plus
-// the remove-label negative control). These gates only guard the shape against
-// regression: the AX name must come from the Label title sourced from the
-// shared tabDisplayTitles computed var, with no accessibility overrides on the
-// tab buttons, exactly like the two toolbar buttons that do surface.
+// MARK: - T-050: tab buttons carry the resolver label as their identifier
+// Governance (p1 rulings, recorded): the probe proved .accessibilityLabel does
+// not produce an AX attribute in plain content areas on this macOS target, so
+// the identifier is the ACCEPTANCE CHANNEL, not an accessibility fix — the tab
+// buttons remain unnamed for VoiceOver, and the original goal (a real
+// accessible name) is downgraded to the backlog. The identifier gates below
+// guard the acceptance channel: the switch button's identifier is the resolver
+// label verbatim from the shared computed var (no prefix, no decoration — a
+// prefix would break the verbatim-equality acceptance), and the close button
+// uses a namespaced identifier over the same computed var.
 
 do {
     let t050ContentView = projectSource("Sources/MindFlowKit/ContentView.swift")
@@ -6131,6 +6133,12 @@ do {
           "T-050 switch label is not prefixed or recomputed outside the resolver")
     check(!t050Slice.contains("Text(\"子主題\")") && !t050Slice.contains("Text(\"中心主題\")"),
           "T-050 tab labels are not hardcoded")
+    check(t050Slice.components(separatedBy: ".accessibilityIdentifier(tabDisplayTitles[index])").count == 2,
+          "T-050 switch identifier is the resolver label verbatim from the shared computed var")
+    check(t050Slice.components(separatedBy: ".accessibilityIdentifier(\"").count == 2,
+          "T-050 the only literal identifier is the namespaced close button (switch stays verbatim)")
+    check(t050Slice.contains(".accessibilityIdentifier(\"mindflow.tab.close.\" + tabDisplayTitles[index])"),
+          "T-050 close identifier is namespaced over the shared computed var")
 }
 
 print("T-050 PENDING: AX label surfacing, verbatim equality, and the remove-label negative control are p1 GUI-probe items and are not simulated headlessly")

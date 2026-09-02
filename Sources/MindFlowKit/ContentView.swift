@@ -298,6 +298,9 @@ public struct ContentView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // T-050: the identifier is the acceptance channel (p1) —
+                    // the resolver label verbatim, no prefix, no decoration.
+                    .accessibilityIdentifier(tabDisplayTitles[index])
                     .background(
                         Capsule().fill(isActive
                             ? Color(nsColor: .controlBackgroundColor)
@@ -353,6 +356,11 @@ public struct ContentView: View {
                             .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        // T-050: identifier choice (p1 does not validate this
+                        // one) — namespaced with the resolver-unique per-tab
+                        // title so it cannot collide with the switch button,
+                        // whose identifier is the bare label.
+                        .accessibilityIdentifier("mindflow.tab.close." + tabDisplayTitles[index])
                         .help("關閉此分頁")
                     }
                 }
