@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 
 /// Everything needed to freeze and restore one open tab.
+public enum StorageFailureKind: Hashable {
+    case autosave
+    case recovery
+}
+
 public struct EditorSession: Equatable {
     public var id = UUID()
     public var document: MindDocument
@@ -27,8 +32,10 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var exportRequest: ExportFormat?
     @Published public var recentlyAddedID: UUID?
     @Published public var statusMessage: String?
+    @Published public private(set) var storageFailures: Set<StorageFailureKind> = []
     private var statusTask: Task<Void, Never>?
     private let autosaveStore: TabStore?
+    private let recoveryWriter: (MindDocument) -> Bool
 
     /// Shows a short transient confirmation for non-obvious actions.
     public func notify(_ message: String) {
@@ -38,6 +45,57 @@ public final class MindMapViewModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 2_400_000_000)
             if !Task.isCancelled { self?.statusMessage = nil }
         }
+    }
+
+    public var storageWarningText: String? {
+        let autosaveFailed = storageFailures.contains(.autosave)
+        let recoveryFailed = storageFailures.contains(.recovery)
+        switch (autosaveFailed, recoveryFailed) {
+        case (true, true): return "⚠︎ 儲存失敗（自動保存・復原快照）"
+        case (true, false): return "⚠︎ 自動保存失敗"
+        case (false, true): return "⚠︎ 復原快照失敗"
+        case (false, false): return nil
+        }
+    }
+
+    public var saveStatusSubtitle: String {
+        if let warning = storageWarningText {
+            return "v\(AppInfo.version) · \(warning)"
+        }
+        if dirty {
+            return "v\(AppInfo.version) · 未儲存"
+        }
+        if let saved = lastSavedAt {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            return "v\(AppInfo.version) · 已自動保存 \(formatter.string(from: saved))"
+        }
+        return "v\(AppInfo.version) · \(filePath?.lastPathComponent ?? "自動儲存中")"
+    }
+
+    private func recordStorageFailure(_ kind: StorageFailureKind, detail: String) {
+        let wasPresent = storageFailures.contains(kind)
+        storageFailures.insert(kind)
+        let mechanism = kind == .autosave ? "autosave" : "recovery"
+        NSLog("MindFlow \(mechanism) failed: \(detail)")
+        if !wasPresent, let warning = storageWarningText {
+            notify(warning)
+        }
+    }
+
+    private func clearStorageFailure(_ kind: StorageFailureKind) {
+        storageFailures.remove(kind)
+    }
+
+    @discardableResult
+    private func performRecoverySnapshot(_ snapshot: MindDocument? = nil) -> Bool {
+        let target = snapshot ?? document
+        guard recoveryWriter(target) else {
+            recordStorageFailure(.recovery, detail: "recovery snapshot writer returned false")
+            return false
+        }
+        clearStorageFailure(.recovery)
+        return true
     }
 
     public enum ExportFormat: String, Equatable {
@@ -130,7 +188,7 @@ public final class MindMapViewModel: ObservableObject {
         closedTabsStack.append(EditorSession(id: sessions[index].id, document: doc,
                                              filePath: index == activeIndex ? filePath : sessions[index].filePath))
         if closedTabsStack.count > 20 { closedTabsStack.removeFirst() }
-        FileIO.writeRecoveryCopy(doc)
+        performRecoverySnapshot(doc)
         inactiveStacks.removeValue(forKey: sessions[index].id)
         inactiveSelections.removeValue(forKey: sessions[index].id)
         sessions.remove(at: index)
@@ -159,7 +217,7 @@ public final class MindMapViewModel: ObservableObject {
         snapshotTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.document.root.text.isEmpty || self.dirty else { return }
-                FileIO.writeRecoveryCopy(self.document)
+                self.performRecoverySnapshot()
             }
         }
     }
@@ -182,13 +240,13 @@ public final class MindMapViewModel: ObservableObject {
         }
         switch outcome {
         case .committed(let warning):
+            clearStorageFailure(.autosave)
             lastSavedAt = Date()
             if let warning {
                 NSLog("MindFlow autosave committed with warning: \(warning)")
             }
         case .failed(let error, let warning):
-            notify("自動保存失敗，已保留舊版本")
-            NSLog("MindFlow autosave failed: \(error)")
+            recordStorageFailure(.autosave, detail: String(describing: error))
             if let warning {
                 NSLog("MindFlow autosave cleanup warning: \(warning)")
             }
@@ -196,8 +254,13 @@ public final class MindMapViewModel: ObservableObject {
         return outcome
     }
 
-    public init(tabStore: TabStore) {
+    public convenience init(tabStore: TabStore) {
+        self.init(tabStore: tabStore, recoveryWriter: FileIO.writeRecoveryCopy)
+    }
+
+    public init(tabStore: TabStore, recoveryWriter: @escaping (MindDocument) -> Bool) {
         self.autosaveStore = tabStore
+        self.recoveryWriter = recoveryWriter
         let first = MindDocument.new()
         self.document = first
         self.selection = first.root.id
@@ -206,6 +269,7 @@ public final class MindMapViewModel: ObservableObject {
 
     public init() {
         self.autosaveStore = nil
+        self.recoveryWriter = FileIO.writeRecoveryCopy
         let restored = FileIO.loadTabs()
         var initialSessions: [EditorSession]
         if restored.isEmpty {
@@ -974,7 +1038,7 @@ public final class MindMapViewModel: ObservableObject {
         guard sessions.indices.contains(index) else { return }
         stashActive()
         for (position, session) in sessions.enumerated() where position != index {
-            FileIO.writeRecoveryCopy(session.document)
+            performRecoverySnapshot(session.document)
             inactiveStacks.removeValue(forKey: session.id)
             inactiveSelections.removeValue(forKey: session.id)
         }

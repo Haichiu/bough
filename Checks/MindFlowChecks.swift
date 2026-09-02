@@ -3548,8 +3548,8 @@ do {
         check(!vmOutcome.succeeded, "ViewModel exposes autosave failure")
         check(vm.lastSavedAt == timestamp,
               "failed autosave leaves lastSavedAt unchanged")
-        check(vm.statusMessage == "自動保存失敗，已保留舊版本",
-              "failed autosave exposes old-version-retained status")
+        check(vm.statusMessage == "⚠︎ 自動保存失敗",
+              "failed autosave exposes the persistent warning status")
     }
     let afterViewModel = tabDirectoryEvidence(fixture.live, label: "write failure after ViewModel")
     assertTabEvidencePreserved(before, afterViewModel, label: "ViewModel write failure")
@@ -3899,8 +3899,8 @@ do {
         check(!vmOutcome.succeeded, "empty ViewModel snapshot uses the failure path")
         check(vm.lastSavedAt == timestamp,
               "empty snapshot leaves ViewModel lastSavedAt unchanged")
-        check(vm.statusMessage == "自動保存失敗，已保留舊版本",
-              "empty snapshot exposes the existing failure status")
+        check(vm.statusMessage == "⚠︎ 自動保存失敗",
+              "empty snapshot exposes the persistent warning status")
     }
     let afterViewModel = tabDirectoryEvidence(fixture.live, label: "empty snapshot after ViewModel")
     assertTabEvidencePreserved(before, afterViewModel, label: "empty ViewModel snapshot")
@@ -4956,6 +4956,154 @@ do {
     print("T-037 old generic fishbone mutation cubic=\(oldGenericCubic) missingSpine=\(oldMissingSpine)")
     check(oldGenericCubic && oldMissingSpine,
           "old generic fishbone behavior remains a detectable negative control")
+}
+
+// MARK: - T-041: persistent autosave/recovery failure state
+// Failure state is tested through the same public result paths that drive the UI;
+// every fixture lives under a fresh /tmp TabStore root, never Application Support.
+do {
+    let root = freshTabStoreRoot("c4a-recovery-episodes")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    var recoveryAllowed = false
+    var recoveryCalls = 0
+    let store = TabStore(directory: fixture.live)
+
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: store, recoveryWriter: { _ in
+            recoveryCalls += 1
+            return recoveryAllowed
+        })
+        vm.document = fixture.single
+        vm.statusMessage = "seed status"
+        @MainActor func invokeRecovery() {
+            vm.sessions = [
+                EditorSession(id: fixture.singleID, document: fixture.single),
+                EditorSession(id: fixture.multiID, document: fixture.multi)
+            ]
+            vm.activeIndex = 0
+            vm.document = fixture.single
+            vm.closeTab(1)
+        }
+
+        invokeRecovery()
+        check(recoveryCalls == 1, "recovery failure invokes the injected writer")
+        check(vm.storageFailures == Set([.recovery]),
+              "first recovery failure persists its failure kind")
+        check(vm.storageWarningText == "⚠︎ 復原快照失敗",
+              "recovery failure derives the exact warning text")
+        check(vm.statusMessage == "⚠︎ 復原快照失敗",
+              "first recovery failure sends the exact transient warning")
+
+        vm.statusMessage = "sentinel: do not spam"
+        invokeRecovery()
+        check(recoveryCalls == 2, "repeated recovery failure still invokes the writer")
+        check(vm.storageFailures == Set([.recovery]),
+              "repeated recovery failure keeps the persistent kind")
+        check(vm.statusMessage == "sentinel: do not spam",
+              "repeated recovery failure does not notify again")
+
+        recoveryAllowed = true
+        invokeRecovery()
+        check(vm.storageFailures.isEmpty,
+              "recovery success clears only the recovery failure")
+        check(vm.storageWarningText == nil,
+              "recovery success removes the recovery warning")
+
+        recoveryAllowed = false
+        vm.statusMessage = "episode two sentinel"
+        invokeRecovery()
+        check(recoveryCalls == 4, "the second recovery episode invokes the writer")
+        check(vm.statusMessage == "⚠︎ 復原快照失敗",
+              "a later recovery episode sends a second transient warning")
+        check(vm.storageFailures == Set([.recovery]),
+              "the second recovery episode persists recovery failure")
+    }
+}
+
+do {
+    let root = freshTabStoreRoot("c4a-cross-kind")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = makeTabFixture(in: root)
+    let production = TabStore.Dependencies.production
+    var autosaveAllowed = false
+    var recoveryAllowed = false
+    let dependencies = TabStore.Dependencies(
+        writeData: { data, url in
+            guard autosaveAllowed else { throw TabStoreCheckFailure.write }
+            try production.writeData(data, url)
+        },
+        exchangeDirectories: { live, staging in
+            guard autosaveAllowed else { throw TabStoreCheckFailure.exchange }
+            try production.exchangeDirectories(live, staging)
+        },
+        removeItem: production.removeItem)
+    let store = TabStore(directory: fixture.live, dependencies: dependencies)
+    let timestamp = Date(timeIntervalSince1970: 1_700_000_401)
+
+    await MainActor.run {
+        let vm = MindMapViewModel(tabStore: store, recoveryWriter: { _ in recoveryAllowed })
+        vm.document = fixture.single
+        vm.sessions = [EditorSession(id: fixture.singleID, document: fixture.single)]
+        vm.activeIndex = 0
+        vm.lastSavedAt = timestamp
+        vm.dirty = true
+        vm.statusMessage = "cross-kind seed"
+        @MainActor func invokeRecovery() {
+            vm.sessions = [
+                EditorSession(id: fixture.singleID, document: fixture.single),
+                EditorSession(id: fixture.multiID, document: fixture.multi)
+            ]
+            vm.activeIndex = 0
+            vm.document = fixture.single
+            vm.closeTab(1)
+        }
+
+        invokeRecovery()
+        let failedSave = vm.autosaveAllSessions()
+        check(!failedSave.succeeded,
+              "cross-kind autosave failure is observable")
+        check(vm.storageFailures == Set([.autosave, .recovery]),
+              "autosave and recovery failures coexist")
+        check(vm.storageWarningText == "⚠︎ 儲存失敗（自動保存・復原快照）",
+              "both failures derive the exact combined warning")
+        check(vm.saveStatusSubtitle == "v\(AppInfo.version) · ⚠︎ 儲存失敗（自動保存・復原快照）",
+              "subtitle exposes the combined persistent warning")
+        check(!vm.saveStatusSubtitle.contains("未儲存")
+              && !vm.saveStatusSubtitle.contains("已自動保存"),
+              "persistent warning takes priority over dirty and saved-time text")
+        check(vm.lastSavedAt == timestamp,
+              "failed autosave does not advance the previous saved time")
+        check(vm.statusMessage == "⚠︎ 儲存失敗（自動保存・復原快照）",
+              "first cross-kind episode notifies with the combined warning")
+
+        recoveryAllowed = true
+        invokeRecovery()
+        check(vm.storageFailures == Set([.autosave]),
+              "recovery success does not clear autosave failure")
+        check(vm.storageWarningText == "⚠︎ 自動保存失敗",
+              "remaining autosave failure keeps its own warning")
+
+        recoveryAllowed = false
+        vm.statusMessage = "second cross-kind episode"
+        invokeRecovery()
+        check(vm.storageFailures == Set([.autosave, .recovery]),
+              "a later recovery failure restores only recovery alongside autosave")
+
+        autosaveAllowed = true
+        let successfulSave = vm.autosaveAllSessions()
+        check(successfulSave.succeeded,
+              "autosave success is accepted after the injected failure")
+        check(vm.storageFailures == Set([.recovery]),
+              "autosave success does not clear recovery failure")
+        check(vm.storageWarningText == "⚠︎ 復原快照失敗",
+              "remaining recovery failure keeps its own warning")
+
+        recoveryAllowed = true
+        invokeRecovery()
+        check(vm.storageFailures.isEmpty,
+              "each success eventually clears only its own failure")
+    }
 }
 
 if failures == 0 {

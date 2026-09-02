@@ -729,15 +729,7 @@ public struct ContentView: View {
 
     /// Title-bar status: version, save state, and when auto-save last ran.
     private var saveSubtitle: String {
-        if vm.dirty {
-            return "v\(AppInfo.version) · 未儲存"
-        }
-        if let saved = vm.lastSavedAt {
-            let f = DateFormatter()
-            f.dateFormat = "HH:mm"
-            return "v\(AppInfo.version) · 已自動保存 \(f.string(from: saved))"
-        }
-        return "v\(AppInfo.version) · \(vm.filePath?.lastPathComponent ?? "自動儲存中")"
+        vm.saveStatusSubtitle
     }
 
     private func scheduleAutosave() {
