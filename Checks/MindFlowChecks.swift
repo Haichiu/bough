@@ -1283,6 +1283,44 @@ do {
         vm.openURL(id: node)
         check(vm.statusMessage?.contains("mailto") == true, "refusing a scheme notifies instead of opening")
     }
+    // The object NSWorkspace receives is URL(string:)'s product, parsed by
+    // Foundation rather than by our slicing. Its measured behavior is pinned
+    // here so a parser change surfaces as a check failure instead of at
+    // launch time — each expectation below matches the behavior observed on
+    // this Foundation at commit time.
+    check(MindMapViewModel.makeOpenableURL("http:")?.absoluteString == "http:",
+          "an empty http: URL parses and reaches the allowlist recheck")
+    check(MindMapViewModel.makeOpenableURL("http:/\\/x")?.absoluteString == "http:/%5C/x",
+          "URL parsing percent-encodes a backslash path")
+    check(MindMapViewModel.makeOpenableURL("http:////x")?.absoluteString == "http:////x",
+          "empty-authority slashes survive URL parsing")
+    check(MindMapViewModel.makeOpenableURL("https:/x")?.absoluteString == "https:/x",
+          "a single-slash https URL parses")
+    check(MindMapViewModel.makeOpenableURL("mailto:")?.absoluteString == "mailto:",
+          "an empty mailto: URL parses")
+    check(MindMapViewModel.makeOpenableURL("MailTo:a@b.c")?.scheme == "MailTo",
+          "URL preserves the original scheme spelling")
+    check(MindMapViewModel.makeOpenableURL("MailTo:a@b.c")?.scheme?.lowercased() == "mailto",
+          "the recheck lowercases the preserved spelling")
+    check(MindMapViewModel.makeOpenableURL("HTTP://X.COM")?.scheme?.lowercased() == "http",
+          "an uppercase scheme survives URL parsing")
+    check(MindMapViewModel.makeOpenableURL("http://%65vil.com")?.absoluteString == "http://%65vil.com",
+          "percent-encoding in the host is left as written")
+    check(MindMapViewModel.makeOpenableURL("http:#")?.absoluteString == "http:%23",
+          "URL parsing percent-encodes a bare #")
+    check(MindMapViewModel.makeOpenableURL("%68ttp://x") == nil,
+          "a percent-encoded scheme name is refused before URL parsing")
+    check(MindMapViewModel.makeOpenableURL("http://a b") == nil,
+          "URL parsing refuses an embedded space our slicing would call http")
+    // Whatever the slicing decided, the object actually handed on must carry
+    // an allowlisted scheme — asserted on the URL, not on our slice.
+    for opened in ["https://a.tw/x", "mailto:a@b.c", "MailTo:a@b.c", "HTTP://X.COM",
+                   "http:", "http:/\\/x", "http:#", "https:/x"] {
+        if let handed = MindMapViewModel.makeOpenableURL(opened) {
+            check(["http", "https", "mailto"].contains(handed.scheme?.lowercased() ?? ""),
+                  "the URL handed on for \(opened.debugDescription) carries an allowlisted scheme")
+        }
+    }
     } else {
         check(false, "future-proof document decodes")
     }

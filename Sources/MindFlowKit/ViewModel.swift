@@ -1530,14 +1530,24 @@ public final class MindMapViewModel: ObservableObject {
     /// of being promoted to https. Leading and trailing whitespace and control
     /// characters are normalized first, so "\n file://" cannot smuggle a scheme
     /// past the check. Scheme matching is case-insensitive.
+    private static let openableSchemes: Set<String> = ["http", "https", "mailto"]
+
     public static func makeOpenableURL(_ raw: String) -> URL? {
         let normalized = raw.trimmingCharacters(
             in: CharacterSet.whitespacesAndNewlines.union(.controlCharacters))
         guard !normalized.isEmpty else { return nil }
         guard let colon = normalized.firstIndex(of: ":") else { return nil }
         let scheme = String(normalized[..<colon]).lowercased()
-        guard ["http", "https", "mailto"].contains(scheme) else { return nil }
-        return URL(string: normalized)
+        guard openableSchemes.contains(scheme) else { return nil }
+        // The slicing above is our own parser. The object NSWorkspace actually
+        // receives is URL(string:)'s product, so the allowlist is asserted
+        // again on that object before it leaves this function: if URL parsing
+        // ever disagrees with our slicing (different scheme, no scheme, or a
+        // nil parse), the link is refused instead of handed on.
+        guard let url = URL(string: normalized),
+              let parsed = url.scheme?.lowercased(),
+              openableSchemes.contains(parsed) else { return nil }
+        return url
     }
 
     public func openURL(id: UUID) {
