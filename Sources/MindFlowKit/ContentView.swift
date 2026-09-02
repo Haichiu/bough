@@ -278,7 +278,7 @@ public struct ContentView: View {
                         vm.switchTab(to: index)
                     } label: {
                         HStack(spacing: 5) {
-                            Text(tabTitle(vm.sessions[index]))
+                            Text(tabDisplayTitles[index])
                                 .font(.callout)
                                 .lineLimit(1)
                             if vm.sessions[index].dirty || (isActive && vm.dirty) {
@@ -318,7 +318,7 @@ public struct ContentView: View {
                             }
                     )
                     .help("切換到此分頁（拖曳可排序）")
-                    .accessibilityLabel("切換到分頁：\(tabTitle(vm.sessions[index]))")
+                    .accessibilityLabel("切換到分頁：\(tabDisplayTitles[index])")
                     .contextMenu {
                         Button("建立分頁副本") { vm.duplicateActiveTab() }
                         Divider()
@@ -340,7 +340,7 @@ public struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                         .help("關閉此分頁")
-                        .accessibilityLabel("關閉分頁：\(tabTitle(vm.sessions[index]))")
+                        .accessibilityLabel("關閉分頁：\(tabDisplayTitles[index])")
                     }
                 }
             }
@@ -372,11 +372,13 @@ public struct ContentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func tabTitle(_ session: EditorSession) -> String {
-        let text = session.document.root.text.trimmingCharacters(in: .whitespaces)
-        if !text.isEmpty { return text }
-        if let path = session.filePath { return path.deletingPathExtension().lastPathComponent }
-        return session.document.title
+    private var tabDisplayTitles: [String] {
+        TabDisplayTitles.resolve(
+            sessions: vm.sessions,
+            activeIndex: vm.activeIndex,
+            liveDocument: vm.document,
+            liveFilePath: vm.filePath,
+            maximumGraphemes: TabDisplayTitles.defaultMaximumGraphemes)
     }
 
     // MARK: - Inspector（備註 / 大綱）

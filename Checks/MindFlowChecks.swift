@@ -5866,6 +5866,139 @@ do {
           "T-048 fishbone unmarked fixture remains bit-for-bit legacy geometry")
 }
 
+
+// MARK: - T-044: deterministic, live-aware tab display titles
+// The resolver owns the final rendered label: middle truncation is grapheme-safe,
+// and uniqueness is allocated only after truncation so SwiftUI cannot introduce
+// a second, opaque naming policy.
+do {
+    func t044Document(_ title: String = "未命名心智圖", root: MindNode,
+                      themeName: String = "ocean") -> MindDocument {
+        MindDocument(title: title, themeName: themeName, root: root)
+    }
+
+    let ladderSessions = [
+        EditorSession(document: t044Document(root: MindNode(text: "  有效根  "))),
+        EditorSession(document: t044Document(root: MindNode(text: "中心主題")),
+                      filePath: URL(fileURLWithPath: "/tmp/檔案來源.mindmap")),
+        EditorSession(document: t044Document("自訂文件", root: MindNode(text: ""))),
+        EditorSession(document: t044Document(root: MindNode(text: "中心主題", children: [
+            MindNode(text: "", children: [MindNode(text: "深層來源")])
+        ]))),
+        EditorSession(document: t044Document(root: MindNode(text: "中心主題")))
+    ]
+    let ladderLabels = TabDisplayTitles.resolve(
+        sessions: ladderSessions,
+        activeIndex: -1,
+        liveDocument: ladderSessions[0].document,
+        liveFilePath: nil,
+        maximumGraphemes: 16)
+    check(ladderLabels == ["有效根", "檔案來源", "自訂文件", "深層來源", "中心主題"],
+          "T-044 source ladder resolves root, file, title, descendant, and default")
+
+    let defaultRootSessions = (1...7).map { number in
+        EditorSession(document: t044Document(root: MindNode(
+            text: "中心主題", children: [MindNode(text: "不同分支\(number)")]))
+        )
+    }
+    let defaultRootLabels = TabDisplayTitles.resolve(
+        sessions: defaultRootSessions,
+        activeIndex: -1,
+        liveDocument: defaultRootSessions[0].document,
+        liveFilePath: nil,
+        maximumGraphemes: 16)
+    check(Set(defaultRootLabels).count == 7
+          && defaultRootLabels == (1...7).map { "不同分支\($0)" },
+          "T-044 default roots use distinct depth-first descendants")
+
+    let duplicateSessions = [
+        EditorSession(document: t044Document(root: MindNode(text: "foo"))),
+        EditorSession(document: t044Document(root: MindNode(text: "foo · 2"))),
+        EditorSession(document: t044Document(root: MindNode(text: "foo")))
+    ]
+    let duplicateLabels = TabDisplayTitles.resolve(
+        sessions: duplicateSessions,
+        activeIndex: -1,
+        liveDocument: duplicateSessions[0].document,
+        liveFilePath: nil,
+        maximumGraphemes: 16)
+    check(duplicateLabels == ["foo", "foo · 2", "foo · 3"],
+          "T-044 allocator skips an occupied generated suffix")
+
+    let longMiddleSessions = [
+        EditorSession(document: t044Document(root: MindNode(
+            text: "共同前綴AAAAA甲BBBBB共同後綴"))),
+        EditorSession(document: t044Document(root: MindNode(
+            text: "共同前綴AAAAA乙BBBBB共同後綴")))
+    ]
+    let longMiddleLabels = TabDisplayTitles.resolve(
+        sessions: longMiddleSessions,
+        activeIndex: -1,
+        liveDocument: longMiddleSessions[0].document,
+        liveFilePath: nil,
+        maximumGraphemes: 16)
+    check(longMiddleLabels.count == 2
+          && Set(longMiddleLabels).count == 2
+          && longMiddleLabels[1].hasSuffix(" · 2")
+          && longMiddleLabels.allSatisfy { Array($0).count > 0 },
+          "T-044 middle truncation precedes uniqueness allocation")
+
+    let graphemeSource = "👩‍💻" + String(repeating: "界", count: 20) + "e\u{301}"
+    let graphemeSession = EditorSession(document: t044Document(root: MindNode(text: graphemeSource)))
+    let graphemeLabel = TabDisplayTitles.resolve(
+        sessions: [graphemeSession],
+        activeIndex: -1,
+        liveDocument: graphemeSession.document,
+        liveFilePath: nil,
+        maximumGraphemes: 8)[0]
+    let graphemes = Array(graphemeLabel)
+    check(graphemes.count <= 8
+          && graphemes.contains("👩‍💻")
+          && graphemes.contains("e\u{301}")
+          && !graphemeLabel.contains("\u{FFFD}"),
+          "T-044 truncation preserves emoji and combining graphemes")
+
+    let staleActive = MindDocument(title: "快照標題", root: MindNode(text: "快照舊根"))
+    let inactiveSnapshot = MindDocument(title: "其他", root: MindNode(text: "非活躍快照"))
+    let liveEdit = MindDocument(title: "快照標題", root: MindNode(text: "即時根"))
+    let liveAwareLabels = TabDisplayTitles.resolve(
+        sessions: [EditorSession(document: staleActive), EditorSession(document: inactiveSnapshot)],
+        activeIndex: 0,
+        liveDocument: liveEdit,
+        liveFilePath: URL(fileURLWithPath: "/tmp/不應遮蔽.mindmap"),
+        maximumGraphemes: 16)
+    check(liveAwareLabels == ["即時根", "非活躍快照"],
+          "T-044 active label uses live document while inactive uses snapshot")
+
+    let liveDefaultDocument = t044Document(root: MindNode(text: "中心主題"))
+    let livePathLabels = TabDisplayTitles.resolve(
+        sessions: [EditorSession(document: t044Document(root: MindNode(text: "中心主題")),
+                    filePath: URL(fileURLWithPath: "/tmp/stale-active.mindmap"))],
+        activeIndex: 0,
+        liveDocument: liveDefaultDocument,
+        liveFilePath: URL(fileURLWithPath: "/tmp/live-active.mindmap"),
+        maximumGraphemes: 16)
+    check(livePathLabels == ["live-active"],
+          "T-044 active label also uses the live file path fallback")
+
+    let invalidActiveLabels = TabDisplayTitles.resolve(
+        sessions: [EditorSession(document: t044Document(root: MindNode(text: "快照")))],
+        activeIndex: 99,
+        liveDocument: liveEdit,
+        liveFilePath: URL(fileURLWithPath: "/tmp/不應使用.mindmap"),
+        maximumGraphemes: 16)
+    let emptyLabels = TabDisplayTitles.resolve(
+        sessions: [], activeIndex: 0, liveDocument: liveEdit, liveFilePath: nil,
+        maximumGraphemes: 16)
+    check(invalidActiveLabels == ["快照"] && emptyLabels.isEmpty,
+          "T-044 invalid active index and empty sessions are safe")
+
+    let t044ContentView = projectSource("Sources/MindFlowKit/ContentView.swift")
+    check(t044ContentView.contains("TabDisplayTitles.resolve")
+          && !t044ContentView.contains("private func tabTitle"),
+          "T-044 ContentView renders resolver final labels directly")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
