@@ -24,6 +24,10 @@ public final class KeyboardMonitor {
     private static let editingHandoffWindow: TimeInterval = 0.6
     private var lastSeenEditingID: UUID?
     private var editingHandoffStart = Date.distantPast
+    /// Session id whose first printable character already went through the
+    /// replacing path. Cleared when editing ends so re-editing the same node
+    /// re-arms type-to-replace.
+    private var replacedSessionID: UUID?
 
     public func start(vm: MindMapViewModel) {
         self.vm = vm
@@ -108,6 +112,26 @@ public final class KeyboardMonitor {
         return false
     }
 
+    /// D2 decision shared by the event monitor and the behavioral checks — same
+    /// dispatch-path pattern as performCoreShortcut. A bare printable character
+    /// (p1-owned guard, unchanged: a selection or open session, no modifiers
+    /// beyond shift, one printable non-delete scalar outside the private-use
+    /// block) must land in the replacing path; anything else is not
+    /// type-to-replace.
+    public static func d2Replacement(characters: String?,
+                                     charactersIgnoringModifiers: String,
+                                     modifierFlags: NSEvent.ModifierFlags,
+                                     selection: UUID?) -> (id: UUID, text: String)? {
+        guard let selection,
+              modifierFlags.subtracting(.shift).isEmpty,
+              charactersIgnoringModifiers.count == 1,
+              let scalar = charactersIgnoringModifiers.unicodeScalars.first,
+              scalar.value >= 0x20, scalar.value != 0x7F, scalar.value < 0xF700 else {
+            return nil
+        }
+        return (selection, characters ?? charactersIgnoringModifiers)
+    }
+
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard let vm else { return event }
 
@@ -143,17 +167,42 @@ public final class KeyboardMonitor {
         // The handoff is deliberately time-boxed. An unbounded "editingID != nil means
         // hands off" rule would kill the keyboard outright whenever editingID is set but
         // no editor ever appears. Esc is always excluded so there is a way back.
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let chars = event.charactersIgnoringModifiers ?? ""
+
         if vm.editingID != lastSeenEditingID {
             lastSeenEditingID = vm.editingID
             editingHandoffStart = Date()
+            if vm.editingID == nil { replacedSessionID = nil }
         }
-        if vm.editingID != nil, event.charactersIgnoringModifiers != "\u{1B}",
+        if vm.editingID != nil, chars != "\u{1B}",
            Date().timeIntervalSince(editingHandoffStart) < Self.editingHandoffWindow {
+            // The field editor installs a runloop turn or two after editingID
+            // lands. Until it does, a printable keystroke passed through here
+            // fell into the responder chain and was dropped: the editor opened
+            // with the old text and the character never reached the document
+            // (p1 measured this on two scenarios). Deliver the first character
+            // of a session through the replacing path instead, reopening the
+            // session one runloop turn later so the editor seeds from the
+            // replaced text. Sessions already carrying a replacement (started
+            // by type-to-replace itself) hand off as before.
+            if let editing = vm.editingID, editing != replacedSessionID,
+               let d2 = Self.d2Replacement(characters: event.characters,
+                                           charactersIgnoringModifiers: chars,
+                                           modifierFlags: flags,
+                                           selection: editing) {
+                vm.stopEditing()
+                let target = d2.id
+                let replacement = d2.text
+                DispatchQueue.main.async {
+                    guard vm.editingID == nil, vm.selection == target else { return }
+                    vm.beginEditing(id: target, replacingWith: replacement)
+                }
+                replacedSessionID = target
+                return nil
+            }
             return event
         }
-
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let chars = event.charactersIgnoringModifiers ?? ""
 
         if Self.performCoreShortcut(characters: chars, modifiers: flags, vm: vm) { return nil }
 
@@ -272,12 +321,12 @@ public final class KeyboardMonitor {
             // the text and drops straight into the editor, as MindNode and XMind do.
             // Excludes the 0xF700-0xF8FF private-use block, which is where AppKit puts
             // arrows and function keys.
-            if let selection = vm.selection,
-               flags.subtracting(.shift).isEmpty,
-               chars.count == 1,
-               let scalar = chars.unicodeScalars.first,
-               scalar.value >= 0x20, scalar.value != 0x7F, scalar.value < 0xF700 {
-                vm.beginEditing(id: selection, replacingWith: event.characters ?? chars)
+            if let d2 = Self.d2Replacement(characters: event.characters,
+                                           charactersIgnoringModifiers: chars,
+                                           modifierFlags: flags,
+                                           selection: vm.selection) {
+                vm.beginEditing(id: d2.id, replacingWith: d2.text)
+                replacedSessionID = d2.id
                 return nil
             }
             return event

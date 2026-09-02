@@ -6139,6 +6139,43 @@ do {
 
 print("T-050 PENDING: AX verbatim equality and the remove-label negative control are p1 GUI-probe items and are not simulated headlessly")
 
+// MARK: - D2 handoff: the first keystroke reaches the replacing path
+// p1 measured (two scenarios): a printable keystroke on a selected node opened
+// the editor with the old text and the character never reached the document.
+// The editing handoff window passed events straight through while the field
+// editor was still installing, so the first printable character fell into the
+// responder chain and was dropped. The printable-character decision now lives
+// in one shared dispatch path (same pattern as performCoreShortcut); the
+// NSEvent wiring plus the field-editor install race stay with the p1 GUI probe.
+
+do {
+    let session = UUID()
+    let routed = KeyboardMonitor.d2Replacement(characters: "x", charactersIgnoringModifiers: "x",
+                                               modifierFlags: [], selection: session)
+    check(routed?.id == session && routed?.text == "x",
+          "D2 handoff routes a bare printable character into the replacing path")
+    check(KeyboardMonitor.d2Replacement(characters: "x", charactersIgnoringModifiers: "x",
+                                        modifierFlags: [.command], selection: session) == nil,
+          "D2 handoff ignores command-modified keystrokes")
+    check(KeyboardMonitor.d2Replacement(characters: "x", charactersIgnoringModifiers: "x",
+                                        modifierFlags: [.shift], selection: session)?.text == "x",
+          "D2 handoff keeps shift-modified characters")
+    check(KeyboardMonitor.d2Replacement(characters: nil, charactersIgnoringModifiers: "\u{F703}",
+                                        modifierFlags: [], selection: session) == nil,
+          "D2 handoff ignores arrow keys")
+    check(KeyboardMonitor.d2Replacement(characters: "\u{7F}", charactersIgnoringModifiers: "\u{7F}",
+                                        modifierFlags: [], selection: session) == nil,
+          "D2 handoff ignores delete")
+    check(KeyboardMonitor.d2Replacement(characters: "ab", charactersIgnoringModifiers: "ab",
+                                        modifierFlags: [], selection: session) == nil,
+          "D2 handoff ignores multi-character events")
+    check(KeyboardMonitor.d2Replacement(characters: "x", charactersIgnoringModifiers: "x",
+                                        modifierFlags: [], selection: nil) == nil,
+          "D2 handoff requires a selection or an open session")
+}
+
+print("D2 PENDING: the NSEvent monitor wiring plus the field-editor install race need a real keyboard and are p1 GUI-probe items")
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
