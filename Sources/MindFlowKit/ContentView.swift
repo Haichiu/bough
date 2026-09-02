@@ -74,63 +74,68 @@ public struct ContentView: View {
                     Label("兄弟主題", systemImage: "plus.square.on.square")
                 }
                 .help("加入兄弟主題（編輯中按 Return）")
+            }
 
-                Button {
-                    if let selection = vm.selection { vm.delete(id: selection) }
-                } label: {
-                    Label("刪除", systemImage: "trash")
-                }
-                .help("刪除選取主題（Delete）")
-
-                Spacer()
-
-                Button { vm.expandAll() } label: { Label("全部展開", systemImage: "rectangle.expand.vertical") }
-                Button { vm.collapseAll() } label: { Label("全部收合", systemImage: "rectangle.compress.vertical") }
-                Menu {
-                    ForEach([1, 2, 3, 4], id: \.self) { level in
-                        Button("顯示到第 \(level) 層") { vm.expandToLevel(level) }
-                    }
-                } label: {
-                    Label("展開至", systemImage: "lineweight.thin")
-                }
-                Button { NotificationCenter.default.post(name: .mindFlowFit, object: nil) } label: {
-                    Label("符合視窗", systemImage: "arrow.down.right.and.arrow.up.left")
-                }
-                .help("縮放至整張圖")
-
-                if vm.focusBranchID != nil {
-                    Button {
-                        vm.focusBranchID = nil
-                    } label: {
-                        Label("取消聚焦", systemImage: "scope")
-                    }
-                    .help("回到全圖檢視")
-                }
-
-                Menu {
-                    Button("邏輯圖（右展）") { vm.setDirection(.logicRight) }
-                    Button("平衡圖（左右）") { vm.setDirection(.balanced) }
-                    Button("魚骨圖") { vm.setDirection(.fishbone) }
-                    Button("括號圖") { vm.setDirection(.bracket) }
-                    Divider()
-                    Button("回到自動排列") { vm.resetAllOffsets() }
-                        .disabled(vm.document.offsets.isEmpty)
-                        .help("清除手動位置並回到自動排列（可復原）")
-                } label: {
-                    Label("版面", systemImage: "arrow.triangle.branch")
-                }
-
-                Button {
-                    vm.copyAsMarkdown()
-                } label: {
-                    Label("複製 MD", systemImage: "doc.on.doc")
-                }
-                .help("把整張圖複製成 Markdown 到剪貼簿（⌘⇧C）")
-
+            ToolbarItem {
                 Toggle(isOn: $vm.showInspector) {
                     Label("檢閱器", systemImage: "sidebar.trailing")
                 }
                 .toggleStyle(.button)
+            }
+
+            ToolbarItem {
+                Menu {
+                    Button { NotificationCenter.default.post(name: .mindFlowFit, object: nil) } label: {
+                        Label("符合視窗", systemImage: "arrow.down.right.and.arrow.up.left")
+                    }
+                    .help("縮放至整張圖")
+
+                    Button { vm.expandAll() } label: {
+                        Label("全部展開", systemImage: "rectangle.expand.vertical")
+                    }
+                    Button { vm.collapseAll() } label: {
+                        Label("全部收合", systemImage: "rectangle.compress.vertical")
+                    }
+                    Menu("展開至") {
+                        ForEach([1, 2, 3, 4], id: \.self) { level in
+                            Button("顯示到第 \(level) 層") { vm.expandToLevel(level) }
+                        }
+                    }
+
+                    if vm.focusBranchID != nil {
+                        Button {
+                            vm.focusBranchID = nil
+                        } label: {
+                            Label("取消聚焦", systemImage: "scope")
+                        }
+                        .help("回到全圖檢視")
+                    }
+
+                    Menu("版面") {
+                        Button("邏輯圖（右展）") { vm.setDirection(.logicRight) }
+                        Button("平衡圖（左右）") { vm.setDirection(.balanced) }
+                        Button("魚骨圖") { vm.setDirection(.fishbone) }
+                        Button("括號圖") { vm.setDirection(.bracket) }
+                        Divider()
+                        Button("回到自動排列") { vm.resetAllOffsets() }
+                            .disabled(vm.document.offsets.isEmpty)
+                            .help("清除手動位置並回到自動排列（可復原）")
+                    }
+
+                    Button { vm.copyAsMarkdown() } label: {
+                        Label("複製 MD", systemImage: "doc.on.doc")
+                    }
+                    .help("把整張圖複製成 Markdown 到剪貼簿（⌘⇧C）")
+
+                    Divider()
+                    Button("刪除", role: .destructive) {
+                        if let selection = vm.selection { vm.delete(id: selection) }
+                    }
+                    .help("刪除選取主題（Delete）")
+                } label: {
+                    Label("更多", systemImage: "ellipsis.circle")
+                }
+                .help("更多操作")
             }
         }
         .navigationTitle(vm.document.root.text.isEmpty ? vm.document.title : vm.document.root.text)

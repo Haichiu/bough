@@ -5204,6 +5204,95 @@ for path in ["Sources/MindFlowKit/MapCanvasView.swift",
           "Palette ownership remains in \(path)")
 }
 
+
+
+// MARK: - T-043: compact toolbar with a complete More menu
+// The toolbar owns only the three primary actions; alternate entrances remain in
+// menus, shortcuts, context menus, and the canvas rather than being deleted.
+let t043Check: () -> Void = {
+    let source = projectSource("Sources/MindFlowKit/ContentView.swift")
+    guard let start = source.range(of: "        .toolbar {\n            ToolbarItemGroup {") else {
+        check(false, "T-043 toolbar declaration remains discoverable")
+        return
+    }
+    guard let end = source.range(of: "        .navigationTitle", range: start.upperBound..<source.endIndex) else {
+        check(false, "T-043 toolbar has a bounded declaration")
+        return
+    }
+    let toolbar = String(source[start.lowerBound..<end.lowerBound])
+    guard let moreStart = toolbar.range(of: "            ToolbarItem {\n                Menu {") else {
+        check(false, "T-043 More menu remains a native toolbar item")
+        return
+    }
+    let primary = String(toolbar[..<moreStart.lowerBound])
+    let more = String(toolbar[moreStart.lowerBound...])
+    let primaryLabels = [
+        "Label(\"子主題\", systemImage: \"plus.circle.fill\")",
+        "Label(\"兄弟主題\", systemImage: \"plus.square.on.square\")",
+        "Label(\"檢閱器\", systemImage: \"sidebar.trailing\")"
+    ]
+    check(primaryLabels.allSatisfy { primary.contains($0) }
+          && primary.components(separatedBy: "Label(").count - 1 == 3
+          && primary.contains("Toggle(isOn: $vm.showInspector)"),
+          "toolbar primary controls are exactly child, sibling, and inspector")
+    check(!primary.contains("刪除")
+          && !primary.contains("符合視窗")
+          && !primary.contains("全部展開")
+          && !primary.contains("複製 MD"),
+          "Delete and secondary actions are not direct toolbar neighbors")
+    check(more.components(separatedBy: "ellipsis.circle").count - 1 == 1
+          && more.contains("Label(\"更多\", systemImage: \"ellipsis.circle\")"),
+          "More is one native ellipsis-circle control")
+
+    let moreActions = [
+        "Label(\"符合視窗\"",
+        "Label(\"全部展開\"",
+        "Label(\"全部收合\"",
+        "Menu(\"展開至\")",
+        "if vm.focusBranchID != nil",
+        "Menu(\"版面\")",
+        "Label(\"複製 MD\"",
+        "Button(\"刪除\", role: .destructive)"
+    ]
+    check(moreActions.allSatisfy { more.contains($0) },
+          "More retains every toolbar capability")
+    check(more.contains("ForEach([1, 2, 3, 4]")
+          && more.contains("vm.expandToLevel(level)")
+          && more.contains("vm.focusBranchID = nil"),
+          "More retains level expansion and conditional focus cancellation")
+    let layoutActions = ["邏輯圖（右展）", "平衡圖（左右）", "魚骨圖", "括號圖", "回到自動排列"]
+    check(layoutActions.allSatisfy { more.contains($0) },
+          "More retains all layout choices and auto-layout reset")
+
+    let positions = moreActions.compactMap { more.range(of: $0)?.lowerBound }
+    check(positions.count == moreActions.count
+          && zip(positions, positions.dropFirst()).allSatisfy { $0 <= $1 },
+          "More action order ends with Delete")
+    check(more.contains("Divider()\n                    Button(\"刪除\", role: .destructive)"),
+          "More separates the final destructive Delete action")
+    if let delete = more.range(of: "Button(\"刪除\", role: .destructive)") {
+        let afterDelete = String(more[delete.upperBound...])
+        check(!afterDelete.contains("Button(") && !afterDelete.contains("Menu("),
+              "destructive Delete is the final More action")
+    } else {
+        check(false, "destructive Delete is present for final-action validation")
+    }
+
+    check(source.contains("NotificationCenter.default.post(name: .mindFlowFit")
+          && source.contains("vm.copyAsMarkdown()")
+          && source.contains("focusBranchID")
+          && source.contains("contextMenu")
+          && source.contains("vm.resetAllOffsets()"),
+          "fit, copy, focus, delete, and layout retain alternate entrances")
+    let keyboard = projectSource("Sources/MindFlowKit/KeyboardMonitor.swift")
+    let appCommands = projectSource("Sources/MindFlow/MindFlowApp.swift")
+    check(keyboard.contains("vm.delete(id: selection)")
+          && appCommands.contains("Button(\"刪除主題\")")
+          && appCommands.contains("keyboardShortcut(\"c\", modifiers: [.command, .shift])")
+          && appCommands.contains("vm.resetAllOffsets()"),
+          "keyboard and App menu alternatives remain reachable")
+}
+t043Check()
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
