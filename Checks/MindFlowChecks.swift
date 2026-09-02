@@ -5911,6 +5911,29 @@ do {
           && defaultRootLabels == (1...7).map { "不同分支\($0)" },
           "T-044 default roots use distinct depth-first descendants")
 
+    let sixteenCJK = String(repeating: "界", count: 16)
+    let seventeenCJK = String(repeating: "界", count: 17)
+    let boundarySessions = [
+        EditorSession(document: t044Document(root: MindNode(text: sixteenCJK))),
+        EditorSession(document: t044Document(root: MindNode(text: seventeenCJK)))
+    ]
+    let boundaryLabels = TabDisplayTitles.resolve(
+        sessions: boundarySessions,
+        activeIndex: -1,
+        liveDocument: boundarySessions[0].document,
+        liveFilePath: nil)
+    let expectedSeventeen = String(seventeenCJK.prefix(8))
+        + "…"
+        + String(seventeenCJK.suffix(7))
+    check(boundaryLabels[1] == expectedSeventeen
+          && Array(boundaryLabels[1]).count == 16
+          && Array(boundaryLabels[1].prefix(8)) == Array(seventeenCJK.prefix(8))
+          && Array(boundaryLabels[1].suffix(7)) == Array(seventeenCJK.suffix(7)),
+          "T-044 production default truncates 17 CJK as 8-leading plus ellipsis plus 7-trailing")
+    check(boundaryLabels[0] == sixteenCJK
+          && Array(boundaryLabels[0]).count == 16,
+          "T-044 production default leaves exactly 16 CJK graphemes untruncated")
+
     let duplicateSessions = [
         EditorSession(document: t044Document(root: MindNode(text: "foo"))),
         EditorSession(document: t044Document(root: MindNode(text: "foo · 2"))),

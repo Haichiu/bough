@@ -6,6 +6,11 @@ import Foundation
 /// than its last stashed session snapshot. Suffixes are allocated after middle
 /// truncation so the string rendered by SwiftUI is already unique.
 public enum TabDisplayTitles {
+    // Traditional-Chinese root titles are typically 2–8 characters; 16 avoids
+    // truncating real titles. In the worst case, 16 CJK characters are about
+    // 208pt (about 230pt with chrome), so a 960pt window shows roughly four
+    // tabs and lets the rest scroll horizontally; 12/14 begin to harm
+    // recognizability.
     public static let defaultMaximumGraphemes = 16
 
     public static func resolve(
