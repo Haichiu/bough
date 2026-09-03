@@ -60,6 +60,7 @@ Owner 裁定迭代 50 輪。本檔是唯一進度來源；唤醒後先讀這裡�
 | 16 | T-044 分頁標題（16-grapheme、active live、最終字串唯一）＋T-049 節點層建立＋D2 吞字修復＋T-050 驗收管道 |
 | 17 | T-047 icon 字形重設計（方向 A 卡片樹＋強制破對稱）| `da2aaa2` glyph：root 填充卡（≥2.1×）＋兩張描邊子卡（不互為鏡像）＋圓角肘線；`a2128e4` gates（p1 修正版，渲染完成品上量）：非實心（16px fill=0.6042 ≤ 0.70；錨點舊=0.469 過／實心≈0.9 拒）＋flip-mismatch ≥0.10 全 10 slots（本 glyph 最低 0.2055@64px；**舊 icon 0.000 被拒＝陰性對照**）；內點 ±1 design unit 全綠；mutation 鏡像子卡／填實心各 rc=1 首敗；掃描先斷言、對比≥3.0、光學置中不變全過。**美學裁決（p1，2026-09-03）：accept。**`/tmp/iconsym` 獨立實測：flip-mismatch 新 0.184–0.292（四 band，門檻 0.10）、fill 0.412–0.495（門檻 0.70）；舊 icon 全 band 0.000 被拒——陰性對照實測。64px ASCII 判讀「讀得出卡片樹而非抽象網路圖」。**已知取捨**：16px 是最弱 band——描邊子卡在該尺寸已填成實面，root 填充 vs 子卡描邊的層級感知不到（墨量 30→40、bbox 8x8→8x11；結構未崩解，blobs 皆 1）。**未行使選項**：小 band 改填充子卡——原樣記錄、現在不做；16px 只出現在 Finder 列表與選單，Dock/切換器 ≥64px；owner 看了說 16px 不行再行使| `da2aaa2` `a2128e4` | resolver headless 全綠＋12/14 boundary mutation 有牙；GUI：p1 量 AXIdentifier 與 resolver 輸出在**量出的 reverse-mtime 順序**上逐字相等（截斷後才碰撞、使用者字串被讓開、8+1+7=16），陰性對照實測；T-049 四路徑 node-level＋方向鍵導航（以取代目標反推選取）PASS；D2 吞字（`6d74a8a` live-store seed）雙情境 PASS；T-050 原目標降級 backlog（實測 `.accessibilityLabel` 在普通內容區不產生屬性），identifier 僅驗收管道 | `7f3404a` `7056f10` `68bd471` `6d74a8a` `a6ea038` |
 | 18 | T-051 輕量資安（S1 真洞；S2/S3 先量再決，兩項結論＝不加守衛）| S1 `ec72b74`+`0e702cc`：openURL scheme allowlist（字串切法之外，**對 NSWorkspace 實收的 URL 物件再斷言一次**；13 條 Foundation 實測行為釘死防解析器漂移）（http/https/mailto；原則：允許交給瀏覽器/郵件撰寫、拒絕定址本地檔案系統或派給任意 app；大小寫不敏感＋歸一化；mutation 拿掉 allowlist 首敗）；S2 `a1f5575`：**實驗證據**——TabStore staging 存檔不 open symlink（target 331→331 identical）、`Data.write(.atomic)` 以 rename 取代連結本身（349→349 identical）、iCloud 式目錄 symlink 本就 bounded 失敗 → **不加守衛**，fixture＋行為記錄即交付；S3 `6c7d060`：外部實體與 billion-laughs 均 0.00s bounded 拒絕 → fixture＋記錄，不加冗餘守衛。威脅模型：能在 storage 種 symlink 者已有同 user 寫權，防的是同步/解壓/誤建連結，非高危。排除：網路（p1 grep 實驗空）、沙箱簽署、依賴稽核、剪貼簿、加密、同 user 惡意行程 | `ec72b74` `0e702cc` `a1f5575` `6c7d060` |
+| 19 | T-047 小 band 子卡填充（owner 裁決行使既有選項）| p6 `32d3378`：`childCard` 改 `filled: band == .small`，small band 兩 slot 實心、mid/large 維持描邊。**p1 獨立驗證**（自寫 oracle，不引用 MindFlowKit、不重用 Checks 程式）：① **收旛控制**——變更前先凍結 10 個 slot 的 SHA256，重建後逐一對比：**恰好 2 個 small slot 變動、其餘 8 個逐位元組相同**；② gates 親跑 ALL CHECKS PASSED，fill 0.6146/0.5966 ≤ 0.70（**門檻未動**）、flip min 0.2055 ≥ 0.10；③ **有牙**——p1 自行把 `filled` 改回 `false`：`FAIL T-047 small fills both child cards on the minimal band`（line 4900）rc=1，還原後全綠；且突變運行重現 fill=0.6042，與變更前基線逐位相符，**證明前後數字歸因正確**；④ **產品判讀**：16px 實際只動 8/256 px（肥描邊在該尺寸本就自併，log 早已預測）；32px 動 18/1024，子卡由**空心環→實心**，是真正可見的改善。owner 螢幕為 Retina 2560x1664，Finder 列表與選單的 16pt 槽實際取用 `icon_16x16@2x.png`（32px）——**改善正好落在 owner 看得到的那個 slot**，1x 的 16px 槽只在非 Retina 螢幕出現 | `32d3378` |
 
 ### 這兩輪的教訓：文件漂移比沒文件更危險
 
@@ -189,6 +190,11 @@ owner 規定：**額度用盡時，兩個 pane 於上次唤醒後 5h10m 再啟�
 
 ### 已識別、未開工
 
-- **狀態訊號縮放不變**：指示器 / 選取 / 重掛 / search / batch / hover 的 lineWidth **與外推 padding** 全在被縮放的內容樹裡。fit 0.25 時指示器只剩 0.75 邏輯 px，契約「看到=排序」在大地圖縮小檢視時失效 —— **而地圖越大越需要排序**
-- TabStore（staging+commit）、import bytes/node/depth 上限、icon、其餘視覺項
-- **symlink 檢查名不副實**：現行以 `fileExists` 判定「是否為真實目錄」，但它會跟隨 symlink。排入後續資安路徑票，**不混進 TabStore 這輪**
+> **本段只列尚未動工的項目。**凡進度表已收錄的，一律以進度表為準，不在此重述。
+> 2026-09-03 p1 清理：舊內容五項中四項早已完工（狀態訊號縮放不變 row 4、TabStore row 5、
+> import 上限 row 6、icon rows 7/17/19），第五項 symlink 已由 T-051 S2 實驗裁定不加守衛（`a1f5575`）。
+> 這正是本檔自己記的「文件漂移比沒文件更危險」的複發；舊內容原樣保留在 git 歷史。
+
+- **T-045** 聚焦路徑取代底部 breadcrumb（C3）—— 尚未開工；驗收不得依賴 `.accessibilityLabel`（T-050 實測在普通內容區不浮現）
+- **T-046** CanvasTransform 去重（`toMap` 兩處定義）—— 尚未開工；無缺陷證據，不順便改 pan/scale
+- **T-050 原目標**（分頁真正的 VoiceOver 名稱）—— 已降級 backlog，owner 不用 VoiceOver

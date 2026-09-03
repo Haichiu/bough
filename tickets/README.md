@@ -210,4 +210,4 @@
 
 ## 已知阻礙
 
-- `~/.pi/agent/extensions/guard.ts:804` 與 `:782` 重複宣告 `const decision` → **所有新 pi session 無法啟動**。需 Owner 授權才能修。
+- ~~guard.ts 重複宣告 `const decision` 使新 pi session 無法啟動~~ —— **2026-09-03 判定過期**：p1 於當日由 owner 重開，是一個全新且成功啟動的 pi session。runtime 證據優於 source grep（`grep -c "const decision"` 仍回 2，但那兩處不在同一 scope，對「能不能啟動」零資訊）。
