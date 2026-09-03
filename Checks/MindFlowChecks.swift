@@ -4698,10 +4698,10 @@ func iconStructureScan(_ image: NSBitmapImageRep, slot: AppIconArtwork.Slot) -> 
         : geometry.root.rect.midX
     let column = iconPixelCoordinate(designColumn + geometry.translationX, pixelSize: pixelSize)
 
-    let scannedCards = usesLeafColumn
-        ? [geometry.upperChild.rect, geometry.lowerChild.rect]
-        : [geometry.root.rect]
-    let allowedRows = scannedCards.map { iconInkRowRange(ofDesignRect: $0, pixelSize: pixelSize) }
+    let scannedCards: [AppIconArtwork.CardSpec] = usesLeafColumn
+        ? [geometry.upperChild, geometry.lowerChild]
+        : [geometry.root]
+    let allowedRows = scannedCards.map { iconInkRowRange(ofDesignRect: $0.rect, pixelSize: pixelSize) }
 
     var peaks: [Int] = []
     var inRun = false
@@ -4729,16 +4729,15 @@ func iconStructureScan(_ image: NSBitmapImageRep, slot: AppIconArtwork.Slot) -> 
     }
     if inRun { peaks.append(peak) }
 
-    let expectedRuns: Int
-    if usesLeafColumn {
-        // A card whose hollow interior survives rasterization contributes its two
-        // stroke edges as runs; a stroke that self-merges contributes one.
-        expectedRuns = scannedCards.reduce(0) { total, rect in
-            let hole = rect.height - 2 * geometry.childStrokeWidth
-            return total + (hole * CGFloat(scale) >= 1.0 ? 2 : 1)
-        }
-    } else {
-        expectedRuns = 1
+    // Expected runs are derived from the band's intended geometry — the card
+    // specs' filled state and stroke widths — before the raster is consulted:
+    // a filled card contributes exactly one solid run on the scan column; an
+    // outlined card contributes its two stroke edges when its hollow interior
+    // survives rasterization (hole x scale >= 1 px), one when it self-merges.
+    let expectedRuns = scannedCards.reduce(0) { total, card in
+        if card.filled { return total + 1 }
+        let hole = card.rect.height - 2 * geometry.childStrokeWidth
+        return total + (hole * CGFloat(scale) >= 1.0 ? 2 : 1)
     }
     return IconStructureScan(
         column: column,
@@ -4751,14 +4750,23 @@ func iconStructureScan(_ image: NSBitmapImageRep, slot: AppIconArtwork.Slot) -> 
 
 func iconInkSamplePoints(for band: AppIconArtwork.SizeBand) -> [(CGPoint, String)] {
     let geometry = AppIconArtwork.geometry(for: band)
+    // A filled child is sampled at its center; an outlined child on its stroke.
+    let upper: (CGPoint, String) = geometry.upperChild.filled
+        ? (CGPoint(x: geometry.upperChild.rect.midX, y: geometry.upperChild.rect.midY),
+           "upper child fill")
+        : (CGPoint(x: geometry.upperChild.rect.midX,
+                   y: geometry.upperChild.rect.maxY - geometry.childStrokeWidth / 2),
+           "upper child stroke")
+    let lower: (CGPoint, String) = geometry.lowerChild.filled
+        ? (CGPoint(x: geometry.lowerChild.rect.midX, y: geometry.lowerChild.rect.midY),
+           "lower child fill")
+        : (CGPoint(x: geometry.lowerChild.rect.minX + geometry.childStrokeWidth / 2,
+                   y: geometry.lowerChild.rect.midY),
+           "lower child stroke")
     return [
         (CGPoint(x: geometry.root.rect.midX, y: geometry.root.rect.midY), "root fill"),
-        (CGPoint(x: geometry.upperChild.rect.midX,
-                 y: geometry.upperChild.rect.maxY - geometry.childStrokeWidth / 2),
-         "upper child stroke"),
-        (CGPoint(x: geometry.lowerChild.rect.minX + geometry.childStrokeWidth / 2,
-                 y: geometry.lowerChild.rect.midY),
-         "lower child stroke"),
+        upper,
+        lower,
     ]
 }
 
@@ -4887,6 +4895,14 @@ for band in [AppIconArtwork.SizeBand.small, .mid, .large] {
         .offsetBy(dx: geometry.translationX, dy: 0)
     check(CGRect(x: 116, y: 116, width: 792, height: 792).contains(inkBounds),
           bandLabel + " rendered ink silhouette stays 16 design units inside the canvas")
+    let childrenFilled = geometry.upperChild.filled && geometry.lowerChild.filled
+    if band == .small {
+        check(childrenFilled,
+              bandLabel + " fills both child cards on the minimal band")
+    } else {
+        check(!childrenFilled,
+              bandLabel + " keeps outlined children")
+    }
 }
 
 // MARK: - T-047 (p1 revision): rendered-silhouette gates, measured on the final

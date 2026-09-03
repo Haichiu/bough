@@ -178,10 +178,13 @@ public enum AppIconArtwork {
         }
 
         let childOffset = offset
+        // The minimal band fills its child cards: at 16-32 px a 72 px stroke pair
+        // reads as hollow decoration, while solid cards keep the two leaves legible.
+        // Every larger band keeps the outlined children.
         func childCard(_ rect: CGRect) -> CardSpec {
             CardSpec(rect: rect.offsetBy(dx: childOffset, dy: 0),
                      cornerRadius: childStroke / 2 + childInnerCornerRadius,
-                     filled: false)
+                     filled: band == .small)
         }
 
         func elbow(exitY: CGFloat, child: CardSpec) -> ElbowSpec {
@@ -310,13 +313,23 @@ public enum AppIconArtwork {
 
         context.setLineWidth(geometry.childStrokeWidth)
         for child in [geometry.upperChild, geometry.lowerChild] {
-            let inset = geometry.childStrokeWidth / 2
-            let innerRadius = child.cornerRadius - inset
-            context.addPath(CGPath(roundedRect: child.rect.insetBy(dx: inset, dy: inset),
-                                   cornerWidth: innerRadius,
-                                   cornerHeight: innerRadius,
-                                   transform: nil))
-            context.strokePath()
+            if child.filled {
+                // A filled card's ink bound is its full rect (CardSpec contract).
+                context.setFillColor(ink)
+                context.addPath(CGPath(roundedRect: child.rect,
+                                       cornerWidth: child.cornerRadius,
+                                       cornerHeight: child.cornerRadius,
+                                       transform: nil))
+                context.fillPath()
+            } else {
+                let inset = geometry.childStrokeWidth / 2
+                let innerRadius = child.cornerRadius - inset
+                context.addPath(CGPath(roundedRect: child.rect.insetBy(dx: inset, dy: inset),
+                                       cornerWidth: innerRadius,
+                                       cornerHeight: innerRadius,
+                                       transform: nil))
+                context.strokePath()
+            }
         }
         context.restoreGState()
     }
