@@ -208,6 +208,30 @@
 
 ---
 
+### T-052 Shift+Tab 目前完全沒有繫結（owner 回報，待 owner 選定語意）
+
+**Owner 原話**：「新增節點時預設不會直接進入編輯模式，你可以繼續按 Enter、Tab 或是 Shift + Tab 針對節點做出調整，只有當使用者按空白鍵（Space）的時候才會開始編輯。」
+
+**已實測結清的部分（不要重做）**：節點層預設（T-049）與 Space 進編輯且保留原文，已由 `scripts/uitest/u9-space-shifttab.sh` 實跑證實（見 ITERATION-LOG row 20）。
+
+**實測到的真缺口**：Shift+Tab 完全未繫結，樹不會改變。機制：`charactersIgnoringModifiers` **會套用 Shift**，Shift+Tab 因此得到 `\u{19}`（0x19），既落不進 `case "\t"`，也過不了 `d2Replacement` 的 `scalar.value >= 0x20` 守衛，最後 `return event` 交給系統。
+
+**為什麼還沒做**：該綁什麼是**產品語意決定，不是實作問題**。XMind 本身並未綁 Shift+Tab，所以無法從「XMind parity」推出答案。p1 不採取「自己想一個先做下去」。
+
+**選項**：
+- **A（p1 推薦）promote / outdent**：節點升一層，變成原父節點的兄弟。大多數 outliner 的共通語意，且與 Tab（降一層）對稱。**可重用現有 `move(id:toParent:)`（ViewModel:495，已含 not-root / not-descendant / 同父短路守衛）**，不需新寫樹操作。
+- **B 不綁**：維持 XMind parity，但 Owner 點名的按鍵會繼續是死鍵。
+- **C 別的語意**（例如上移兄弟順序）—— 需 Owner 指定。
+
+**若選 A，預定驗收（實跑探針，不得以 gate/source 結案）**：
+- 延伸 `u9-space-shifttab.sh`：選一個**孫節點**按 Shift+Tab → 它的父變成原祖父（以 `treecompare.py parentof` 斷言），且**節點總數不變**（是搬動，不是新增）。
+- **邊界**：root 的直接子節點再 promote 應為 **no-op**（root 沒有父節點）—— 必須有對應探針，且樹完全不動。
+- **陽性對照**不可省：同一支探針必須同時證明 Tab 仍能建節點，否則「樹沒變」無法與探針壞掉區分。
+- 若 promote 後節點被 `move` 附到祖父 children 末端而非原父之後，需判定這個位置是否可接受（p1 視覺裁決）。
+
+---
+
+
 ## 已知阻礙
 
 - ~~guard.ts 重複宣告 `const decision` 使新 pi session 無法啟動~~ —— **2026-09-03 判定過期**：p1 於當日由 owner 重開，是一個全新且成功啟動的 pi session。runtime 證據優於 source grep（`grep -c "const decision"` 仍回 2，但那兩處不在同一 scope，對「能不能啟動」零資訊）。
