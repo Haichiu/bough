@@ -130,6 +130,8 @@
 **理由**：聚焦是一個**模式**，模式指示器要在視線落點（左上），不是最易忽略的底部中央。一般 selection 不觸發（selection 變得太頻繁，會成噸音）。
 **〔可觀察結果〕**：非 focus 時 AX 不出現路徑；focus 時路徑只反映 root→focus 不隨 selection 噪動；點祖先改 `focusBranchID`。
 
+**結案記錄（2026-09-05）**：p6 `6d13535` 實作，p1 修正後 `u10-focus-path.sh` PASS=7 FAIL=0。過程中發現**驗收條件本身把產品扭曲了**：原條件要求「一個 AXStaticText 拼出 root→focus」，而 Button 在此 target 不暴露 title，唯一能滿足的方式就是把路徑再畫一次；實作照做，膠囊遂同一行並排顯示兩份路徑（p1 以 AX 幾何實測：StaticText@x=284 與四個 Button@x=482–638）。修法：移除重複整串 `Text`（只留模式標籤「聚焦：」），改在每個段落按鈕掛 `.accessibilityIdentifier("focuspath-<text>")`，oracle 改讀 `AXIdentifier` 並新增「任何 StaticText 再拼出整條路徑即 FAIL」。**教訓：只能靠新增可見元素才能滿足的驗收條件，會把產品扭曲成量具的形狀。**
+
 ### T-046 CanvasTransform 去重（toMap）
 **問題**：`MapCanvasView` 的 `toMap` 定義兩次（:213、:398）。公式相同但呼叫座標原點不同。
 **交付**：純 `CanvasTransform(screen↔map)`；visible rect 與 lasso 共用；Checks 做 round-trip。

@@ -159,11 +159,12 @@ public struct ContentView: View {
                     Image(systemName: "scope")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    // AX channel for the whole line: the acceptance oracle reads one
-                    // static text spelling root->focus. Buttons surface as AXButton
-                    // and carry no static text, so this visible Text is what AX reads.
-                    Text("聚焦：" + path.map { $0.text.isEmpty ? "\u{2026}" : $0.text }
-                        .joined(separator: " › "))
+                    // Mode label only. An earlier pass also drew the whole path here
+                    // as one string so an AX assertion could read it, which rendered
+                    // the path twice on screen — the measurement was shaping the
+                    // product. The path is the buttons below; AX reads them through
+                    // accessibilityIdentifier, which adds no visible element.
+                    Text("聚焦：")
                         .font(.callout)
                         .lineLimit(1)
                     // Clickable segments (Button { } label: { Text } — a Button("string")
@@ -180,6 +181,7 @@ public struct ContentView: View {
                         }
                         .buttonStyle(.borderless)
                         .disabled(node.id == fid)
+                        .accessibilityIdentifier("focuspath-" + (node.text.isEmpty ? "\u{2026}" : node.text))
                         if node.id != fid {
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 8))

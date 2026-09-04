@@ -38,7 +38,14 @@ corner_buttons(){ # bottom-right controls, the over-deletion guard
   rich | awk -F'\t' -v wy="$1" -v wh="$2" -v wx="$3" -v ww="$4" \
     '$1=="AXButton" && $3 > wy+wh-90 && $2 > wx+0.78*ww' | wc -l | tr -d ' '
 }
-focus_text(){ rich | awk -F'\t' '$1=="AXStaticText" && $4 ~ /聚焦/ {print $4}' | head -1; }
+# The path is read through accessibilityIdentifier on each segment button, in
+# left-to-right order. An earlier pass asserted a single StaticText spelling the
+# whole path; because Buttons expose no title, the only way to satisfy that was
+# to draw the path a second time as a plain string, and the implementation duly
+# did so — the measurement was shaping the product. Identifiers are a test hook,
+# not a visible element, so the oracle no longer distorts what it measures.
+focus_path(){ rich | awk -F'\t' '$1=="AXButton" && $7 ~ /^focuspath-/ {print $2"\t"$7}' \
+  | sort -n | sed 's/^[0-9]*\t//' | sed 's/^focuspath-//' | paste -sd'>' -; }
 
 select_node(){ local d cx cy; d=$(uit_axdump); read -r cx cy <<<"$(uit_node_coords "$d" "$1")"; [[ -z "${cx:-}" ]] && return 1; uit_click "$cx" "$cy"; sleep 0.8; }
 
@@ -59,20 +66,24 @@ echo "  corner buttons=$g (baseline 4)"
 [[ "$g" -eq 4 ]] && ok "bottom-right controls intact" || bad "corner controls changed: $g (expected 4) — too much was deleted"
 
 echo "=== 3. selection alone must not produce a path ==="
-f=$(focus_text)
+f=$(focus_path)
 [[ -z "$f" ]] && ok "no focus path while merely selecting" || bad "path shown without focus: '$f'"
+# Phases 3 and 4 run the same query in two states. Empty here and non-empty there
+# is what makes a 'nothing found' result in phase 3 interpretable rather than blind.
 
 echo "=== 4. focus shows a root->focus path ==="
 r=$(uit_context_menu N-0005 聚焦此分支); sleep 1.5
 osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.6
 [[ "$r" == "pressed" ]] || bad "could not enter focus (ctx='$r') — phases 4/5 uninterpretable"
-f=$(focus_text); echo "  focus text='$f'"
-[[ -n "$f" ]] && ok "focus path visible in AX" || bad "focus path not observable"
-case "$f" in *N-0000*N-0001*N-0005*) ok "path spells root->focus";; *) bad "path is not root->focus: '$f'";; esac
+f=$(focus_path); echo "  focus path='$f'"
+[[ -n "$f" ]] && ok "focus path observable in AX" || bad "focus path not observable"
+[[ "$f" == "N-0000>N-0001>N-0005" ]] && ok "path spells root->focus in order" || bad "path is not root->focus: '$f'"
+sc=$(rich | awk -F'\t' '$1=="AXStaticText" && $4 ~ /N-0000.*N-0001/ {n++} END{print n+0}')
+[[ "$sc" -eq 0 ]] && ok "path is not also drawn as a duplicate string" || bad "path rendered twice: $sc static text(s) spell the whole path"
 
 echo "=== 5. changing selection must not perturb the path ==="
 select_node N-0009 || echo "  (N-0009 not found, skipped)"
-f2=$(focus_text); echo "  after selecting elsewhere='$f2'"
+f2=$(focus_path); echo "  after selecting elsewhere='$f2'"
 [[ "$f2" == "$f" ]] && ok "path is byte-identical after selection change" || bad "path moved with selection: '$f' -> '$f2'"
 
 uit_quit_flush >/dev/null; uit_cleanup_all >/dev/null 2>&1 || true

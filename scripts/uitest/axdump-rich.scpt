@@ -30,7 +30,11 @@ tell application "System Events"
       try
         set dsc to description of el as text
       end try
-      set end of out to r & tabCh & ((item 1 of p) as text) & tabCh & ((item 2 of p) as text) & tabCh & v & tabCh & t & tabCh & dsc
+      set idf to ""
+      try
+        set idf to value of attribute "AXIdentifier" of el as text
+      end try
+      set end of out to r & tabCh & ((item 1 of p) as text) & tabCh & ((item 2 of p) as text) & tabCh & v & tabCh & t & tabCh & dsc & tabCh & idf
     end repeat
   end tell
 end tell
