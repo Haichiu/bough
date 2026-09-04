@@ -6575,6 +6575,41 @@ do {
     print("T-051 S3 internal: threw=\(bombThrew) textLength=\(bombText.count) seconds=\(String(format: "%.2f", elapsed))")
 }
 
+// MARK: T-052 — Shift+Tab outdent (promote)
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!            // root-level child
+        let b = vm.addChild(to: a)!              // grandchild
+        let rootID = vm.document.root.id
+        let before = tabNodeCount(vm.document.root)
+
+        vm.promote(id: b)
+        check(vm.document.root.parent(of: b)?.id == rootID,
+              "T-052 promote lifts a grandchild to its grandparent")
+        check(tabNodeCount(vm.document.root) == before,
+              "T-052 promote moves instead of adding or deleting")
+        check(vm.selection == b,
+              "T-052 promote keeps the moved node selected")
+
+        // A root-level child has no grandparent, so promoting it must not move
+        // the tree at all — not even sibling order.
+        let rootChildrenBefore = vm.document.root.children.map(\.id)
+        vm.promote(id: a)
+        check(vm.document.root.parent(of: a)?.id == rootID
+              && tabNodeCount(vm.document.root) == before
+              && vm.document.root.children.map(\.id) == rootChildrenBefore,
+              "T-052 promoting a root-level child is a no-op")
+
+        // promote reuses move(id:toParent:) rather than new tree surgery; the
+        // self-target guard it inherits is asserted directly.
+        vm.move(id: a, toParent: a)
+        check(vm.document.root.children.map(\.id) == rootChildrenBefore,
+              "T-052 inherits move's self-target guard")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

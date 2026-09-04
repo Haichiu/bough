@@ -258,8 +258,17 @@ public final class KeyboardMonitor {
         }
 
         switch chars {
-        case "\t":
-            vm.addChild(to: vm.selection ?? vm.document.root.id)
+        case "\t", "\u{19}":
+            // Shift+Tab outdents (XMind's outliner guide: "press Shift + Tab to
+            // outdent"). Depending on the responder chain the shifted Tab arrives
+            // either as charactersIgnoringModifiers "\u{19}" (the traditional
+            // back-tab byte) or as a plain "\t" carrying .shift, so both spellings
+            // route here and only the shifted one promotes.
+            if chars == "\u{19}" || flags.contains(.shift) {
+                if let selection = vm.selection { vm.promote(id: selection) }
+            } else {
+                vm.addChild(to: vm.selection ?? vm.document.root.id)
+            }
             return nil
         case "\r", "\u{3}":
             if flags.contains(.shift) {

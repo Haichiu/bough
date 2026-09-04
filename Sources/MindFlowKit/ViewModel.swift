@@ -509,6 +509,18 @@ public final class MindMapViewModel: ObservableObject {
         _ = target
     }
 
+    /// Shift+Tab: outdent — the node becomes a child of its grandparent
+    /// (XMind's own outliner guide binds Shift+Tab to outdent). A root-level
+    /// child has no grandparent, so promoting it is a no-op and the tree does
+    /// not move at all. Everything else (not-root, not-descendant, same-parent
+    /// short-circuit) is carried by move(id:toParent:); no new tree surgery.
+    public func promote(id: UUID) {
+        guard let parent = document.root.parent(of: id),
+              parent.id != document.root.id,
+              let grandparent = document.root.parent(of: parent.id) else { return }
+        move(id: id, toParent: grandparent.id)
+    }
+
     public func expandAll() {
         mutate { doc in collapse(node: &doc.root, collapsed: false) }
         activeCollapseLevel = nil
