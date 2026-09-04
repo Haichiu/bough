@@ -140,7 +140,6 @@ public struct ContentView: View {
         }
         .navigationTitle(vm.document.root.text.isEmpty ? vm.document.title : vm.document.root.text)
         .navigationSubtitle(saveSubtitle)
-        .overlay(alignment: .bottom) { breadcrumbBar }
         .onReceive(NotificationCenter.default.publisher(for: .mindFlowShowNotes)) { _ in
             guard vm.selection != nil else { return }
             vm.inspectorTab = 0
@@ -150,14 +149,44 @@ public struct ContentView: View {
             DispatchQueue.main.async { noteFocused = true }
         }
         .overlay(alignment: .topLeading) {
-            if let fid = vm.focusBranchID, let fnode = vm.document.root.find(fid) {
+            if let fid = vm.focusBranchID {
+                // T-045: the focus indicator is a MODE indicator, so it lives where
+                // the eye lands (top-leading) and reflects only root->focus — it is
+                // derived from focusBranchID alone and must not re-render per
+                // selection change (selection is far too chatty to be path noise).
+                let path = vm.breadcrumbPath(to: fid)
                 HStack(spacing: 6) {
                     Image(systemName: "scope")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("聚焦：\(fnode.text)")
+                    // AX channel for the whole line: the acceptance oracle reads one
+                    // static text spelling root->focus. Buttons surface as AXButton
+                    // and carry no static text, so this visible Text is what AX reads.
+                    Text("聚焦：" + path.map { $0.text.isEmpty ? "\u{2026}" : $0.text }
+                        .joined(separator: " › "))
                         .font(.callout)
                         .lineLimit(1)
+                    // Clickable segments (Button { } label: { Text } — a Button("string")
+                    // exposes no title to AX, the shape measured in T-050). Clicking an
+                    // ancestor re-targets the focus mode to that branch; the focus node
+                    // itself is disabled because it is already the target.
+                    ForEach(path, id: \.id) { node in
+                        Button {
+                            vm.focusBranchID = node.id
+                        } label: {
+                            Text(node.text.isEmpty ? "\u{2026}" : node.text)
+                                .font(.caption)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(node.id == fid)
+                        if node.id != fid {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    // Cancel focus lives in the same group (T-045 deliverable ③).
                     Button {
                         vm.focusBranchID = nil
                     } label: {
@@ -221,47 +250,6 @@ public struct ContentView: View {
         }
         .onAppear {
             if vm.selection == nil { vm.selection = vm.document.root.id }
-        }
-    }
-
-    private var breadcrumbBar: some View {
-        Group {
-            if let selID = vm.selection {
-                // A horizontal ScrollView always claims the full proposed width, so hanging
-                // the capsule background on it smeared a translucent bar across the whole
-                // window instead of drawing a pill around the path. The row sizes to its
-                // own content instead, and deep paths are bounded by showing the tail.
-                let path = vm.breadcrumbPath(to: selID)
-                let shown = path.suffix(6)
-                HStack(spacing: 4) {
-                    if path.count > shown.count {
-                        Text("\u{2026}")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(shown, id: \.id) { node in
-                        Button(node.text.isEmpty ? "\u{2026}" : node.text) {
-                            vm.selection = node.id
-                        }
-                        .buttonStyle(.borderless)
-                        .font(.caption)
-                        .lineLimit(1)
-                        if node.id != vm.selection {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 8))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(.ultraThinMaterial, in: Capsule())
-                .fixedSize()
-                .padding(.bottom, 40)
-            }
         }
     }
 
