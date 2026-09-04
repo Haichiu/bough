@@ -216,12 +216,17 @@
 
 **實測到的真缺口**：Shift+Tab 完全未繫結，樹不會改變。機制：`charactersIgnoringModifiers` **會套用 Shift**，Shift+Tab 因此得到 `\u{19}`（0x19），既落不進 `case "\t"`，也過不了 `d2Replacement` 的 `scalar.value >= 0x20` 守衛，最後 `return event` 交給系統。
 
-**為什麼還沒做**：該綁什麼是**產品語意決定，不是實作問題**。XMind 本身並未綁 Shift+Tab，所以無法從「XMind parity」推出答案。p1 不採取「自己想一個先做下去」。
+**決定：綁 promote / outdent。** 這不是口味問題，是專案既有預設（XMind parity）直接推導出來的。
 
-**選項**：
-- **A（p1 推薦）promote / outdent**：節點升一層，變成原父節點的兄弟。大多數 outliner 的共通語意，且與 Tab（降一層）對稱。**可重用現有 `move(id:toParent:)`（ViewModel:495，已含 not-root / not-descendant / 同父短路守衛）**，不需新寫樹操作。
-- **B 不綁**：維持 XMind parity，但 Owner 點名的按鍵會繼續是死鍵。
-- **C 別的語意**（例如上移兄弟順序）—— 需 Owner 指定。
+**p1 的更正**：本票初版寫「XMind 本身並未綁 Shift+Tab」，**該敘述是錯的，且當時未經查證就寫成事實**。XMind 官方使用指南明載：
+
+> "Shortcuts: Press Enter to add new topics, press Tab to indent, **press Shift + Tab to outdent**."
+> — <https://xmind.com/user-guide/outliner-new>
+
+因此 Shift+Tab = outdent（升一層）是 XMind 的既定語意，本專案照抄即可，不需 Owner 裁決。
+（誠實標註範圍：該段出自 XMind 的 **Outliner 檢視**說明；畫布檢視的快捷鍵表未列 Shift+Tab。但 Tab=Insert Subtopic 在兩邊一致，且我們的 Tab 已經是降一層，故 outdent 是對稱且有據的綁法。）
+
+**實作方向**：升一層＝變成原父節點的兄弟。**重用現有 `move(id:toParent:)`（ViewModel:495，已含 not-root / not-descendant / 同父短路守衛）**，不需新寫樹操作。
 
 **若選 A，預定驗收（實跑探針，不得以 gate/source 結案）**：
 - 延伸 `u9-space-shifttab.sh`：選一個**孫節點**按 Shift+Tab → 它的父變成原祖父（以 `treecompare.py parentof` 斷言），且**節點總數不變**（是搬動，不是新增）。
