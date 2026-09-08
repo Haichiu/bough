@@ -107,11 +107,15 @@
 **文案**：僅 autosave「⚠︎ 自動保存失敗」／僅 recovery「⚠︎ 復原快照失敗」／兩者「⚠︎ 儲存失敗（自動保存・復原快照）」。
 **〔可觀察結果〕**：注入失敗後 persistent warning 出現且不隨時間消失；兩種失敗互不覆蓋；交替 fail→success→fail 行為被測試定義；把 `Bool` 再丟掉必 FAIL。
 
+**結案記錄（2026-09-09，p1 補記）**：實作早已完成，但**兩份檔案都沒記**，所以清單上看起來還沒做。實測依據：`ViewModel.swift` 有 `StorageFailureKind`、注入式 `recoveryWriter`（測試替身接縫）、`storageFailures: Set`、四段文案 switch、`performRecoverySnapshot()` 回傳 Bool 並在 false 時 `recordStorageFailure(.recovery,…)`；`MindFlowChecks.swift:5229` 起有對應守衛，斷言 writer 被呼叫次數、`storageFailures == Set([.recovery])`、`storageWarningText == "⚠︎ 復原快照失敗"`、以及重複失敗仍持續。
+
 ### T-042 外殼語意色（C4）
 **問題**：tab active 背景、dirty dot、outline selection 直接讀 Palette A —— 畫布色滞到外殼。
 **交付**：shell 改用 AppKit／SwiftUI 語意色；active tab 用原生 controlBackground + separator 邊界，**不用 accent 填滿**；dirty 改 secondaryLabel；不在 App 根全局 tint（避免系統 accent 污染畫布狀態訊號）。
 **顏色職務**：中性 = 狀態陳述；controlAccent = 需強調的可操作控制；橘／紅 = **持續存在的失敗**。**不得單靠顏色編碼狀態。**
 **〔可觀察結果〕**：MapCanvasView／NodeView／匯出仍讀 Palette A；shell 不再出現 Palette A 色值。
+
+**結案記錄（2026-09-09，p1 補記）**：已完成且守衛強度高於一般票。`MindFlowChecks.swift:5379` 以**掃描原始碼**的方式斷言 `ContentView.swift` 只保留**恰好一個** `Palette` 參照（大綱星號的內容色 `Palette.screen.statusHighlight`），並斷言不存在小寫 `palette.` 的外殼色參照。因此外殼語意色是被機械守住的，不是靠人自律。
 
 ### T-043 工具列精簡（C1）
 **問題**：11 類等重直達按鈕、無分組；刪除緊鄰新增（誤擊風險）。
@@ -123,6 +127,8 @@
 **問題**（1）fallback 先取 root.text，預設「中心主題」遮住其他辨識來源；（2）active tab 讀 `sessions[active].document` 而編輯改的是 `vm.document`，標題在本分頁內會變舊。
 **交付**：純函式 `TabDisplayTitles`。序：非預設 root → file basename → 非預設 document.title → 第一個非空後代 → 中心主題。active slot 注入 live document／filePath。
 **細節**：去重編號必須在**截斷之前**；顯示用 `.truncationMode(.middle)`（分頁標題常共用前綴，尾部截斷會切掉唯一辨識字元）。
+
+**結案記錄（2026-09-09，p1 補記）**：已完成。`Sources/MindFlowKit/TabDisplayTitles.swift` 提供 `public enum TabDisplayTitles`，`ContentView.swift:387` 呼叫 `TabDisplayTitles.resolve(…, maximumGraphemes:)`，`MindFlowChecks.swift:6182` 起有 12 處守衛。**本票是「清單說謊」的代價實例**：p1 在 2026-09-09 依清單把它派給 p6 實作，p6 開工後才被叫停。教訓已寫進協作慣例：**拿到票的第一件事是先去程式碼確認它真的還沒做。**
 
 ### T-045 聚焦路徑取代底部 breadcrumb（C3）
 **問題**：onAppear 必選 root，底部 breadcrumb 常態重複標題；同時左上另有 focus capsule，兩份狀態。
