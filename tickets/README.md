@@ -137,6 +137,8 @@
 **交付**：純 `CanvasTransform(screen↔map)`；visible rect 與 lasso 共用；Checks 做 round-trip。
 **邊界**：**不順便改 pan／scale** —— 無缺陷證據不動。
 
+**結案記錄（2026-09-09）**：p7 於 `bake/p7` `e7144f3` 實作，p1 獨立重跑通過（980 筆 legacy 等價 + 2000 筆隨機往返，0 失敗；diff −22/+8；死碼 `visibleItems` 未動）。本日 cherry-pick 進 main，`MindFlowChecks.swift` 檔尾衝突為「雙方各自追加」形狀，保留雙方後閘門全綠。commit `89124ea`。
+
 ### T-047 App icon 字形重設計
 **問題**：現行單向右輐射 + 等大圓點，讀起來是通用的「分享／分支」符號。owner 明確要求重設計。
 
