@@ -209,18 +209,10 @@ struct MapCanvasView: View {
     /// Do not enable it without a rendering test that proves nodes still appear.
     /// The measured layout win came from LayoutEngine memoization, not from culling.
     private func visibleItems(items: [NodeItem], geoSize: CGSize, bounds: CGRect) -> [NodeItem] {
-        let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
-        let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
-
-        func toMap(_ screen: CGPoint) -> CGPoint {
-            let sx = screen.x - (geoSize.width - bounds.width) / 2 - pan.width
-            let sy = screen.y - (geoSize.height - bounds.height) / 2 - pan.height
-            let qx = center.x + (sx - center.x) / scale
-            let qy = center.y + (sy - center.y) / scale
-            return CGPoint(x: qx - origin.x, y: qy - origin.y)
-        }
-        let a = toMap(CGPoint.zero)
-        let b = toMap(CGPoint(x: geoSize.width, y: geoSize.height))
+        // T-046: the identical toMap closure was extracted to CanvasTransform.
+        let t = CanvasTransform(viewport: geoSize, bounds: bounds, pan: pan, scale: scale)
+        let a = t.screenToMap(CGPoint.zero)
+        let b = t.screenToMap(CGPoint(x: geoSize.width, y: geoSize.height))
         let viewport = CGRect(x: min(a.x, b.x) - 200, y: min(a.y, b.y) - 150,
                               width: abs(a.x - b.x) + 400, height: abs(a.y - b.y) + 300)
         return items.filter { viewport.intersects($0.layout.frame) }
@@ -397,16 +389,10 @@ struct MapCanvasView: View {
     private func completeLasso(geoRect: CGRect, layouts: [UUID: NodeLayout],
                                bounds: CGRect, geoSize: CGSize, origin: CGPoint) {
         guard !geoRect.isNull, geoRect.width > 4, geoRect.height > 4 else { return }
-        let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
-        func toMap(_ screen: CGPoint) -> CGPoint {
-            let sx = screen.x - (geoSize.width - bounds.width) / 2 - pan.width
-            let sy = screen.y - (geoSize.height - bounds.height) / 2 - pan.height
-            let qx = center.x + (sx - center.x) / scale
-            let qy = center.y + (sy - center.y) / scale
-            return CGPoint(x: qx - origin.x, y: qy - origin.y)
-        }
-        let a = toMap(geoRect.origin)
-        let b = toMap(CGPoint(x: geoRect.maxX, y: geoRect.maxY))
+        // T-046: the identical toMap closure was extracted to CanvasTransform.
+        let t = CanvasTransform(viewport: geoSize, bounds: bounds, pan: pan, scale: scale)
+        let a = t.screenToMap(geoRect.origin)
+        let b = t.screenToMap(CGPoint(x: geoRect.maxX, y: geoRect.maxY))
         let mapRect = CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
                              width: abs(a.x - b.x), height: abs(a.y - b.y)).insetBy(dx: -8, dy: -8)
         var hits: Set<UUID> = []

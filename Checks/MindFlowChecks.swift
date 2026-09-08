@@ -6635,6 +6635,146 @@ do {
               "T-052 inherits move's self-target guard")
     }
 }
+// ---------------------------------------------------------------------------
+// T-046: CanvasTransform dedup (screen<->map). Oracle checks.
+//
+// The two byte-identical toMap closures in MapCanvasView (visibleItems culling
+// rect and completeLasso batch rect) were extracted into CanvasTransform
+// without touching pan/scale semantics. The oracle below is the literal
+// pre-extraction formula (git 1a3a425, MapCanvasView.swift), so an error
+// transcribed into BOTH the product and the extraction still fails here.
+
+func t046LegacyToMap(screen: CGPoint, geoSize: CGSize, bounds: CGRect,
+                     pan: CGSize, scale: CGFloat) -> CGPoint {
+    let origin = CGPoint(x: -bounds.minX, y: -bounds.minY)
+    let center = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
+    let sx = screen.x - (geoSize.width - bounds.width) / 2 - pan.width
+    let sy = screen.y - (geoSize.height - bounds.height) / 2 - pan.height
+    let qx = center.x + (sx - center.x) / scale
+    let qy = center.y + (sy - center.y) / scale
+    return CGPoint(x: qx - origin.x, y: qy - origin.y)
+}
+
+do {
+    // Deterministic low-discrepancy sweep over the space the product actually
+    // exercises: viewport smaller/larger than the content bounds, negative
+    // bounds origins (content offset), full zoom range, and free pans.
+    struct T046Params {
+        let viewport: CGSize
+        let bounds: CGRect
+        let pan: CGSize
+        let scale: CGFloat
+        let label: String
+    }
+    let combos: [T046Params] = [
+        .init(viewport: CGSize(width: 800, height: 600),
+              bounds: CGRect(x: -300, y: -200, width: 600, height: 400),
+              pan: .zero, scale: 1, label: "fit"),
+        .init(viewport: CGSize(width: 1400, height: 900),
+              bounds: CGRect(x: -750, y: -500, width: 1500, height: 1000),
+              pan: CGSize(width: 120, height: -80), scale: 0.25, label: "zoomed-out+panned"),
+        .init(viewport: CGSize(width: 500, height: 400),
+              bounds: CGRect(x: -100, y: -60, width: 1200, height: 900),
+              pan: CGSize(width: -500, height: 340), scale: 3, label: "zoomed-in"),
+        .init(viewport: CGSize(width: 1024, height: 768),
+              bounds: CGRect(x: -512, y: -384, width: 1024, height: 768),
+              pan: CGSize(width: 37.5, height: -12.25), scale: 1.37, label: "odd-scale")
+    ]
+
+    // Deterministic 2D grid inside the viewport (includes the exact corners the
+    // two call sites map: .zero and viewport-bottom-right for the culling rect,
+    // and arbitrary lasso rectangles for completeLasso).
+    var sweepPoints: [CGPoint] = [.zero,
+                                  CGPoint(x: 800, y: 600),
+                                  CGPoint(x: 400, y: 300)]
+    for i in 0...16 {
+        for j in 0...13 {
+            sweepPoints.append(CGPoint(x: CGFloat(i) * 50, y: CGFloat(j) * 50))
+        }
+    }
+    // The four corners of a plausible lasso rect, applied at each combo.
+    let lasso = CGRect(x: 130, y: 90, width: 420, height: 260)
+
+    var equivalenceSamples = 0
+    var roundTripSamples = 0
+    for combo in combos {
+        let t = CanvasTransform(viewport: combo.viewport, bounds: combo.bounds,
+                                pan: combo.pan, scale: combo.scale)
+        let points: [CGPoint] = sweepPoints + [lasso.origin,
+                                               CGPoint(x: lasso.maxX, y: lasso.minY),
+                                               CGPoint(x: lasso.minX, y: lasso.maxY),
+                                               CGPoint(x: lasso.maxX, y: lasso.maxY)]
+        // Out-of-viewport points are not produced by the call sites but still
+        // round-trip; per-sample failures record the first offending point.
+        var badLegacy: CGPoint?
+        var badScreenTrip: CGPoint?
+        var badMapTrip: CGPoint?
+        for p in points {
+            let legacy = t046LegacyToMap(screen: p, geoSize: combo.viewport,
+                                         bounds: combo.bounds, pan: combo.pan,
+                                         scale: combo.scale)
+            let mapped = t.screenToMap(p)
+            if abs(mapped.x - legacy.x) > 1e-9 || abs(mapped.y - legacy.y) > 1e-9 {
+                if badLegacy == nil { badLegacy = p }
+            }
+            let back = t.mapToScreen(mapped)
+            if abs(back.x - p.x) > 1e-6 || abs(back.y - p.y) > 1e-6 {
+                if badScreenTrip == nil { badScreenTrip = p }
+            }
+            let forth = t.screenToMap(t.mapToScreen(mapped))
+            if abs(forth.x - mapped.x) > 1e-6 || abs(forth.y - mapped.y) > 1e-6 {
+                if badMapTrip == nil { badMapTrip = p }
+            }
+            equivalenceSamples += 1
+            roundTripSamples += 2
+        }
+        func describe(_ p: CGPoint?) -> String {
+            p.map { "first bad point (\(Int($0.x)),\(Int($0.y)))" } ?? "none"
+        }
+        check(badLegacy == nil,
+              "T-046 \(combo.label) screenToMap == legacy formula at all \(points.count) samples (\(describe(badLegacy)))")
+        check(badScreenTrip == nil,
+              "T-046 \(combo.label) screen->map->screen round trip at all \(points.count) samples (\(describe(badScreenTrip)))")
+        check(badMapTrip == nil,
+              "T-046 \(combo.label) map->screen->map round trip at all \(points.count) samples (\(describe(badMapTrip)))")
+    }
+    print("T-046: \(equivalenceSamples) legacy-equivalence samples, \(roundTripSamples) round-trip samples across \(combos.count) transform states")
+}
+
+do {
+    // Randomised round trip over wider parameter space, seeded so a failure is
+    // reproducible. Scale kept inside the product's zoomRange (0.25...3).
+    var seed: UInt64 = 0x5EED_046
+    func nextUnit() -> CGFloat {
+        seed = seed &* 6364136223846793005 &+ 1442695040888963407
+        return CGFloat(seed >> 11) / CGFloat(1 << 53)
+    }
+    var randomFailures = 0
+    var samples = 0
+    for _ in 0..<2_000 {
+        let vw = 300 + nextUnit() * 1600
+        let vh = 200 + nextUnit() * 1200
+        let bw = 100 + nextUnit() * 2400
+        let bh = 100 + nextUnit() * 1800
+        let bounds = CGRect(x: -nextUnit() * bw, y: -nextUnit() * bh,
+                            width: bw, height: bh)
+        let scale = 0.25 + nextUnit() * 2.75
+        let pan = CGSize(width: (nextUnit() - 0.5) * 1600,
+                         height: (nextUnit() - 0.5) * 1200)
+        let t = CanvasTransform(viewport: CGSize(width: vw, height: vh),
+                                bounds: bounds, pan: pan, scale: scale)
+        let sx = nextUnit() * vw
+        let sy = nextUnit() * vh
+        let screen = CGPoint(x: sx, y: sy)
+        let map = t.screenToMap(screen)
+        let back = t.mapToScreen(map)
+        if abs(back.x - sx) > 1e-5 || abs(back.y - sy) > 1e-5 { randomFailures += 1 }
+        samples += 1
+    }
+    check(randomFailures == 0,
+          "T-046 randomised round trip holds over 2,000 states (failures=\(randomFailures))")
+    print("T-046: \(samples) randomised round-trip samples, failures=\(randomFailures)")
+}
 
 // MARK: - T-053: Delete/Backspace never reaches AppKit unclaimed (no alert beep)
 // AppKit plays the system alert sound for a keyDown that reaches the end of the
