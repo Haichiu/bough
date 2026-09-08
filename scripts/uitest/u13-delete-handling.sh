@@ -49,6 +49,18 @@ sel_child(){ sel_root; uit_key 124; sleep 0.4; }      # Right -> N-0001
 sel_leaf(){ sel_child; uit_key 124; sleep 0.4; }      # Right -> N-0005 (leaf)
 down_key(){ uit_key 125; sleep 0.3; }
 undo_key(){ activate; osascript -e 'tell application "System Events" to key code 6 using command down' >/dev/null 2>&1; sleep 0.7; }
+sel_n0005(){ esc_key; uit_key 124; sleep 0.3; uit_key 124; sleep 0.3; uit_key 124; sleep 0.4; }
+send_phrase(){ # label osascript-action — for modifier combos uit_key cannot send
+  local label="$1" action="$2" before after
+  before=$(wc -l < "$PROBE" | tr -d ' ')
+  activate
+  osascript -e "tell application \"System Events\" to $action" >/dev/null 2>&1
+  sleep 0.5
+  after=$(wc -l < "$PROBE" | tr -d ' ')
+  echo "  [$label] probe lines +$((after-before))"
+  tail -n $((after-before)) "$PROBE" | sed 's/^/      /'
+  LAST=$(tail -1 "$PROBE")
+}
 send(){ # label keycode...
   local label="$1"; shift
   local before after k
@@ -105,9 +117,16 @@ LAST=$(tail -1 "$PROBE")
   || bad "undo did not restore node count: $(value_of nodes) != $BASE_NODES"
 
 echo "=== 2. root selected (⌫) ==="
+# The root is auto-selected at launch (ContentView:254) and is deliberately
+# undeletable. A claimed-but-refused delete here is correct and silent — p1's
+# u16 cmd phase hit exactly this state after a coordinate click missed its node.
 sel_root
 send "Delete" 51
 assert_handled "root ⌫"
+root_before=$(value_of nodes)
+esc_key; LAST=$(tail -1 "$PROBE")
+[[ "$(value_of nodes)" == "$root_before" ]] && ok "root ⌫ leaves the document untouched" \
+  || bad "root ⌫ mutated the document: $(value_of nodes) != $root_before"
 
 echo "=== 3. no selection (⌫) ==="
 esc_key
@@ -207,6 +226,24 @@ after_nodes=$(value_of nodes)
 echo "  ⌦: before=$before_nodes after=$after_nodes"
 [[ -n "$before_nodes" && "$after_nodes" == $((before_nodes-1)) ]] && ok "⌦ removes exactly one leaf" \
   || bad "⌦ node count $before_nodes -> $after_nodes (expected -1)"
+
+echo "=== 11. modifier matrix: every delete modifier is claimed (p1/u16 overlap) ==="
+# u16 (p1) measured ⌘⌫ as a no-op. Root cause was its coordinate click missing
+# the node, leaving the launch-selected root: the monitor claims the key and
+# delete() correctly refuses the root, so nothing moves. Arrow selection is
+# deterministic, and the instrument records the disposition directly.
+for spec in "plain ⌫|key code 51" "⌘⌫|key code 51 using command down" "⌥⌫|key code 51 using option down" "⌃⌫|key code 51 using control down"; do
+  label=${spec%%|*}; action=${spec#*|}
+  sel_n0005
+  send_phrase "$label" "$action"
+  assert_handled "$label"
+  mod_before=$(value_of nodes)
+  esc_key; LAST=$(tail -1 "$PROBE")
+  [[ -n "$mod_before" && "$(value_of nodes)" == $((mod_before-1)) ]] \
+    && ok "$label deletes exactly one leaf" \
+    || bad "$label node count $mod_before -> $(value_of nodes) (expected -1)"
+  undo_key
+done
 
 echo
 echo "U13 RESULT: PASS=$PASS FAIL=$FAIL"
