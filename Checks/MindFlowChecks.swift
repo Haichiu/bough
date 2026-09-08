@@ -6872,6 +6872,48 @@ do {
     }
 }
 
+// MARK: - T-054: undo history belongs to one tab and must not leak across tabs
+// Unguarded until now. The failure this defends against is the worst kind the
+// app can have: press undo in one document and silently damage another. A user
+// would not attribute the damage to the tab switch, and by the time they saw
+// it the correct state would be several edits gone.
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.newDocument()
+        let idxA = vm.activeIndex
+        let originalA = vm.document.root.text
+        vm.rename(id: vm.document.root.id, to: "TAB-A-EDITED")
+        check(vm.document.root.text == "TAB-A-EDITED",
+              "T-054 control: the edit under test actually lands in tab A")
+
+        vm.openInNewTab(MindDocument(title: "B", root: MindNode(text: "B-ROOT")))
+        let idxB = vm.activeIndex
+        check(idxB != idxA, "T-054 opening a tab makes it active")
+
+        // The sharpest assertion: a tab with no history of its own must not
+        // reach into the previous tab's stack.
+        vm.undo()
+        check(vm.document.root.text == "B-ROOT",
+              "T-054 undo in a fresh tab does not consume the previous tab's history")
+        check(vm.sessions[idxA].document.root.text == "TAB-A-EDITED",
+              "T-054 undo in a fresh tab leaves the other tab's document intact")
+
+        // Returning to A must find A's own history still there.
+        vm.switchTab(to: idxA)
+        vm.undo()
+        check(vm.document.root.text == originalA,
+              "T-054 tab A keeps its own undo history across a round trip")
+        check(vm.sessions[idxB].document.root.text == "B-ROOT",
+              "T-054 undoing in tab A does not touch tab B")
+
+        // Redo is stored per tab on the same footing as undo.
+        vm.redo()
+        check(vm.document.root.text == "TAB-A-EDITED",
+              "T-054 redo is also per-tab")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
