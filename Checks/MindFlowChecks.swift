@@ -5562,6 +5562,32 @@ let t043Check: () -> Void = {
           && appCommands.contains("keyboardShortcut(\"c\", modifiers: [.command, .shift])")
           && appCommands.contains("vm.resetAllOffsets()"),
           "keyboard and App menu alternatives remain reachable")
+
+    // Canonical capability inventory (T-043 "能力零移除"): the 11 equal-weight
+    // toolbar buttons that existed before the collapse. Each capability must keep
+    // at least one entrance in the product, independent of the More-menu list
+    // above — deleting a capability from the product *and* from the menu
+    // expectation still fails here. Runtime reachability of the collapsed set is
+    // measured by scripts/uitest/u15-toolbar.sh.
+    let canvas = projectSource("Sources/MindFlowKit/MapCanvasView.swift")
+    let product = source + canvas + appCommands + keyboard
+    let capabilityEntrances: [(capability: String, needles: [String])] = [
+        ("子主題", ["Label(\"子主題\"", "加入子主題"]),
+        ("兄弟主題", ["Label(\"兄弟主題\"", "加入兄弟主題"]),
+        ("檢閱器", ["Label(\"檢閱器\"", "showInspector"]),
+        ("刪除", ["Button(\"刪除\"", "Button(\"刪除主題\")", "vm.delete(id: selection)"]),
+        ("全部展開", ["Label(\"全部展開\""]),
+        ("全部收合", ["Label(\"全部收合\""]),
+        ("展開至", ["Menu(\"展開至\")", "vm.expandToLevel(level)"]),
+        ("符合視窗", ["Label(\"符合視窗\"", ".mindFlowFit"]),
+        ("取消聚焦", ["Label(\"取消聚焦\"", "vm.focusBranchID = nil"]),
+        ("版面", ["Menu(\"版面\")", "邏輯圖（右展）", "vm.resetAllOffsets()"]),
+        ("複製 MD", ["Label(\"複製 MD\"", "vm.copyAsMarkdown()"]),
+    ]
+    for entry in capabilityEntrances {
+        check(entry.needles.contains { product.contains($0) },
+              "T-043 capability \(entry.capability) keeps at least one entrance")
+    }
 }
 
 
