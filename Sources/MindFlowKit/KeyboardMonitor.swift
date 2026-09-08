@@ -40,6 +40,77 @@ public final class KeyboardMonitor {
         }
     }
 
+    /// The Delete/Backspace family: ⌫ and control-backspace arrive as U+007F /
+    /// U+0008; the forward-delete key (⌦) arrives as U+F728 with .function set.
+    public static func isDeleteKey(_ characters: String) -> Bool {
+        characters == "\u{7F}" || characters == "\u{8}" || characters == "\u{F728}"
+    }
+
+    /// What the monitor must do with a Delete/Backspace keyDown. AppKit plays the
+    /// system alert sound for a keyDown that reaches the end of the responder
+    /// chain unhandled — the "warning sound" the Owner reported while deleting
+    /// nodes — so every delete keyDown must end in one of these outcomes and
+    /// never fall through to AppKit.
+    public enum DeleteOutcome: Equatable {
+        /// An editable text view owns the first responder: AppKit must deliver
+        /// the key there (⌘⌫ / ⌥⌫ delete words and lines inside text fields).
+        case fieldEditor
+        /// The canvas owns the key and deletes the selected link or node.
+        case deleteSelection
+        /// The canvas owns the key but has nothing to delete right now (editing
+        /// handoff, presentation); consume it silently instead of beeping.
+        case swallowed
+    }
+
+    public struct DeleteContext: Equatable {
+        public var textFieldEditing: Bool
+        public var presentationActive: Bool
+        public var editingHandoffActive: Bool
+
+        public init(textFieldEditing: Bool = false,
+                    presentationActive: Bool = false,
+                    editingHandoffActive: Bool = false) {
+            self.textFieldEditing = textFieldEditing
+            self.presentationActive = presentationActive
+            self.editingHandoffActive = editingHandoffActive
+        }
+    }
+
+    public static func deleteOutcome(for context: DeleteContext) -> DeleteOutcome {
+        if context.textFieldEditing { return .fieldEditor }
+        if context.presentationActive || context.editingHandoffActive { return .swallowed }
+        return .deleteSelection
+    }
+
+    /// Single dispatch path for Delete/Backspace, shared by the event monitor and
+    /// the behavioral checks (same pattern as performCoreShortcut and
+    /// d2Replacement). Returns true when the monitor must consume the key.
+    ///
+    /// Modifier flags are deliberately absent: the monitor calls this before its
+    /// Command/Option/Control gates, because passing a delete keyDown to the
+    /// responder chain is exactly what makes AppKit beep. ⌦ deletes like ⌫.
+    @discardableResult
+    public static func performDelete(vm: MindMapViewModel,
+                                     textFieldEditing: Bool,
+                                     editingHandoffActive: Bool) -> Bool {
+        switch deleteOutcome(for: DeleteContext(
+            textFieldEditing: textFieldEditing,
+            presentationActive: vm.presentationActive,
+            editingHandoffActive: editingHandoffActive)) {
+        case .fieldEditor:
+            return false
+        case .swallowed:
+            return true
+        case .deleteSelection:
+            if let linkID = vm.selectedLinkID {
+                vm.removeLink(id: linkID)
+            } else if let selection = vm.selection {
+                vm.delete(id: selection)
+            }
+            return true
+        }
+    }
+
     /// Performs the XMind core shortcuts that need exact modifier matching.
     /// The event monitor and behavioral checks share this one dispatch path.
     @discardableResult
@@ -132,7 +203,59 @@ public final class KeyboardMonitor {
         return (selection, characters ?? charactersIgnoringModifiers)
     }
 
+    /// Runtime instrument for the "delete beeps" report (env `MINDFLOW_KEY_PROBE=<path>`).
+    /// Every keyDown the monitor sees is appended as one TSV line carrying the decision
+    /// (`handled` = the monitor returned nil, `passed` = AppKit's responder chain got the
+    /// event and plays the system alert sound when nothing handles it) plus the state at
+    /// decision time. Unset variable = no behaviour change, nothing written.
+    private static var probePath: String? {
+        guard let path = ProcessInfo.processInfo.environment["MINDFLOW_KEY_PROBE"],
+              !path.isEmpty else { return nil }
+        return path
+    }
+
+    private func probeSnapshot() -> String {
+        let responder = NSApp.keyWindow?.firstResponder
+        let editing = (responder as? NSTextView)?.isEditable == true
+        let nodes = vm.map { $0.document.root.descendantIDs().count + 1 } ?? 0
+        return [
+            vm?.editingID == nil ? "editing=0" : "editing=1",
+            vm?.selection == nil ? "selection=0" : "selection=1",
+            vm?.selectedLinkID == nil ? "link=0" : "link=1",
+            vm?.selectedSummaryID == nil ? "summary=0" : "summary=1",
+            vm?.presentationActive == true ? "present=1" : "present=0",
+            "nodes=\(nodes)",
+            editing ? "editor=1" : "editor=0",
+            String(describing: responder.map { type(of: $0) } ?? Optional<Any>.none),
+        ].joined(separator: "\t")
+    }
+
+    private static func probeAppend(_ event: NSEvent, consumed: Bool, snapshot: String) {
+        guard let path = probePath else { return }
+        let scalars = (event.charactersIgnoringModifiers ?? "")
+            .unicodeScalars.map { String(format: "U+%04X", $0.value) }.joined(separator: ",")
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+        let line = "\(Date().timeIntervalSince1970)\t\(scalars)\tflags=\(flags)\t"
+            + "\(consumed ? "handled" : "passed")\t\(snapshot)\n"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+
     private func handle(_ event: NSEvent) -> NSEvent? {
+        let snapshot = Self.probePath == nil ? "" : probeSnapshot()
+        let decision = handleInner(event)
+        if Self.probePath != nil {
+            Self.probeAppend(event, consumed: decision == nil, snapshot: snapshot)
+        }
+        return decision
+    }
+
+    private func handleInner(_ event: NSEvent) -> NSEvent? {
         guard let vm else { return event }
 
         if event.type == .scrollWheel {
@@ -175,8 +298,21 @@ public final class KeyboardMonitor {
             editingHandoffStart = Date()
             if vm.editingID == nil { replacedSessionID = nil }
         }
-        if vm.editingID != nil, chars != "\u{1B}",
-           Date().timeIntervalSince(editingHandoffStart) < Self.editingHandoffWindow {
+        let editingHandoffActive = vm.editingID != nil
+            && Date().timeIntervalSince(editingHandoffStart) < Self.editingHandoffWindow
+
+        // Delete/Backspace is routed before every modifier gate and before the
+        // editing handoff: a keyDown that falls through to AppKit makes it play
+        // the system alert sound (the beep the Owner reported while deleting
+        // nodes). The field editor keeps the key (guard above), every other
+        // state is the canvas's — see performDelete.
+        if Self.isDeleteKey(chars) {
+            _ = Self.performDelete(vm: vm, textFieldEditing: false,
+                                   editingHandoffActive: editingHandoffActive)
+            return nil
+        }
+
+        if vm.editingID != nil, chars != "\u{1B}", editingHandoffActive {
             // The field editor installs a runloop turn or two after editingID
             // lands. Until it does, a printable keystroke passed through here
             // fell into the responder chain and was dropped: the editor opened
@@ -282,13 +418,6 @@ public final class KeyboardMonitor {
                 } else {
                     vm.addChild(to: vm.document.root.id)
                 }
-            }
-            return nil
-        case "\u{7F}", "\u{8}":
-            if let linkID = vm.selectedLinkID {
-                vm.removeLink(id: linkID)
-            } else if let selection = vm.selection {
-                vm.delete(id: selection)
             }
             return nil
         case " ":

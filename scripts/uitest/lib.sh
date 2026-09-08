@@ -20,6 +20,9 @@ UIT_STORAGE_MAX_AGE=86400
 UIT_CLEANUP_CALLBACKS=()
 UIT_CLEANUP_TRAP_INSTALLED=0
 TABS=""
+# Extra KEY=VALUE pairs handed to the app by uit_launch (repeatable --env). Probes
+# that need an in-app instrument set this; empty by default.
+UIT_APP_ENV=()
 ART_DIR="/tmp/uitest-artifacts"
 mkdir -p "$ART_DIR"
 
@@ -236,7 +239,10 @@ uit_launch(){ # <fixture-basename> [waitsec] -> echoes pid
   local f="$1" waitsec="${2:-30}" t0 w
   uit_pkill
   uit_stage "$f" || return 1
-  open --env "MINDFLOW_STORAGE_ROOT=$MINDFLOW_STORAGE_ROOT" "$APP"
+  local -a open_env=(--env "MINDFLOW_STORAGE_ROOT=$MINDFLOW_STORAGE_ROOT")
+  local kv
+  for kv in ${UIT_APP_ENV[@]+"${UIT_APP_ENV[@]}"}; do open_env+=(--env "$kv"); done
+  open "${open_env[@]}" "$APP"
   t0=$(date +%s)
   while :; do
     if pgrep -x MindFlow >/dev/null 2>&1; then

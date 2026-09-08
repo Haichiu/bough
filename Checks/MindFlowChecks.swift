@@ -6610,6 +6610,102 @@ do {
     }
 }
 
+// MARK: - T-053: Delete/Backspace never reaches AppKit unclaimed (no alert beep)
+// AppKit plays the system alert sound for a keyDown that reaches the end of the
+// responder chain unhandled — the Owner reported it as a warning sound while
+// deleting nodes. The runtime probe (scripts/uitest/u13-delete-handling.sh)
+// measured which keyDowns the monitor claims; this oracle pins the dispatch
+// decision for every state through the same performDelete / deleteOutcome path
+// the event monitor calls.
+do {
+    try await MainActor.run {
+        check(KeyboardMonitor.isDeleteKey("\u{7F}"),
+              "T-053 ⌫ is a delete key")
+        check(KeyboardMonitor.isDeleteKey("\u{8}"),
+              "T-053 control-backspace is a delete key")
+        check(KeyboardMonitor.isDeleteKey("\u{F728}"),
+              "T-053 ⌦ is a delete key (unclaimed today → AppKit alert beep)")
+        check(!KeyboardMonitor.isDeleteKey("\t")
+              && !KeyboardMonitor.isDeleteKey(" ")
+              && !KeyboardMonitor.isDeleteKey("\u{F700}")
+              && !KeyboardMonitor.isDeleteKey("a"),
+              "T-053 navigation and printable keys are not delete keys")
+
+        let vm = MindMapViewModel()
+        vm.newDocument()
+        let child = vm.addChild(to: nil)!
+        let grandchild = vm.addChild(to: child)!
+        vm.editingID = nil
+
+        // 一般選取
+        vm.selection = grandchild
+        check(KeyboardMonitor.performDelete(vm: vm, textFieldEditing: false, editingHandoffActive: false)
+              && vm.document.root.find(grandchild) == nil,
+              "T-053 selection: Delete is handled and removes the node")
+
+        // 選中連線
+        let linkA = vm.addChild(to: nil)!
+        let linkB = vm.addChild(to: nil)!
+        let linkID = vm.addLink(from: linkA, to: linkB)!
+        vm.selection = linkA
+        vm.selectedLinkID = linkID
+        check(KeyboardMonitor.performDelete(vm: vm, textFieldEditing: false, editingHandoffActive: false)
+              && vm.document.links.isEmpty
+              && vm.document.root.find(linkA) != nil,
+              "T-053 link selected: Delete is handled and removes only the link")
+        vm.selectedLinkID = nil
+
+        // root 被選
+        let rootID = vm.document.root.id
+        vm.selection = rootID
+        check(KeyboardMonitor.performDelete(vm: vm, textFieldEditing: false, editingHandoffActive: false)
+              && vm.document.root.find(rootID) != nil,
+              "T-053 root selected: Delete is handled and the root survives")
+
+        // 無選取
+        vm.selection = nil
+        check(KeyboardMonitor.performDelete(vm: vm, textFieldEditing: false, editingHandoffActive: false),
+              "T-053 no selection: Delete is still handled (no AppKit fall-through)")
+
+        // 編輯中 — 交接視窗：編輯器尚未接管，必須吞掉且不得刪掉正在編輯的節點
+        vm.selection = child
+        vm.editingID = child
+        check(KeyboardMonitor.performDelete(vm: vm, textFieldEditing: false, editingHandoffActive: true)
+              && vm.document.root.find(child) != nil,
+              "T-053 editing handoff: Delete is handled and does not delete the node being edited")
+        vm.editingID = nil
+
+        // 簡報中
+        vm.selection = child
+        vm.presentationActive = true
+        check(KeyboardMonitor.performDelete(vm: vm, textFieldEditing: false, editingHandoffActive: false)
+              && vm.document.root.find(child) != nil,
+              "T-053 presentation: Delete is handled without mutating the document")
+        vm.presentationActive = false
+
+        // 編輯器接管時必須交還按鍵：⌘⌫／⌥⌫ 在文字欄位是刪詞／刪行，吞掉會弄壞編輯
+        check(!KeyboardMonitor.performDelete(vm: vm, textFieldEditing: true, editingHandoffActive: false),
+              "T-053 field editor owns the key: the monitor must pass Delete through")
+
+        // 決策函式本身（與事件監控共用同一條 dispatch path）
+        check(KeyboardMonitor.deleteOutcome(for: .init()) == .deleteSelection,
+              "T-053 default state routes Delete to the canvas")
+        check(KeyboardMonitor.deleteOutcome(for: .init(textFieldEditing: true)) == .fieldEditor,
+              "T-053 text-field focus routes Delete to the editor")
+        check(KeyboardMonitor.deleteOutcome(for: .init(editingHandoffActive: true)) == .swallowed
+              && KeyboardMonitor.deleteOutcome(for: .init(presentationActive: true)) == .swallowed,
+              "T-053 handoff and presentation swallow Delete instead of beeping")
+
+        // 單一刪除路徑：事件監控呼叫共用 dispatcher，switch 裡不再有第二份實作
+        let keyboardSource = projectSource("Sources/MindFlowKit/KeyboardMonitor.swift")
+        check(keyboardSource.contains("if Self.isDeleteKey(chars) {")
+              && keyboardSource.contains("Self.performDelete(vm: vm, textFieldEditing: false,"),
+              "T-053 the event monitor routes Delete through the shared dispatcher")
+        check(!keyboardSource.contains("case \"\\u{7F}\", \"\\u{8}\":"),
+              "T-053 the switch no longer carries a second delete implementation")
+    }
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
