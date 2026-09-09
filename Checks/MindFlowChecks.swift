@@ -96,6 +96,18 @@ func themeCheck() {
     Palette.active = .classic
     check(Palette.light.canvasRGB.hex == "#f2efe7", "returning to classic restores it exactly")
 
+    // 6b. Exports follow the chosen theme. The exporters paint with Palette.light,
+    //     which resolves through the active theme, so this holds today for free --
+    //     the assertion exists so that pinning an exporter back to a fixed palette
+    //     shows up as a failure rather than as a user exporting a picture that
+    //     does not match what they were looking at.
+    Palette.active = .minimal
+    check(StaticMapView.exportPalette.canvasRGB.hex == "#ffffff",
+          "exported canvas follows the active theme")
+    Palette.active = .classic
+    check(StaticMapView.exportPalette.canvasRGB.hex == "#f2efe7",
+          "exported canvas returns with the theme")
+
     // 7. The persisted form round-trips. The stored string is what survives a
     //    relaunch, so an unreadable one silently resets the user's choice.
     for theme in MindTheme.allCases {
