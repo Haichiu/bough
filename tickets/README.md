@@ -255,6 +255,19 @@
 ---
 
 
+### T-055 螢幕解鎖後補做的 GUI 驗證（待辦）
+
+本輪有兩項行為只做了**模型層**驗證，因為實測發現 `CGSSessionScreenIsLocked = Yes`（螢幕鎖定），此時**任何需要視窗的探針都會 timeout**。
+已用對照組（HEAD 原始碼另建一份）確認這是環境限制，**不是程式回歸**。
+
+解鎖後需要實跑確認：
+
+1. **主題切換時畫布是否立即重繪**。静態證據支持會（畫布未將 palette/style 快取在 body 之外，且 `MapCanvasView` 以 `@EnvironmentObject` 觀察 vm），但**這不等於 runtime 證明**。
+   可用像素取樣做 oracle：經典畫布 `#f2efe7` → 極簡 `#ffffff`（ImageMagick 可用）。若不重繪，修法**不是**無條件加 `.id(vm.themeID)`——那會重置縮放與平移。
+2. **選擇是否跨重啟保留**（UserDefaults `themeID`）。
+3. **`⌘/` 現在只做一件事**。修正前實測到它**同時**收合分支（21→18 節點）**且**開啟說明面板；修正後應只收合。並驗 `⌘?` 開說明、`⌥⌘/` 全部收合／展開。
+
+
 ## 已知阻礙
 
 - ~~guard.ts 重複宣告 `const decision` 使新 pi session 無法啟動~~ —— **2026-09-03 判定過期**：p1 於當日由 owner 重開，是一個全新且成功啟動的 pi session。runtime 證據優於 source grep（`grep -c "const decision"` 仍回 2，但那兩處不在同一 scope，對「能不能啟動」零資訊）。
