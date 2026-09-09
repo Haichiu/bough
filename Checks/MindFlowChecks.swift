@@ -7190,6 +7190,94 @@ do {
           "boundary: 加入外框 is bound to XMind's ⇧⌘B")
 }
 
+// Geometry across every shipped layout. The block above only exercised
+// .logicRight. Fishbone flattens a branch onto a strict diagonal, balanced
+// splits the children left/right, and bracket reuses the logicRight branch —
+// a frame that is right in one direction says nothing about the other three.
+
+do {
+    let directions: [(MapDirection, String)] = [
+        (.logicRight, "logicRight"),
+        (.balanced, "balanced"),
+        (.fishbone, "fishbone"),
+        (.bracket, "bracket"),
+    ]
+    // The gap is a literal on purpose: an oracle that reads the constant it is
+    // checking cannot catch that constant drifting. The constant itself is
+    // pinned against the documented value right below.
+    let documentedPadding: CGFloat = 10
+    let eps: CGFloat = 0.0001
+    var framesByDirection: [String: CGRect] = [:]
+
+    check(BoundaryGeometry.padding == documentedPadding
+          && BoundaryGeometry.cornerRadius == documentedPadding,
+          "boundary geometry: the documented padding and corner radius are both 10pt")
+
+    for (direction, name) in directions {
+        let vm = MindMapViewModel()
+        vm.newDocument()
+        let anchor = vm.addChild(to: nil)!
+        let child = vm.addChild(to: anchor)!
+        let grand = vm.addChild(to: child)!
+        // Two uncovered root children. The immediate sibling is the tight one:
+        // vGap is 12 and the frame pads by 10, so it clears by exactly 2pt in
+        // logicRight/bracket/balanced and 168pt in fishbone; the second sibling
+        // clears by 52–420pt. That coupling is the point — if the padding ever
+        // grows past vGap the frame would enclose the neighbouring row's node,
+        // which is a real defect and should turn this red.
+        let outside = vm.addChild(to: nil)!
+        let far = vm.addChild(to: nil)!
+        _ = vm.addBoundary(rootID: anchor)
+
+        let layouts = LayoutEngine.layout(root: vm.document.root, direction: direction)
+        guard let geo = BoundaryGeometry.frame(for: vm.document.boundaries[0],
+                                               root: vm.document.root,
+                                               layouts: layouts, origin: .zero) else {
+            check(false, "boundary geometry (\(name)): a frame exists")
+            continue
+        }
+        framesByDirection[name] = geo.rect
+        let covered = [anchor, child, grand].compactMap { layouts[$0]?.frame }
+
+        // 1. Containment: every covered node sits inside, with the documented gap.
+        check(covered.count == 3 && covered.allSatisfy {
+            geo.rect.minX <= $0.minX - documentedPadding + eps &&
+            geo.rect.minY <= $0.minY - documentedPadding + eps &&
+            geo.rect.maxX >= $0.maxX + documentedPadding - eps &&
+            geo.rect.maxY >= $0.maxY + documentedPadding - eps
+        }, "boundary geometry (\(name)): every covered node is inside with 10pt to spare")
+
+        // 2. Tightness: no side may carry more slack than the documented gap, so a
+        //    frame that swallows the whole canvas passes (1) but fails here.
+        let unionMinX = covered.map(\.minX).min() ?? 0
+        let unionMinY = covered.map(\.minY).min() ?? 0
+        let unionMaxX = covered.map(\.maxX).max() ?? 0
+        let unionMaxY = covered.map(\.maxY).max() ?? 0
+        check(abs(geo.rect.minX - (unionMinX - documentedPadding)) < eps &&
+              abs(geo.rect.minY - (unionMinY - documentedPadding)) < eps &&
+              abs(geo.rect.maxX - (unionMaxX + documentedPadding)) < eps &&
+              abs(geo.rect.maxY - (unionMaxY + documentedPadding)) < eps,
+              "boundary geometry (\(name)): the frame hugs the covered subtree — 10pt on all four sides")
+
+        // 3. Negative control: uncovered siblings stay outside. Without this, a
+        //    degenerate "frame everything" implementation passes (1)+(2).
+        let uncovered = [outside, far].compactMap { layouts[$0]?.frame }
+        check(uncovered.count == 2 && uncovered.allSatisfy { !geo.rect.contains($0) },
+              "boundary geometry (\(name)): both uncovered siblings stay outside the frame")
+    }
+
+    // Positive control: the direction argument really moved the nodes, so the
+    // per-direction assertions are not one layout measured four times.
+    check(Set(framesByDirection.values.map { "\($0)" }).count >= 3,
+          "boundary geometry: the four directions produce at least three distinct frames")
+    // Observed, not assumed: bracket shares the logicRight placement branch
+    // (`case .logicRight, .bracket:`), so their node frames — and thus the
+    // boundary frame — coincide. If bracket ever gets its own layout this turns
+    // red and the line should be re-measured, not deleted.
+    check(framesByDirection["bracket"] == framesByDirection["logicRight"],
+          "boundary geometry: bracket reuses the logicRight layout, so their frames coincide")
+}
+
 // MARK: - One selected object at a time, and Delete acts on it
 //
 // A node ring and a boundary frame are stroked with the same accent, so two
