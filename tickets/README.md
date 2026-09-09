@@ -265,6 +265,8 @@
 1. **主題切換時畫布是否立即重繪**。静態證據支持會（畫布未將 palette/style 快取在 body 之外，且 `MapCanvasView` 以 `@EnvironmentObject` 觀察 vm），但**這不等於 runtime 證明**。
    可用像素取樣做 oracle：經典畫布 `#f2efe7` → 極簡 `#ffffff`（ImageMagick 可用）。若不重繪，修法**不是**無條件加 `.id(vm.themeID)`——那會重置縮放與平移。
 2. **選擇是否跨重啟保留**（UserDefaults `themeID`）。
+**探針已寫好待跑**：`scripts/uitest/u19-theme-repaint.sh`（第 32 輪寫，**尚未執行過**，因為寫的當下螢幕鎖定）。它以「視窗區域的眾數顏色」當畫布底色，對節點位置免疫，並以「取樣器必須先讀到經典的 `#f2efe7`」作為陽性對照；讀不到就報 `INSTRUMENT:` 而非 `FAIL`。
+
 3. **`⌘/` 現在只做一件事**。修正前實測到它**同時**收合分支（21→18 節點）**且**開啟說明面板；修正後應只收合。並驗 `⌘?` 開說明、`⌥⌘/` 全部收合／展開。
 
 
