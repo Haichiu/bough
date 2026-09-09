@@ -251,6 +251,25 @@ public enum BoundaryGeometry {
 
 ---
 
+## 附錄 A-0：p1 獨立驗證（第 32 輪）
+
+本提案最關鍵的一步是 §0.2 的語意收窄（「XMind 沒有跨父節點的任意成員集合」），它直接決定了 D1 採用錨點而非成員集合。該結論原本只有**單一來源**：XMind `app.asar` 的字串。
+
+**證據來源缺口（如實記錄）**：p1 在本機**找不到任何 `.asar`**（`/Applications` 無 XMind、`~/Downloads` 只有一份 `.xmind` 文件），因此**無法重現該次量測**。單一且不可重現的外部證據，不足以獨自支撐一個架構決定。
+
+**改以獨立管道複查，結論一致**。XMind 官方使用指南 `https://xmind.com/user-guide/boundary-new` 逐字寫道：
+
+> When adding a boundary to **multiple topics**, topics from the same branch will be grouped under the same boundary. **Topics from different branches will each have their own boundary.**
+>
+> **The central topic and multiple floating topics** cannot have a boundary.
+
+這與 §0.2 的主張相同：**外框不能跨分支**，所以「不連續／跨父節點成員集合」在 XMind 裡不存在。D1 的錨點模型因此站得住，且其理由不依賴任何無法查核的來源。
+
+同一頁另外兩項對實作有用、且本提案原本沒寫的事實：
+- 「Adjust the Boundary Scope：拖曳外框上下的藍色邊界可調整範圍」——與 `rangeStart`/`rangeEnd` 的連續兄弟語意吻合，是 §0.2 表格的旁證。
+- **Mac 快捷鍵為 `⇧⌘B`**。專案預設是 XMind parity，v1 應直接沿用，不要另創。
+
+
 ## 附錄 A：證據出處
 
 **本專案（HEAD `6c0b1b6`）**
