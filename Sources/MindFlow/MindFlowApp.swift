@@ -120,10 +120,16 @@ struct MindFlowApp: App {
                 // outright; removing it must not remove any capability, and the
                 // inspector toggle in particular had no other entrance anywhere
                 // in the product.
+                // Deliberately no key equivalent. ⌘0 is already taken by zoom
+                // reset (.mindFlowReset: scale 1, pan zero), which the local
+                // monitor consumes before any menu key equivalent can run -- so
+                // a ⌘-digit shortcut here would render as a working shortcut in
+                // the menu and then do something else entirely. Fit and reset are
+                // genuinely different commands, so fit keeps the menu row and the
+                // canvas "全圖" button as its entrances.
                 Button("符合視窗") {
                     NotificationCenter.default.post(name: .mindFlowFit, object: nil)
                 }
-                .keyboardShortcut("0", modifiers: [.command])
                 Toggle("檢閱器", isOn: $vm.showInspector)
                     .keyboardShortcut("i", modifiers: [.command, .option])
                 // Explicit expand/collapse. The existing "全部收合／展開" entry is a
