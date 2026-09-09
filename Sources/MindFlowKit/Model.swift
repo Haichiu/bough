@@ -179,6 +179,30 @@ public struct MindSummary: Codable, Equatable, Identifiable {
     }
 }
 
+/// A boundary frame around a subtree: the anchor node plus its visible descendants.
+/// The covered set is derived from the tree at render time and never stored, so a
+/// boundary cannot drift out of sync with the document the way a stored member
+/// list would (see docs/proposals/boundary.md).
+public struct MindBoundary: Codable, Equatable, Identifiable {
+    public var id: UUID = UUID()
+    /// Root of the framed branch: the frame covers this node and all of its
+    /// visible descendants. A boundary whose root leaves the document is pruned.
+    public var rootID: UUID
+
+    public init(id: UUID = UUID(), rootID: UUID) {
+        self.id = id
+        self.rootID = rootID
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, rootID }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        rootID = try c.decode(UUID.self, forKey: .rootID)
+    }
+}
+
 public struct MindDocument: Codable, Equatable {
     public var title: String
     public var themeName: String
@@ -186,15 +210,17 @@ public struct MindDocument: Codable, Equatable {
     public var root: MindNode
     public var links: [MindLink]
     public var summaries: [MindSummary]
+    public var boundaries: [MindBoundary]
     public var offsets: [String: CGPoint]
 
     private enum CodingKeys: String, CodingKey {
-        case title, themeName, directionName, root, links, summaries, offsets
+        case title, themeName, directionName, root, links, summaries, boundaries, offsets
     }
 
     public init(title: String = "未命名心智圖", themeName: String = "ocean",
                 directionName: String = MapDirection.logicRight.rawValue, root: MindNode,
                 links: [MindLink] = [], summaries: [MindSummary] = [],
+                boundaries: [MindBoundary] = [],
                 offsets: [String: CGPoint] = [:]) {
         self.title = title
         self.themeName = themeName
@@ -202,6 +228,7 @@ public struct MindDocument: Codable, Equatable {
         self.root = root
         self.links = links
         self.summaries = summaries
+        self.boundaries = boundaries
         self.offsets = offsets
     }
 
@@ -214,6 +241,7 @@ public struct MindDocument: Codable, Equatable {
         root = try container.decode(MindNode.self, forKey: .root)
         links = try container.decodeIfPresent([MindLink].self, forKey: .links) ?? []
         summaries = try container.decodeIfPresent([MindSummary].self, forKey: .summaries) ?? []
+        boundaries = try container.decodeIfPresent([MindBoundary].self, forKey: .boundaries) ?? []
         offsets = try container.decodeIfPresent([String: CGPoint].self, forKey: .offsets) ?? [:]
     }
 

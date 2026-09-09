@@ -176,6 +176,7 @@ struct MapCanvasView: View {
             .onTapGesture {
                 vm.stopEditing()
                 vm.selection = nil
+                vm.selectedBoundaryID = nil
                 vm.showSearch = false
             }
     }
@@ -271,6 +272,14 @@ struct MapCanvasView: View {
             if item.node.id != vm.document.root.id {
                 Button("加入概要括線（含下一個兄弟）") { _ = vm.addSummaryWithNextSibling(of: item.node.id) }
             }
+            Button(vm.boundary(forRoot: item.node.id) == nil ? "加入外框" : "移除外框") {
+                if vm.boundary(forRoot: item.node.id) == nil {
+                    _ = vm.addBoundary(rootID: item.node.id)
+                } else {
+                    vm.removeBoundary(rootID: item.node.id)
+                }
+            }
+            .accessibilityIdentifier("boundary-toggle")
             if vm.document.offsets[item.node.id.uuidString] != nil {
                 Button("重設此節點位置") { vm.clearOffset(id: item.node.id) }
             }
@@ -578,6 +587,8 @@ struct MapCanvasView: View {
                               origin: origin, focusIDs: focusIDs)
             linksCanvas(layouts: layouts, origin: origin, focusIDs: focusIDs, palette: theme,
                         interactionScale: scale)
+            boundariesCanvas(layouts: layouts, origin: origin, palette: theme,
+                             interactionScale: scale)
             summariesCanvas(layouts: layouts, origin: origin, palette: theme,
                             interactionScale: scale)
             dragIndicator(origin: origin, palette: theme, interactionScale: scale)
@@ -608,6 +619,39 @@ struct MapCanvasView: View {
         ForEach(vm.document.summaries) { summary in
             summaryView(summary: summary, layouts: layouts, origin: origin, palette: palette,
                         interactionScale: interactionScale)
+        }
+    }
+
+    private func boundariesCanvas(layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette,
+                                  interactionScale: CGFloat) -> some View {
+        ForEach(vm.document.boundaries) { boundary in
+            boundaryView(boundary: boundary, layouts: layouts, origin: origin, palette: palette,
+                         interactionScale: interactionScale)
+        }
+    }
+
+    @ViewBuilder
+    private func boundaryView(boundary: MindBoundary, layouts: [UUID: NodeLayout], origin: CGPoint,
+                              palette: Palette, interactionScale: CGFloat) -> some View {
+        if let geo = BoundaryGeometry.frame(for: boundary, root: vm.document.root,
+                                            layouts: layouts, origin: origin) {
+            let isSelected = vm.selectedBoundaryID == boundary.id
+            let outline = Path(roundedRect: geo.rect, cornerRadius: geo.cornerRadius)
+            ZStack {
+                outline.fill(palette.accent.opacity(0.06))
+                outline.stroke(isSelected ? palette.accent : palette.textSecondary.opacity(0.8),
+                               style: StrokeStyle(lineWidth: isSelected ? 2.5 : 2, lineJoin: .round))
+            }
+            // Only the stroke band is clickable. A filled hit area would swallow
+            // every node click inside the frame, which the frame must not do.
+            .contentShape(outline.strokedPath(StrokeStyle(
+                lineWidth: InteractionSignalGeometry.local(screenPoints: 12, scale: interactionScale))))
+            .onTapGesture {
+                vm.selectedBoundaryID = vm.selectedBoundaryID == boundary.id ? nil : boundary.id
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("外框")
+            .accessibilityIdentifier("boundary-" + boundary.id.uuidString)
         }
     }
 

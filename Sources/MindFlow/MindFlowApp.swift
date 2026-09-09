@@ -252,6 +252,15 @@ struct MindFlowApp: App {
                         vm.addSibling(of: selection)
                     }
                 }
+                // XMind's Insert Boundary is ⇧⌘B on the Mac. KeyboardMonitor does
+                // not claim it (MindFlowChecks asserts that), so the menu fires.
+                Button("加入外框") {
+                    if let selection = vm.selection { _ = vm.addBoundary(rootID: selection) }
+                }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
+                Button("移除外框") {
+                    if let selection = vm.selection { vm.removeBoundary(rootID: selection) }
+                }
                 Button("刪除主題") {
                     if let selection = vm.selection { vm.delete(id: selection) }
                 }

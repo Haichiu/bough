@@ -171,6 +171,15 @@ public enum MapExporter {
             parts.append("<text x=\"\(lx)\" y=\"\(ly)\" font-size=\"11\" fill=\"\(hex(palette.textSecondary))\" text-anchor=\"middle\">\(esc(childLinkLabel(target)))</text>")
         }
 
+        // Boundary frames (same geometry as on-screen rendering).
+        for b in document.boundaries {
+            guard let geo = BoundaryGeometry.frame(for: b, root: document.root,
+                                                   layouts: layouts, origin: .zero)
+            else { continue }
+            let r = geo.rect
+            parts.append("<rect x=\"\(r.minX)\" y=\"\(r.minY)\" width=\"\(r.width)\" height=\"\(r.height)\" rx=\"\(geo.cornerRadius)\" fill=\"\(hex(palette.accent))\" fill-opacity=\"0.06\" stroke=\"\(hex(palette.textSecondary))\" stroke-opacity=\"0.8\" stroke-width=\"2\"/>")
+        }
+
         // Summary brackets (same geometry as on-screen rendering).
         for s in document.summaries {
             guard let parentNode = document.root.find(s.parentID),

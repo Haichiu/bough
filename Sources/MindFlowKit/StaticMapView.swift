@@ -78,6 +78,7 @@ public struct StaticMapView: View {
         return ZStack {
             MapConnectionsView(items: items, layouts: layouts, theme: theme,
                                origin: origin, direction: direction)
+            boundaryFrames(layouts: layouts, origin: origin, palette: theme)
             summaryBrackets(layouts: layouts, origin: origin, palette: theme)
             ForEach(items) { item in
                 NodeView(node: item.node,
@@ -98,6 +99,21 @@ public struct StaticMapView: View {
         }
         .frame(width: bounds.width, height: bounds.height)
         .background(transparentBackground ? Color.clear : theme.canvasBackground)
+    }
+
+    /// Boundary frames share the same geometry as canvas + SVG rendering.
+    @ViewBuilder
+    private func boundaryFrames(layouts: [UUID: NodeLayout], origin: CGPoint, palette: Palette) -> some View {
+        ForEach(document.boundaries) { boundary in
+            if let geo = BoundaryGeometry.frame(for: boundary, root: document.root,
+                                                layouts: layouts, origin: origin) {
+                Path(roundedRect: geo.rect, cornerRadius: geo.cornerRadius)
+                    .fill(palette.accent.opacity(0.06))
+                Path(roundedRect: geo.rect, cornerRadius: geo.cornerRadius)
+                    .stroke(palette.textSecondary.opacity(0.8),
+                            style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+            }
+        }
     }
 
     /// Summary brackets share the same geometry as canvas + SVG rendering.

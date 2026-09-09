@@ -141,6 +141,7 @@ public final class MindMapViewModel: ObservableObject {
         selection = inactiveSelections[sessions[index].id] ?? document.root.id
         selectedLinkID = nil
         selectedSummaryID = nil
+        selectedBoundaryID = nil
         // Focus belongs to a specific document — never leak across tabs.
         focusBranchID = nil
         // Search results belong to a specific document — never leak across tabs.
@@ -325,6 +326,7 @@ public final class MindMapViewModel: ObservableObject {
         lastCoalesceTime = now
         redoStack.removeAll()
         change(&document)
+        pruneBoundaries()
         dirty = true
     }
 
@@ -904,6 +906,8 @@ public final class MindMapViewModel: ObservableObject {
     @Published public var selectedLinkID: UUID?
     /// Currently selected summary bracket (for inspector text editing).
     @Published public var selectedSummaryID: UUID?
+    /// Currently selected boundary frame.
+    @Published public var selectedBoundaryID: UUID?
 
     /// Creates an associative link between two existing nodes.
     @discardableResult
@@ -1404,6 +1408,43 @@ public final class MindMapViewModel: ObservableObject {
         notify("已刪除概要括線")
     }
 
+    // MARK: - Boundary frames
+
+    /// The boundary anchored at `rootID`, if any. v1 keeps one boundary per root.
+    public func boundary(forRoot rootID: UUID) -> MindBoundary? {
+        document.boundaries.first { $0.rootID == rootID }
+    }
+
+    /// Adds a boundary around `rootID` and its subtree. An existing boundary is
+    /// selected instead of duplicated (docs/proposals/boundary.md D4).
+    @discardableResult
+    public func addBoundary(rootID: UUID) -> UUID? {
+        guard document.root.contains(rootID) else { return nil }
+        if let existing = boundary(forRoot: rootID) {
+            selectedBoundaryID = existing.id
+            notify("這個主題已經有外框了")
+            return existing.id
+        }
+        let boundary = MindBoundary(rootID: rootID)
+        mutate { $0.boundaries.append(boundary) }
+        selectedBoundaryID = boundary.id
+        notify("已加入外框")
+        return boundary.id
+    }
+
+    public func removeBoundary(id: UUID) {
+        guard document.boundaries.contains(where: { $0.id == id }) else { return }
+        mutate { $0.boundaries.removeAll { $0.id == id } }
+        if selectedBoundaryID == id { selectedBoundaryID = nil }
+        notify("已移除外框")
+    }
+
+    /// Removes the boundary anchored at `rootID`, if there is one.
+    public func removeBoundary(rootID: UUID) {
+        guard let existing = boundary(forRoot: rootID) else { return }
+        removeBoundary(id: existing.id)
+    }
+
     /// Extends the bracket to include the next sibling after its current end.
     public func extendSummary(id: UUID) {
         guard let s = document.summaries.first(where: { $0.id == id }),
@@ -1448,6 +1489,18 @@ public final class MindMapViewModel: ObservableObject {
             guard let parent = doc.root.find(s.parentID) else { return true }
             return !parent.children.contains(where: { $0.id == s.startID })
                 || !parent.children.contains(where: { $0.id == s.endID })
+        }
+    }
+
+    /// Boundary invariant: every boundary's root must still exist. Run from
+    /// `mutate` so no structural edit can forget it — the summary bug this
+    /// avoids is documented in docs/proposals/boundary.md §0.3.
+    private func pruneBoundaries() {
+        guard !document.boundaries.isEmpty else { return }
+        document.boundaries.removeAll { !document.root.contains($0.rootID) }
+        if let selected = selectedBoundaryID,
+           !document.boundaries.contains(where: { $0.id == selected }) {
+            selectedBoundaryID = nil
         }
     }
 

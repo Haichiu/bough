@@ -7003,6 +7003,181 @@ do {
           "the in-app shortcut table lists ⌘?")
 }
 
+// MARK: - Boundary v1: a frame anchored on a subtree, derived at render time
+// Spec: docs/proposals/boundary.md §4. Canvas drawing and the context menu are
+// deliberately NOT asserted here: the screen is locked, every windowed probe
+// times out, and a green model suite must not pretend otherwise.
+
+do {
+    let vm = MindMapViewModel()
+    vm.newDocument()
+    let branch = vm.addChild(to: nil)!
+    let leafA = vm.addChild(to: branch)!
+    let leafB = vm.addChild(to: branch)!
+    let other = vm.addChild(to: nil)!
+
+    let boundaryID = vm.addBoundary(rootID: branch)
+    check(boundaryID != nil && vm.document.boundaries.count == 1,
+          "boundary: creating one adds exactly one")
+    check(vm.document.boundaries.first?.rootID == branch,
+          "boundary: it anchors on the chosen subtree root")
+    check(vm.addBoundary(rootID: branch) == boundaryID && vm.document.boundaries.count == 1,
+          "boundary: a second boundary on the same root is not created (D4)")
+    check(vm.selectedBoundaryID == boundaryID,
+          "boundary: creating one selects it")
+
+    // Lifecycle table, docs/proposals/boundary.md §2.
+    vm.delete(id: leafA)
+    check(vm.document.boundaries.count == 1,
+          "boundary: deleting a covered descendant keeps the boundary")
+    vm.delete(id: other)
+    check(vm.document.boundaries.count == 1,
+          "boundary: deleting an unrelated node keeps the boundary")
+    vm.delete(id: branch)
+    check(vm.document.boundaries.isEmpty,
+          "boundary: deleting the anchor prunes the boundary")
+    check(vm.selectedBoundaryID == nil,
+          "boundary: pruning the selected boundary clears the selection")
+    vm.undo()
+    check(vm.document.boundaries.count == 1 && vm.document.root.contains(branch),
+          "boundary: undo restores the anchor and its boundary")
+    vm.redo()
+    check(vm.document.boundaries.isEmpty, "boundary: redo prunes it again")
+    vm.undo()
+    check(vm.document.boundaries.count == 1, "boundary: undo/redo round-trips the boundary")
+
+    let target = vm.addChild(to: nil)!
+    vm.move(id: branch, toParent: target)
+    check(vm.boundary(forRoot: branch) != nil,
+          "boundary: moving the anchor keeps the boundary on it")
+    vm.move(id: leafB, toParent: target)
+    check(vm.boundary(forRoot: branch) != nil,
+          "boundary: moving a descendant out keeps the boundary")
+    check(vm.document.root.find(target)?.children.count == 2,
+          "boundary: control — both moves actually landed")
+
+    // Batch delete: anchors inside the batch take their boundaries with them.
+    vm.newDocument()
+    let b1 = vm.addChild(to: nil)!
+    let b2 = vm.addChild(to: nil)!
+    _ = vm.addBoundary(rootID: b1)
+    _ = vm.addBoundary(rootID: b2)
+    vm.batchSelection = [b1, b2]
+    vm.deleteBatch()
+    check(vm.document.boundaries.isEmpty,
+          "boundary: batch-deleting the anchors prunes both")
+
+    // Reordering siblings changes the order, never the anchor.
+    vm.newDocument()
+    let r1 = vm.addChild(to: nil)!
+    let r2 = vm.addChild(to: nil)!
+    _ = vm.addBoundary(rootID: r1)
+    vm.moveSibling(id: r1, offset: 1)
+    check(vm.document.boundaries.count == 1 && vm.document.boundaries[0].rootID == r1
+          && vm.document.root.children.first?.id == r2,
+          "boundary: reordering siblings changes nothing but the order")
+
+    // Tab switch clears the selection, not the document's boundary.
+    vm.openInNewTab(MindDocument(title: "B", root: MindNode(text: "B")))
+    check(vm.selectedBoundaryID == nil,
+          "boundary: switching tabs clears the boundary selection")
+}
+
+do {
+    // Geometry: coverage is the anchor plus its visible descendants, padded.
+    let vm = MindMapViewModel()
+    vm.newDocument()
+    let anchor = vm.addChild(to: nil)!
+    let child = vm.addChild(to: anchor)!
+    let grand = vm.addChild(to: child)!
+    let outside = vm.addChild(to: nil)!
+    _ = vm.addBoundary(rootID: anchor)
+
+    let layouts = LayoutEngine.layout(root: vm.document.root, direction: .logicRight)
+    let boundary = vm.document.boundaries[0]
+    let geo = BoundaryGeometry.frame(for: boundary, root: vm.document.root,
+                                     layouts: layouts, origin: .zero)
+    check(geo != nil, "boundary geometry: a live boundary produces a frame")
+    if let geo {
+        let covered = [anchor, child, grand].compactMap { layouts[$0]?.frame }
+        check(covered.count == 3 && covered.allSatisfy { geo.rect.contains($0) },
+              "boundary geometry: the frame contains the anchor and every descendant")
+        check(!geo.rect.intersects(layouts[outside]!.frame),
+              "boundary geometry: the frame excludes nodes outside the subtree")
+        let shifted = BoundaryGeometry.frame(for: boundary, root: vm.document.root,
+                                             layouts: layouts, origin: CGPoint(x: 100, y: 50))
+        check(shifted?.rect == geo.rect.offsetBy(dx: 100, dy: 50),
+              "boundary geometry: origin offsets the frame like every other surface")
+
+        // Collapsing the anchor hides the descendants from layout; the frame
+        // shrinks to the anchor instead of disappearing.
+        vm.toggleCollapse(id: anchor)
+        let collapsedLayouts = LayoutEngine.layout(root: vm.document.root, direction: .logicRight)
+        let collapsed = BoundaryGeometry.frame(for: vm.document.boundaries[0], root: vm.document.root,
+                                               layouts: collapsedLayouts, origin: .zero)
+        check(collapsed?.rect == collapsedLayouts[anchor]!.frame.insetBy(dx: -10, dy: -10),
+              "boundary geometry: a collapsed anchor frames only its own node, padded 10pt")
+
+        let orphan = MindBoundary(rootID: UUID())
+        check(BoundaryGeometry.frame(for: orphan, root: vm.document.root,
+                                     layouts: collapsedLayouts, origin: .zero) == nil,
+              "boundary geometry: a missing anchor has no frame")
+    }
+
+    // Persistence: tolerant decode in both directions.
+    let encoded = try JSONEncoder().encode(vm.document)
+    let decoded = try JSONDecoder().decode(MindDocument.self, from: encoded)
+    check(decoded.boundaries == vm.document.boundaries,
+          "boundary: Codable round-trip preserves id and rootID")
+
+    let rootIDString = "11111111-1111-1111-1111-111111111111"
+    let legacyJSON = """
+    {"title":"舊檔","themeName":"ocean","directionName":"logicRight",
+     "root":{"id":"\(rootIDString)","text":"中心"}}
+    """
+    let legacyDoc = try? JSONDecoder().decode(MindDocument.self, from: Data(legacyJSON.utf8))
+    check(legacyDoc?.boundaries.isEmpty == true,
+          "boundary: an older file without the field decodes to none")
+
+    let futureJSON = """
+    {"title":"未來","themeName":"ocean","directionName":"logicRight",
+     "root":{"id":"\(rootIDString)","text":"中心"},
+     "boundaries":[{"rootID":"\(rootIDString)","style":"neon"}]}
+    """
+    let futureDoc = try? JSONDecoder().decode(MindDocument.self, from: Data(futureJSON.utf8))
+    check(futureDoc?.boundaries.count == 1
+          && futureDoc?.boundaries[0].rootID == UUID(uuidString: rootIDString),
+          "boundary: an unknown field is ignored and a missing id is regenerated")
+
+    // Export: drawn in vector/bitmap formats, invisible to the tree formats.
+    vm.removeBoundary(rootID: anchor)
+    let svgWithout = MapExporter.svg(vm.document)
+    let mdWithout = try MapExporter.markdown(vm.document)
+    _ = vm.addBoundary(rootID: anchor)
+    let svgWith = MapExporter.svg(vm.document)
+    let mdWith = try MapExporter.markdown(vm.document)
+    check(svgWith.components(separatedBy: "<rect").count
+          == svgWithout.components(separatedBy: "<rect").count + 1,
+          "boundary: SVG export draws exactly one extra rect")
+    check(mdWith == mdWithout,
+          "boundary: Markdown export is unchanged — no fake boundary node")
+
+    check(["Sources/MindFlowKit/MapCanvasView.swift", "Sources/MindFlowKit/StaticMapView.swift",
+           "Sources/MindFlowKit/MapExporter.swift"].allSatisfy {
+        projectSource($0).contains("BoundaryGeometry.frame")
+    }, "boundary: canvas, static render and SVG all call the one geometry function")
+
+    // ⇧⌘B is XMind's Insert Boundary. p1's round-29 lesson: a menu key that the
+    // monitor silently consumes is worse than no shortcut, so assert it is free.
+    check(!KeyboardMonitor.performCoreShortcut(characters: "b", modifiers: [.command, .shift], vm: vm),
+          "boundary: the core shortcut path does not consume ⇧⌘B")
+    check(!projectSource("Sources/MindFlowKit/KeyboardMonitor.swift").contains("\"b\""),
+          "boundary: no key string in the monitor claims b, so the menu can fire")
+    check(projectSource("Sources/MindFlow/MindFlowApp.swift")
+            .contains(".keyboardShortcut(\"b\", modifiers: [.command, .shift])"),
+          "boundary: 加入外框 is bound to XMind's ⇧⌘B")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {
