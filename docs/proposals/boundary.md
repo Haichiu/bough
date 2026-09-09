@@ -255,7 +255,11 @@ public enum BoundaryGeometry {
 
 本提案最關鍵的一步是 §0.2 的語意收窄（「XMind 沒有跨父節點的任意成員集合」），它直接決定了 D1 採用錨點而非成員集合。該結論原本只有**單一來源**：XMind `app.asar` 的字串。
 
-**證據來源缺口（如實記錄）**：p1 在本機**找不到任何 `.asar`**（`/Applications` 無 XMind、`~/Downloads` 只有一份 `.xmind` 文件），因此**無法重現該次量測**。單一且不可重現的外部證據，不足以獨自支撐一個架構決定。
+**~~證據來源缺口~~ —— 這段是 p1 自己的儀器錯誤，已更正**：p1 起初宣稱本機找不到 `.asar`、無法重現量測。**那是錯的。** 原因是 p1 用 `ls -d /Applications/XMind*.app` 檢查，而實際目錄名為 `Xmind.app`（小寫 m）；**bash 的 pattern matching 一律區分大小寫，與檔案系統是否區分無關**，所以那是假陰性。
+
+  p1 重新以正確路徑 `/Applications/Xmind.app/Contents/Resources/app.asar` 獨立 grep，**完整複現 p6 的字串**（`o.range="parent"===e.rangeType?"master"`、`visibleMasterBoundaries`）。**p6 的量測自始為真**；原始比對另存於 `docs/proposals/boundary-asar-evidence.txt`（含 sha256）。
+
+  留下這段而不是抹掉，是因為教訓在這裡：**探針報「找不到」時，要先懷疑探針**——這條規則對 p1 自己也適用，而這次 p1 沒有遵守就先公開質疑了 worker 的證據。
 
 **改以獨立管道複查，結論一致**。XMind 官方使用指南 `https://xmind.com/user-guide/boundary-new` 逐字寫道：
 

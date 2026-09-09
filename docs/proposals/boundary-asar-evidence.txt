@@ -1,0 +1,25 @@
+# XMind app.asar evidence for docs/proposals/boundary.md §0.2
+#
+# Why this file exists: the boundary proposal's central claim (XMind has two
+# boundary range types, 'children' and 'parent'/master) rested on strings read
+# out of XMind's own app bundle. p1 could not reproduce the measurement, so the
+# raw matches are preserved here verbatim instead of being re-derived from memory.
+#
+# Source file
+#   path: /Applications/Xmind.app/Contents/Resources/app.asar
+#   size: 211691426 bytes
+#   mtime: Feb 10 00:44:40 2026
+#   sha256: 8966835b089272b2672fa9ecd543a2ce243634e2e12ff432f3b1fc5afdb56330  /Applications/Xmind.app/Contents/Resources/app.asar
+#
+# Commands (macOS grep has no -P; -a treats the bundle as text, -o prints only the match)
+#   grep -ao 'rangeType:i.rangeType??"children".\{0,80\}' "$ASAR"
+#   grep -ao 'o.range="parent"===e.rangeType\?"master".\{0,40\}' "$ASAR"
+#   grep -ao 'visibleMasterBoundaries' "$ASAR" | head -2
+#   grep -ao 'y(d(t),"boundaries",\[\])' "$ASAR" | head -2
+#
+# Verbatim matches (first occurrence each)
+  rangeType:i.rangeType??"children",rangeStart:i.rangeStart??0,rangeEnd:i.rangeEnd??0,title:i.title??""
+  o.range="parent"===e.rangeType?"master":`(${e.rangeStart},${e.rangeEnd})`,e.titl
+  visibleMasterBoundaries
+  y(d(t),"boundaries",[])
+  boundaryAddingTitleButton
