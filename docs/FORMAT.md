@@ -63,7 +63,7 @@
 | 刪掉 `rootID` 的子孫 | 框自動縮小（`boundary: deleting a covered descendant keeps the boundary`） |
 | 把 `rootID` 搬到別的父節點 | 框跟著錨點走（`boundary: moving the anchor keeps the boundary on it`） |
 | 把子孫搬離 `rootID` | 框保留，該子孫不再被框住（`boundary: moving a descendant out keeps the boundary`） |
-| 收合 `rootID` | 框仍在，只框住 `rootID` 自己（`boundary: a collapsed anchor frames only its own node, padded 10pt`） |
+| 收合 `rootID` | 框仍在，只框住 `rootID` 自己（`boundary geometry: a collapsed anchor frames only its own node, padded 10pt`） |
 | 刪除 `rootID`（或它的祖先） | 這筆外框記錄一併移除（`boundary: deleting the anchor prunes the boundary`；祖先的情況未單獨驗證） |
 | 調整兄弟順序 | 只改順序，外框不受影響（`boundary: reordering siblings changes nothing but the order`） |
 
