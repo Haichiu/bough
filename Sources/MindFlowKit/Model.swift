@@ -11,15 +11,20 @@ public struct MindNode: Codable, Identifiable, Equatable {
     /// Optional attached picture stored as a data URL (single-file portability).
     public var image: String?
     public var colorTag: String?
+    /// Node fill override: one of `Theme.colorTags`' six keys, or nil to inherit
+    /// the style's own fill. Deliberately not a free colour code — the six-key
+    /// palette is what keeps the themes coherent.
+    public var fillTag: String?
     public var children: [MindNode] = []
 
     private enum CodingKeys: String, CodingKey {
-        case id, text, note, collapsed, marked, colorTag, url, image, children
+        case id, text, note, collapsed, marked, colorTag, fillTag, url, image, children
     }
 
     public init(id: UUID = UUID(), text: String = "", note: String = "",
                 collapsed: Bool = false, marked: Bool = false,
-                colorTag: String? = nil, url: String? = nil, image: String? = nil,
+                colorTag: String? = nil, fillTag: String? = nil,
+                url: String? = nil, image: String? = nil,
                 children: [MindNode] = []) {
         self.id = id
         self.text = text
@@ -27,6 +32,7 @@ public struct MindNode: Codable, Identifiable, Equatable {
         self.collapsed = collapsed
         self.marked = marked
         self.colorTag = colorTag
+        self.fillTag = fillTag
         self.url = url
         self.image = image
         self.children = children
@@ -40,6 +46,7 @@ public struct MindNode: Codable, Identifiable, Equatable {
         note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
         collapsed = try container.decodeIfPresent(Bool.self, forKey: .collapsed) ?? false
         colorTag = try container.decodeIfPresent(String.self, forKey: .colorTag)
+        fillTag = try container.decodeIfPresent(String.self, forKey: .fillTag)
         url = try container.decodeIfPresent(String.self, forKey: .url)
         image = try container.decodeIfPresent(String.self, forKey: .image)
         marked = try container.decodeIfPresent(Bool.self, forKey: .marked) ?? false

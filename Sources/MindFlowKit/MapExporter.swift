@@ -196,10 +196,16 @@ public enum MapExporter {
             guard let node = document.root.find(l.id) else { continue }
             let f = l.frame
             let style = NodeStyle.of(depth: l.depth, palette: palette, branchColor: palette.color(forIndex: l.colorIndex))
+            // A per-node fill override wins over the style's own fill. Opaque,
+            // like every filled state in NodeStyle, so the SVG agrees with the
+            // canvas instead of inventing a second paint rule.
+            let fillOverride = node.fillTag.flatMap { Theme.colorTag(named: $0) }
+            let fillHex = fillOverride.map { hex($0) } ?? hex(style.fillBase)
+            let fillOpacity = fillOverride == nil ? style.fillOpacity : 1.0
             let strokeAttrs = style.strokeBase.map {
                 "stroke=\"\(hex($0))\" stroke-opacity=\"\(style.strokeOpacity)\" stroke-width=\"\(style.strokeWidth)\""
             } ?? "stroke=\"none\""
-            var rect = "<rect x=\"\(f.minX)\" y=\"\(f.minY)\" width=\"\(f.width)\" height=\"\(f.height)\" rx=\"\(style.cornerRadius)\" fill=\"\(hex(style.fillBase))\" fill-opacity=\"\(style.fillOpacity)\" \(strokeAttrs)/>"
+            var rect = "<rect x=\"\(f.minX)\" y=\"\(f.minY)\" width=\"\(f.width)\" height=\"\(f.height)\" rx=\"\(style.cornerRadius)\" fill=\"\(fillHex)\" fill-opacity=\"\(fillOpacity)\" \(strokeAttrs)/>"
             if !node.note.isEmpty {
                 rect += "<title>備註：\(esc(node.note))</title>"
             }

@@ -1260,6 +1260,16 @@ public final class MindMapViewModel: ObservableObject {
         notify(tag == nil ? "已清除顏色標記" : "已加上顏色標記")
     }
 
+    /// Sets (or clears with nil) a node's fill override. Unknown tags are
+    /// ignored rather than stored: the palette is `Theme.colorTags`' six keys,
+    /// not free colour codes, and a stray key would export as an invisible fill.
+    public func setNodeFill(id: UUID, tag: String?) {
+        guard document.root.contains(id) else { return }
+        guard tag == nil || Theme.colorTag(named: tag ?? "") != nil else { return }
+        mutate { $0.root.update(id) { node in node.fillTag = tag } }
+        notify(tag == nil ? "已清除填色" : "已套用填色")
+    }
+
     /// Applies (or clears with nil) one color tag across an entire subtree.
     public func setSubtreeColorTag(id: UUID, tag: String?) {
         guard document.root.contains(id) else { return }

@@ -635,6 +635,101 @@ do {
     check(!svgT.contains("fill=\"#ffffff\"><rect") && !svgT.contains("<rect width=\"100%\""), "svg transparent skips background rect")
 }
 
+// MARK: - S4: per-node fill override (model half)
+//
+// The canvas half is separate; these checks pin the model, the save format and
+// the SVG. A fill override is one of Theme.colorTags' six keys — never a free
+// colour code — and it must not be confused with colorTag, which draws the 4pt
+// semantic bar in the very same colour.
+
+do {
+    var doc = MindDocument.new()
+    doc.root.children = [MindNode(text: "塗色", fillTag: "red"), MindNode(text: "原色")]
+    let json = String(data: try JSONEncoder().encode(doc), encoding: .utf8) ?? ""
+    let decoded = try JSONDecoder().decode(MindDocument.self, from: Data(json.utf8))
+    check(decoded.root.children[0].fillTag == "red", "fill override survives the save round-trip")
+    check(decoded.root.children[1].fillTag == nil,
+          "fill override: a node without one reads back nil (control)")
+    check(json.components(separatedBy: "\"fillTag\"").count - 1 == 1,
+          "fill override: only the overridden node writes the key")
+}
+
+do {
+    // A file written before the field existed must load, not throw.
+    let legacy = """
+    {"title":"t","themeName":"classic","root":{"id":"\(UUID().uuidString.lowercased())","text":"R","note":"","collapsed":false,"colorTag":"blue","children":[{"id":"\(UUID().uuidString.lowercased())","text":"C","note":"","collapsed":false,"marked":false,"children":[]}]}}
+    """
+    let doc = try JSONDecoder().decode(MindDocument.self, from: Data(legacy.utf8))
+    check(doc.root.fillTag == nil && doc.root.children[0].fillTag == nil,
+          "fill override: a file without the field decodes to nil, not an error")
+    check(doc.root.colorTag == "blue", "fill override: the rest of an old file still decodes")
+}
+
+do {
+    try await MainActor.run {
+        let vm = MindMapViewModel()
+        vm.newDocument()
+        let a = vm.addChild(to: nil)!
+        let b = vm.addChild(to: nil)!
+        vm.setNodeFill(id: a, tag: "green")
+        check(vm.document.root.find(a)?.fillTag == "green", "setNodeFill stores the override")
+        check(vm.document.root.find(b)?.fillTag == nil,
+              "setNodeFill leaves a sibling untouched (control)")
+        // Pin the tree as well as the field: without this, an undo that simply
+        // popped the earlier addChild entry would satisfy the fill assertion.
+        let idsBefore = vm.document.root.children.map(\.id)
+        vm.undo()
+        check(vm.document.root.find(a)?.fillTag == nil, "undo clears the fill override")
+        check(vm.document.root.children.map(\.id) == idsBefore,
+              "undo of the fill override leaves the tree alone (control)")
+        vm.redo()
+        check(vm.document.root.find(a)?.fillTag == "green", "redo restores the fill override")
+        check(vm.document.root.children.map(\.id) == idsBefore, "redo keeps the tree (control)")
+        vm.setNodeFill(id: a, tag: "chartreuse")
+        check(vm.document.root.find(a)?.fillTag == "green",
+              "setNodeFill refuses a tag outside the six-key palette")
+        vm.setNodeFill(id: a, tag: nil)
+        check(vm.document.root.find(a)?.fillTag == nil, "setNodeFill(nil) clears the override")
+    }
+}
+
+do {
+    let redHex = "#e05252" // Theme.colorTags "red"
+    let painted = MindDocument(title: "T", root: MindNode(text: "Root", children: [
+        MindNode(text: "塗色", fillTag: "red"),
+    ]))
+    let plain = MindDocument(title: "T", root: MindNode(text: "Root", children: [
+        MindNode(text: "塗色"),
+    ]))
+    let svg = MapExporter.svg(painted)
+    check(svg.contains("fill=\"\(redHex)\" fill-opacity=\"1.0\""),
+          "svg paints the node with the override colour")
+    check(!MapExporter.svg(plain).contains(redHex),
+          "svg without an override never contains the override colour (control)")
+
+    // Same colour, different job: colorTag's 4pt bar must not be mistaken for a fill.
+    let both = MindDocument(title: "T", root: MindNode(text: "Root", children: [
+        MindNode(text: "兩者", colorTag: "red", fillTag: "red"),
+    ]))
+    let cleared = MindDocument(title: "T", root: MindNode(text: "Root", children: [
+        MindNode(text: "兩者", colorTag: "red"),
+    ]))
+    check(MapExporter.svg(both).contains("fill=\"\(redHex)\" fill-opacity=\"1.0\""),
+          "svg fill override and colorTag bar coexist")
+    check(!MapExporter.svg(cleared).contains("fill=\"\(redHex)\" fill-opacity=\"1.0\""),
+          "clearing the override removes the fill even when the colorTag bar keeps the colour")
+    check(MapExporter.svg(cleared).contains("fill=\"\(redHex)\""),
+          "clearing the override keeps the colorTag bar (control)")
+
+    // Text formats have nowhere to put a fill; the check names say so.
+    check(!(try! MapExporter.markdown(painted)).contains(redHex),
+          "markdown does not carry the fill override (text format has no fill)")
+    check(!(try! MapExporter.opml(painted)).contains(redHex),
+          "opml does not carry the fill override (text format has no fill)")
+    check(!(try! MapExporter.freemind(painted)).contains(redHex),
+          "freemind does not carry the fill override (text format has no fill)")
+}
+
 // MARK: - v1.3: markdown import round-trip
 
 do {
