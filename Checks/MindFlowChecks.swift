@@ -82,6 +82,11 @@ func themeCheck() {
     check(classicBranch.fillOpacity == 1, "classic theme still fills a depth-1 topic")
     check(classicLeaf.strokeWidth == 1, "classic theme still borders a deep topic")
     check(classicLeaf.cornerRadius == 9, "classic theme keeps its original corner radius")
+    check(classicLeaf.horizontalInset == 14, "classic theme keeps its original padding")
+
+    // Removing the box only reads as deliberate if the space it occupied stays.
+    check(minimalLeaf.horizontalInset > classicLeaf.horizontalInset,
+          "minimal theme pads a topic more generously than classic, not less")
 
     // 6. Selecting a theme and coming back must land on the same values. The
     //    per-theme values are cached, and a cache that mutates under selection
@@ -6956,6 +6961,46 @@ do {
         check(vm.document.root.text == "TAB-A-EDITED",
               "T-054 redo is also per-tab")
     }
+}
+
+// MARK: - ⌘/ folds the branch, ⇧⌘/ (⌘?) opens the shortcut sheet
+
+do {
+    let vm = MindMapViewModel()
+    vm.newDocument()
+    let branch = vm.addChild(to: nil)!
+    _ = vm.addChild(to: branch)!
+    vm.selection = branch
+
+    check(KeyboardMonitor.performBranchFold(characters: "/", modifiers: [.command], vm: vm),
+          "⌘/ is claimed by the monitor")
+    check(vm.document.root.find(branch)?.collapsed == true,
+          "⌘/ folds the selected branch")
+
+    // ⇧⌘/ arrives as charactersIgnoringModifiers "/" too; the shift flag is the
+    // only difference, and the monitor must decline it so the menu item fires.
+    check(!KeyboardMonitor.performBranchFold(characters: "/", modifiers: [.command, .shift], vm: vm),
+          "⇧⌘/ is declined by the monitor")
+    check(vm.document.root.find(branch)?.collapsed == true,
+          "⇧⌘/ does not toggle the fold state")
+    check(!vm.showHelp,
+          "the monitor never opens the shortcut sheet itself — that is the menu item's job")
+
+    // ⌥⌘/ belongs to performCoreShortcut's all-branches toggle; the fold path
+    // must not also claim it.
+    check(!KeyboardMonitor.performBranchFold(characters: "/", modifiers: [.option, .command], vm: vm),
+          "⌥⌘/ is not claimed by the branch-fold path")
+    check(KeyboardMonitor.performCoreShortcut(characters: "/", modifiers: [.option, .command], vm: vm),
+          "⌥⌘/ still toggles all branches through the core path")
+
+    let appSource = projectSource("Sources/MindFlow/MindFlowApp.swift")
+    check(appSource.contains(".keyboardShortcut(\"/\", modifiers: [.command, .shift])"),
+          "the shortcut-sheet menu item is bound to ⇧⌘/ (⌘?)")
+    check(!appSource.contains(".keyboardShortcut(\"/\", modifiers: [.command])"),
+          "no menu item claims bare ⌘/ any more")
+    check(projectSource("Sources/MindFlowKit/ContentView.swift")
+            .contains("(\"⌘?\", \"開啟這份鍵盤快速鍵說明\")"),
+          "the in-app shortcut table lists ⌘?")
 }
 
 if failures == 0 {

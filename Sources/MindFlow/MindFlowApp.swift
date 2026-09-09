@@ -64,8 +64,10 @@ struct MindFlowApp: App {
         }
         .commands {
             CommandGroup(after: .help) {
+                // ⌘? is macOS's standard Help shortcut. Bare ⌘/ belongs to
+                // editor.toggleBranch, which the key monitor claims for itself.
                 Button("鍵盤快速鍵…") { vm.showHelp = true }
-                    .keyboardShortcut("/", modifiers: [.command])
+                    .keyboardShortcut("/", modifiers: [.command, .shift])
             }
         }
         .windowToolbarStyle(.unified)

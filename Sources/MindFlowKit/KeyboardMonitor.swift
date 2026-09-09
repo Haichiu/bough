@@ -183,6 +183,23 @@ public final class KeyboardMonitor {
         return false
     }
 
+    /// ⌘/ folds the selected branch (XMind's editor.toggleBranch). ⇧⌘/ is the
+    /// macOS Help shortcut and what the "鍵盤快速鍵…" menu item advertises; both
+    /// arrive as charactersIgnoringModifiers "/", so the shift flag is the only
+    /// thing telling them apart. Returns true when the monitor must swallow the
+    /// key — false lets it fall through to the menu key equivalent.
+    @discardableResult
+    public static func performBranchFold(characters: String,
+                                         modifiers rawModifiers: NSEvent.ModifierFlags,
+                                         vm: MindMapViewModel) -> Bool {
+        let modifiers = rawModifiers
+            .intersection(.deviceIndependentFlagsMask)
+            .subtracting([.capsLock, .help, .numericPad, .function])
+        guard characters == "/", modifiers == [.command] else { return false }
+        if let selection = vm.selection { vm.toggleCollapse(id: selection) }
+        return true
+    }
+
     /// D2 decision shared by the event monitor and the behavioral checks — same
     /// dispatch-path pattern as performCoreShortcut. A bare printable character
     /// (p1-owned guard, unchanged: a selection or open session, no modifiers
@@ -367,9 +384,9 @@ public final class KeyboardMonitor {
             }
             // Xmind parity: ⌘/ folds a branch, ⇧⌘N opens the notes editor. Both are read
             // straight out of Xmind's own command table (editor.toggleBranch,
-            // editor.showNotesEditor) rather than guessed.
-            if chars == "/" {
-                if let selection = vm.selection { vm.toggleCollapse(id: selection) }
+            // editor.showNotesEditor) rather than guessed. ⇧⌘/ is the Help shortcut, so
+            // performBranchFold declines it and the event reaches the menu item.
+            if Self.performBranchFold(characters: chars, modifiers: flags, vm: vm) {
                 return nil
             }
             if chars.lowercased() == "n", flags.contains(.shift) {
