@@ -46,7 +46,7 @@ public struct NodeStyle {
                              textColor: palette.creamText,
                              fillBase: palette.accent, fillOpacity: 1,
                              strokeBase: nil, strokeOpacity: 0, strokeWidth: 0,
-                             horizontalInset: 24, verticalInset: 13,
+                             horizontalInset: 24 * shape.insetScale, verticalInset: 13 * shape.insetScale,
                              lineLimit: 3, maxTextWidth: 280,
                              minSize: CGSize(width: 140, height: 52))
         case 1:
@@ -56,7 +56,7 @@ public struct NodeStyle {
                              fillBase: shape.branchFilled ? branch : .clear,
                              fillOpacity: shape.branchFilled ? 1 : 0,
                              strokeBase: nil, strokeOpacity: 0, strokeWidth: 0,
-                             horizontalInset: 18, verticalInset: 10,
+                             horizontalInset: 18 * shape.insetScale, verticalInset: 10 * shape.insetScale,
                              lineLimit: 3, maxTextWidth: 260,
                              minSize: CGSize(width: 76, height: 38))
         default:
@@ -70,7 +70,7 @@ public struct NodeStyle {
                              strokeBase: shape.leafStroked ? branch : nil,
                              strokeOpacity: shape.leafStroked ? 1 : 0,
                              strokeWidth: shape.leafStroked ? 1 : 0,
-                             horizontalInset: 14, verticalInset: 8,
+                             horizontalInset: 14 * shape.insetScale, verticalInset: 8 * shape.insetScale,
                              lineLimit: 4, maxTextWidth: 250,
                              minSize: CGSize(width: 64, height: 32))
         }

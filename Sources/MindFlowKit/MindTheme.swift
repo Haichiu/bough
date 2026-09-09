@@ -63,12 +63,18 @@ public struct NodeMorphology: Sendable, Equatable {
     public let leafFilled: Bool
     /// Deeper topics carry a hairline border in their branch colour.
     public let leafStroked: Bool
+    /// Multiplies the padding inside a topic. Once the box is gone the padding
+    /// stops being decoration and becomes the only thing holding topics apart,
+    /// so a borderless theme needs more of it, not less.
+    public let insetScale: CGFloat
 
-    public init(cornerScale: CGFloat, branchFilled: Bool, leafFilled: Bool, leafStroked: Bool) {
+    public init(cornerScale: CGFloat, branchFilled: Bool, leafFilled: Bool,
+                leafStroked: Bool, insetScale: CGFloat = 1.0) {
         self.cornerScale = cornerScale
         self.branchFilled = branchFilled
         self.leafFilled = leafFilled
         self.leafStroked = leafStroked
+        self.insetScale = insetScale
     }
 }
 
@@ -117,7 +123,8 @@ extension MindTheme {
                 darkTextPrimary: 0xF4F4F5, darkTextSecondary: 0xA1A1AA,
                 darkSecondarySurface: 0x27272A, darkOnAccent: 0x18181B,
                 morphology: NodeMorphology(cornerScale: 0.35, branchFilled: false,
-                                           leafFilled: false, leafStroked: false))
+                                           leafFilled: false, leafStroked: false,
+                                           insetScale: 1.3))
         case .mono:
             return MindThemeSpec(
                 accent: 0x3F3F46,
@@ -128,7 +135,8 @@ extension MindTheme {
                 darkTextPrimary: 0xEDEDEF, darkTextSecondary: 0x9B9BA1,
                 darkSecondarySurface: 0x2A2A2E, darkOnAccent: 0xFAFAFA,
                 morphology: NodeMorphology(cornerScale: 0.0, branchFilled: false,
-                                           leafFilled: false, leafStroked: true))
+                                           leafFilled: false, leafStroked: true,
+                                           insetScale: 1.15))
         case .indigo:
             return MindThemeSpec(
                 accent: 0x4338CA,
