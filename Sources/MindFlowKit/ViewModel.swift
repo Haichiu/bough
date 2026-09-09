@@ -587,6 +587,19 @@ public final class MindMapViewModel: ObservableObject {
     /// Undo entries made before entering presentation; steps inside are non-undoable.
     private var undoBaselineCount: Int?
 
+    /// The active visual theme. Persisted.
+    ///
+    /// The canvas reads colours from the static `Palette.screen`, so the theme
+    /// has to be pushed into `Palette.active` rather than threaded through every
+    /// view. Assigning here is the single place that happens.
+    @Published public var themeID: MindTheme = MindTheme(rawValue: UserDefaults.standard.string(forKey: "themeID") ?? "") ?? .classic {
+        didSet {
+            guard oldValue != themeID else { return }
+            Palette.active = themeID
+            UserDefaults.standard.set(themeID.rawValue, forKey: "themeID")
+        }
+    }
+
     /// Shows hierarchical numbers ("2.1") in the outline view. Persisted.
     @Published public var showOutlineNumbers: Bool = UserDefaults.standard.bool(forKey: "showOutlineNumbers") {
         didSet {

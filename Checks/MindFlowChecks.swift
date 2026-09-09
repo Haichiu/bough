@@ -1,3 +1,104 @@
+// MARK: - Themes
+//
+// The GUI half of this feature (does the canvas actually repaint when the theme
+// changes?) is deliberately NOT asserted here -- it needs a real window, and a
+// model-layer check cannot see paint. These assertions cover what they can
+// honestly cover: that the values a theme resolves to are the values intended,
+// that the classic theme is byte-identical to the pre-theme palette, and that
+// selecting a theme never damages another one.
+func themeCheck() {
+    let restore = Palette.active
+    defer { Palette.active = restore }
+
+    // 1. Classic is the original palette, exactly. Every other colour assertion
+    //    in this file describes classic, so if this drifts they all become
+    //    descriptions of a state that no longer ships.
+    Palette.active = .classic
+    check(Palette.light.canvasRGB.hex == "#f2efe7", "theme classic keeps the original light canvas")
+    check(Palette.dark.canvasRGB.hex == "#101819", "theme classic keeps the original dark canvas")
+    check(Palette.light.accentRGB.hex == "#3368a0", "theme classic keeps the original accent")
+
+    // 2. Themes are actually different from one another. A picker whose options
+    //    all look the same is a lie in the menu.
+    var canvases: Set<String> = []
+    var accents: Set<String> = []
+    for theme in MindTheme.allCases {
+        Palette.active = theme
+        canvases.insert(Palette.light.canvasRGB.hex)
+        accents.insert(Palette.light.accentRGB.hex)
+    }
+    check(canvases.count == MindTheme.allCases.count, "every theme has a distinct light canvas")
+    check(accents.count == MindTheme.allCases.count, "every theme has a distinct accent")
+
+    // 3. Legibility is not optional. Whatever a theme does decoratively, body
+    //    text has to clear the WCAG AA 4.5:1 floor against the surface it sits
+    //    on, in both appearances. This is the assertion that stops a future
+    //    "pretty" theme from shipping unreadable.
+    for theme in MindTheme.allCases {
+        Palette.active = theme
+        let name = theme.rawValue
+        let lightOnCanvas = Palette.light.textPrimaryRGB.contrastRatio(with: Palette.light.canvasRGB)
+        let lightOnCard = Palette.light.textPrimaryRGB.contrastRatio(with: Palette.light.cardRGB)
+        let darkOnCanvas = Palette.dark.textPrimaryRGB.contrastRatio(with: Palette.dark.canvasRGB)
+        let darkOnCard = Palette.dark.textPrimaryRGB.contrastRatio(with: Palette.dark.cardRGB)
+        check(lightOnCanvas >= 4.5, "theme \(name) light primary text clears 4.5:1 on canvas (\(String(format: "%.2f", lightOnCanvas)))")
+        check(lightOnCard >= 4.5, "theme \(name) light primary text clears 4.5:1 on card")
+        check(darkOnCanvas >= 4.5, "theme \(name) dark primary text clears 4.5:1 on canvas")
+        check(darkOnCard >= 4.5, "theme \(name) dark primary text clears 4.5:1 on card")
+
+        // Secondary text carries real content in the minimal themes, where deep
+        // topics are drawn in it, so hold it to the same body-text floor rather
+        // than the 3:1 large-text one.
+        let secondaryLight = Palette.light.textSecondaryRGB.contrastRatio(with: Palette.light.canvasRGB)
+        let secondaryDark = Palette.dark.textSecondaryRGB.contrastRatio(with: Palette.dark.canvasRGB)
+        check(secondaryLight >= 4.5, "theme \(name) light secondary text clears 4.5:1 (\(String(format: "%.2f", secondaryLight)))")
+        check(secondaryDark >= 4.5, "theme \(name) dark secondary text clears 4.5:1 (\(String(format: "%.2f", secondaryDark)))")
+    }
+
+    // 4. The marked-node highlight keeps one meaning everywhere. Its lightness is
+    //    re-solved per theme so it stays visible, but it must never drift to a
+    //    different colour, or the badge stops being a status signal.
+    for theme in MindTheme.allCases {
+        Palette.active = theme
+        let hue = Palette.light.statusHighlightOKLCh.hue
+        check(abs(hue - Palette.statusHighlightSourceOKLCh.hue) < 12,
+              "theme \(theme.rawValue) keeps the marked-node highlight on its source hue")
+        check(Palette.light.statusHighlightRGB.contrastRatio(with: Palette.light.canvasRGB) >= 3.1,
+              "theme \(theme.rawValue) marked highlight stays visible on canvas")
+    }
+
+    // 5. Morphology, not just colour. A "minimal" theme that still draws every
+    //    topic as a filled or bordered box has not done the thing it claims.
+    Palette.active = .minimal
+    let minimalBranch = NodeStyle.of(depth: 1)
+    let minimalLeaf = NodeStyle.of(depth: 2)
+    check(minimalBranch.fillOpacity == 0, "minimal theme draws no fill behind a depth-1 topic")
+    check(minimalLeaf.fillOpacity == 0, "minimal theme draws no fill behind a deep topic")
+    check(minimalLeaf.strokeWidth == 0, "minimal theme draws no border around a deep topic")
+
+    Palette.active = .classic
+    let classicBranch = NodeStyle.of(depth: 1)
+    let classicLeaf = NodeStyle.of(depth: 2)
+    check(classicBranch.fillOpacity == 1, "classic theme still fills a depth-1 topic")
+    check(classicLeaf.strokeWidth == 1, "classic theme still borders a deep topic")
+    check(classicLeaf.cornerRadius == 9, "classic theme keeps its original corner radius")
+
+    // 6. Selecting a theme and coming back must land on the same values. The
+    //    per-theme values are cached, and a cache that mutates under selection
+    //    would corrupt whichever theme was visited first.
+    Palette.active = .indigo
+    _ = Palette.light.canvasRGB
+    Palette.active = .classic
+    check(Palette.light.canvasRGB.hex == "#f2efe7", "returning to classic restores it exactly")
+
+    // 7. The persisted form round-trips. The stored string is what survives a
+    //    relaunch, so an unreadable one silently resets the user's choice.
+    for theme in MindTheme.allCases {
+        check(MindTheme(rawValue: theme.rawValue) == theme, "theme \(theme.rawValue) round-trips through its stored form")
+    }
+    check(MindTheme(rawValue: "nonsense") == nil, "an unknown stored theme is rejected rather than guessed")
+}
+
 import AppKit
 import CoreGraphics
 import CoreText
@@ -5534,6 +5635,7 @@ let t043Check: () -> Void = {
 }
 
 t043Check()
+themeCheck()
 
 // MARK: - T-048: marked badge shared bottom-center geometry
 // Screen/PNG/PDF retain SF Symbol star.fill; SVG retains ★. Only their placement is shared.

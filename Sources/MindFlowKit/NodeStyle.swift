@@ -34,10 +34,15 @@ public struct NodeStyle {
 
     public static func of(depth: Int, palette: Palette = .screen, branchColor: Color? = nil) -> NodeStyle {
         let branch = branchColor ?? palette.accent
+        // Morphology, not just colour, belongs to the theme: a minimalist scheme
+        // builds hierarchy from type and whitespace instead of from fills and
+        // borders, so it has to be able to switch the boxes off rather than
+        // merely repaint them.
+        let shape = Palette.active.spec.morphology
         switch depth {
         case 0:
             return NodeStyle(font: .systemFont(ofSize: 18, weight: .semibold),
-                             cornerRadius: 14,
+                             cornerRadius: 14 * shape.cornerScale,
                              textColor: palette.creamText,
                              fillBase: palette.accent, fillOpacity: 1,
                              strokeBase: nil, strokeOpacity: 0, strokeWidth: 0,
@@ -45,10 +50,11 @@ public struct NodeStyle {
                              lineLimit: 3, maxTextWidth: 280,
                              minSize: CGSize(width: 140, height: 52))
         case 1:
-            return NodeStyle(font: .systemFont(ofSize: 15, weight: .medium),
-                             cornerRadius: 11,
-                             textColor: palette.creamText,
-                             fillBase: branch, fillOpacity: 1,
+            return NodeStyle(font: .systemFont(ofSize: 15, weight: shape.branchFilled ? .medium : .semibold),
+                             cornerRadius: 11 * shape.cornerScale,
+                             textColor: shape.branchFilled ? palette.creamText : palette.textPrimary,
+                             fillBase: shape.branchFilled ? branch : .clear,
+                             fillOpacity: shape.branchFilled ? 1 : 0,
                              strokeBase: nil, strokeOpacity: 0, strokeWidth: 0,
                              horizontalInset: 18, verticalInset: 10,
                              lineLimit: 3, maxTextWidth: 260,
@@ -57,10 +63,13 @@ public struct NodeStyle {
             // Deeper nodes use the shared card surface and identify their branch
             // with the same derived colour as the connector.
             return NodeStyle(font: .systemFont(ofSize: 13),
-                             cornerRadius: 9,
-                             textColor: palette.textPrimary,
-                             fillBase: palette.card, fillOpacity: 1,
-                             strokeBase: branch, strokeOpacity: 1, strokeWidth: 1,
+                             cornerRadius: 9 * shape.cornerScale,
+                             textColor: shape.leafFilled ? palette.textPrimary : palette.textSecondary,
+                             fillBase: shape.leafFilled ? palette.card : .clear,
+                             fillOpacity: shape.leafFilled ? 1 : 0,
+                             strokeBase: shape.leafStroked ? branch : nil,
+                             strokeOpacity: shape.leafStroked ? 1 : 0,
+                             strokeWidth: shape.leafStroked ? 1 : 0,
                              horizontalInset: 14, verticalInset: 8,
                              lineLimit: 4, maxTextWidth: 250,
                              minSize: CGSize(width: 64, height: 32))

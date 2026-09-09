@@ -40,6 +40,15 @@ private struct SettingsView: View {
 @main
 struct MindFlowApp: App {
     @StateObject private var vm = MindMapViewModel()
+
+    init() {
+        // The canvas reads colours from the static `Palette.screen`, so the saved
+        // choice has to be installed before the first view is built. This lives in
+        // the app target rather than in the kit on purpose: MindFlowChecks asserts
+        // the classic palette, and it must not start depending on whatever theme a
+        // developer happens to have selected.
+        Palette.active = MindTheme(rawValue: UserDefaults.standard.string(forKey: "themeID") ?? "") ?? .classic
+    }
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
@@ -145,6 +154,17 @@ struct MindFlowApp: App {
                 }
                 Button("取消聚焦") { vm.focusBranchID = nil }
                     .disabled(vm.focusBranchID == nil)
+                Divider()
+                Menu("主題") {
+                    ForEach(MindTheme.allCases, id: \.self) { theme in
+                        // Toggle rather than Button so the menu shows a checkmark
+                        // against the active theme; a picker with no visible
+                        // current value makes the user guess.
+                        Toggle(theme.displayName,
+                               isOn: Binding(get: { vm.themeID == theme },
+                                             set: { if $0 { vm.themeID = theme } }))
+                    }
+                }
                 Divider()
                 // Menu registration and the local monitor share one exact dispatcher.
                 Button(vm.zenMode ? "離開專注模式" : "專注模式") {

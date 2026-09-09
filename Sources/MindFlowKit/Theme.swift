@@ -205,53 +205,93 @@ public struct Palette {
 
     private static let statusHighlightSourceRGBValue = RGB(hex: 0xF5C542)
     private static let statusHighlightSourceOKLChValue = rgbToOKLCh(statusHighlightSourceRGBValue)
-    private static let lightCanvasRGBValue = RGB(hex: 0xF2EFE7)
-    private static let lightCardRGBValue = RGB(hex: 0xFFFFFF)
-    private static let accentRGBValue = RGB(hex: 0x3368A0)
-    private static let baseOKLCh = rgbToOKLCh(accentRGBValue)
-    private static let darkCanvasRGBValue = RGB(hex: 0x101819)
-    private static let iconGradientBottomSample = gamutMapped(
-        lightness: baseOKLCh.lightness * 0.70,
-        chroma: baseOKLCh.chroma,
-        hue: baseOKLCh.hue,
-        mapping: .boundary)
 
-    private static let lightBranchSamples = makeBranchSamples(dark: false)
-    private static let darkBranchSamples = makeBranchSamples(dark: true)
-    private static let lightStatusHighlightSample = makeLightStatusHighlightSample()
-    private static let darkStatusHighlightSample = Sample(
-        oklch: statusHighlightSourceOKLChValue,
-        rgb: statusHighlightSourceRGBValue)
+    /// The theme every palette lookup follows. Assigning it changes what the
+    /// existing static palettes resolve to; it does not create new Palette
+    /// instances, because call sites all over the canvas hold `Palette.screen`.
+    public static var active: MindTheme = .classic
 
-    private static let lightValues = Values(
-        canvas: RGB(hex: 0xF2EFE7),
-        card: RGB(hex: 0xFFFFFF),
-        textPrimary: RGB(hex: 0x2A2A28),
-        textSecondary: RGB(hex: 0x5E6C6F),
-        accent: accentRGBValue,
-        creamText: RGB(hex: 0xF2EFE7),
-        secondarySurface: RGB(hex: 0xC8DFDB),
-        statusHighlight: lightStatusHighlightSample.rgb,
-        branches: lightBranchSamples
-    )
+    /// Everything a single theme resolves to. Built once per theme and cached:
+    /// branch generation runs a contrast bisection per branch, which is far too
+    /// much work to repeat on every colour read during rendering.
+    private struct ThemeValues {
+        let light: Values
+        let dark: Values
+        let accent: RGB
+        let base: OKLCh
+        let iconBottom: Sample
+    }
 
-    private static let darkValues = Values(
-        canvas: RGB(hex: 0x101819),
-        card: RGB(hex: 0x1B2628),
-        textPrimary: RGB(hex: 0xE2E9EB),
-        textSecondary: RGB(hex: 0x9AA7AA),
-        accent: accentRGBValue,
-        creamText: RGB(hex: 0xF2EFE7),
-        secondarySurface: RGB(hex: 0xC8DFDB),
-        statusHighlight: darkStatusHighlightSample.rgb,
-        branches: darkBranchSamples
-    )
+    private static let themeCache: [MindTheme: ThemeValues] = {
+        var out: [MindTheme: ThemeValues] = [:]
+        for theme in MindTheme.allCases { out[theme] = buildTheme(theme) }
+        return out
+    }()
 
-    private static func makeLightStatusHighlightSample() -> Sample {
+    private static func buildTheme(_ theme: MindTheme) -> ThemeValues {
+        let spec = theme.spec
+        let accent = RGB(hex: spec.accent)
+        let base = rgbToOKLCh(accent)
+        let lightCanvas = RGB(hex: spec.lightCanvas)
+        let lightCard = RGB(hex: spec.lightCard)
+        let darkCanvas = RGB(hex: spec.darkCanvas)
+
+        // The marked-node highlight keeps one meaning across every theme: it is
+        // always the same amber source hue. Only its lightness is re-solved, so
+        // that it still clears the 3.1:1 floor against this theme's surfaces. A
+        // status colour that stays legible is doing its job; one that keeps a
+        // fixed RGB and disappears into a dark canvas is not.
+        let lightHighlight = makeLightStatusHighlightSample(lightCanvas: lightCanvas, lightCard: lightCard)
+        let darkHighlight = Sample(oklch: statusHighlightSourceOKLChValue, rgb: statusHighlightSourceRGBValue)
+
+        return ThemeValues(
+            light: Values(
+                canvas: lightCanvas,
+                card: lightCard,
+                textPrimary: RGB(hex: spec.lightTextPrimary),
+                textSecondary: RGB(hex: spec.lightTextSecondary),
+                accent: accent,
+                creamText: RGB(hex: spec.lightOnAccent),
+                secondarySurface: RGB(hex: spec.lightSecondarySurface),
+                statusHighlight: lightHighlight.rgb,
+                branches: makeBranchSamples(base: base, darkCanvas: darkCanvas, dark: false)),
+            dark: Values(
+                canvas: darkCanvas,
+                card: RGB(hex: spec.darkCard),
+                textPrimary: RGB(hex: spec.darkTextPrimary),
+                textSecondary: RGB(hex: spec.darkTextSecondary),
+                accent: accent,
+                creamText: RGB(hex: spec.darkOnAccent),
+                secondarySurface: RGB(hex: spec.darkSecondarySurface),
+                statusHighlight: darkHighlight.rgb,
+                branches: makeBranchSamples(base: base, darkCanvas: darkCanvas, dark: true)),
+            accent: accent,
+            base: base,
+            iconBottom: gamutMapped(lightness: base.lightness * 0.70,
+                                    chroma: base.chroma,
+                                    hue: base.hue,
+                                    mapping: .boundary))
+    }
+
+    private static var currentTheme: ThemeValues { themeCache[active] ?? buildTheme(.classic) }
+
+    private static var accentRGBValue: RGB { currentTheme.accent }
+    private static var baseOKLCh: OKLCh { currentTheme.base }
+    private static var iconGradientBottomSample: Sample { currentTheme.iconBottom }
+    private static var lightStatusHighlightSample: Sample {
+        Sample(oklch: rgbToOKLCh(currentTheme.light.statusHighlight), rgb: currentTheme.light.statusHighlight)
+    }
+    private static var darkStatusHighlightSample: Sample {
+        Sample(oklch: rgbToOKLCh(currentTheme.dark.statusHighlight), rgb: currentTheme.dark.statusHighlight)
+    }
+    private static var lightValues: Values { currentTheme.light }
+    private static var darkValues: Values { currentTheme.dark }
+
+    private static func makeLightStatusHighlightSample(lightCanvas: RGB, lightCard: RGB) -> Sample {
         let source = statusHighlightSourceOKLChValue
         func passes(_ sample: Sample) -> Bool {
-            sample.rgb.contrastRatio(with: lightCanvasRGBValue) >= 3.1
-                && sample.rgb.contrastRatio(with: lightCardRGBValue) >= 3.1
+            sample.rgb.contrastRatio(with: lightCanvas) >= 3.1
+                && sample.rgb.contrastRatio(with: lightCard) >= 3.1
         }
         let initial = gamutMapped(lightness: source.lightness,
                                   chroma: source.chroma, hue: source.hue)
@@ -274,19 +314,18 @@ public struct Palette {
         return gamutMapped(lightness: low, chroma: source.chroma, hue: source.hue)
     }
 
-    private static func makeBranchSamples(dark: Bool) -> [Sample] {
-        let base = baseOKLCh
+    private static func makeBranchSamples(base: OKLCh, darkCanvas: RGB, dark: Bool) -> [Sample] {
         return (0..<6).map { index in
             let hue = normalizedHue(base.hue + Double(index) * 60)
             var sample = gamutMapped(lightness: base.lightness, chroma: base.chroma, hue: hue)
-            if dark && sample.rgb.contrastRatio(with: darkCanvasRGBValue) < 3.1 {
+            if dark && sample.rgb.contrastRatio(with: darkCanvas) < 3.1 {
                 // Raise L only for the branches that miss the final 8-bit dark-canvas 3.1:1 floor.
                 var low = base.lightness
                 var high = 1.0
                 for _ in 0..<32 {
                     let middle = (low + high) / 2
                     let probe = gamutMapped(lightness: middle, chroma: base.chroma, hue: hue)
-                    if probe.rgb.contrastRatio(with: darkCanvasRGBValue) >= 3.1 {
+                    if probe.rgb.contrastRatio(with: darkCanvas) >= 3.1 {
                         high = middle
                     } else {
                         low = middle
