@@ -32,7 +32,7 @@
 
 **功能面真正還缺的只有一項**：
 - **Boundary（外框）** —— XMind 用來圈選跨層級的一群節點。我們的 `MindSummary` 明確受限於「同一父節點下**連續**的兄弟」（見 `Model.swift` 註解），表達不了這個語意。
-  值得注意：`Theme.swift` 已有 `.boundary` 這個**顏色角色**（:102/:217/:304），亦即主題系統預留了槽位，但模型層與 UI 完全沒有對應物。
+  **更正（p1 原記述有誤，由 p6 在 boundary 提案中指出並經 p1 複查）**：`Theme.swift:102` 的 `.boundary` **不是**顏色角色，而是 `private enum GamutMapping { case step; case boundary }` 的一個 case，即色域映射策略（二分搜尋至色域邊界），與外框功能無關。主題系統**沒有**為外框預留任何槽位。外框是徹底的從零開始。
 
 > **原本這裡還列了「Outline 大綱檢視」，那是錯的。**實測：`OutlineFlattener.swift` 產生帶 depth／marked／note／hasChildren 的 `OutlineRow`，
 > `ContentView.swift:547` 在用，Inspector 有「大綱」分頁（:401），另有大綱編號（`showOutlineNumbers`）與 `⇧⌘M` 圖／大綱切換。
