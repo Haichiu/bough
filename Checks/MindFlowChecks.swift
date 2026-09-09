@@ -5474,122 +5474,61 @@ for path in ["Sources/MindFlowKit/MapCanvasView.swift",
 
 
 
-// MARK: - T-043: compact toolbar with a complete More menu
-// The toolbar owns only the three primary actions; alternate entrances remain in
-// menus, shortcuts, context menus, and the canvas rather than being deleted.
+// MARK: - T-043: the window toolbar is gone, and no capability left with it
+// The original ticket asked for the toolbar to be *slimmed* to three buttons.
+// That had in fact already shipped (30cca8f, 2026-09-02), and the Owner was
+// looking at the slimmed version when they still called it ugly and
+// unnecessary -- so satisfying the old wording would not have satisfied the
+// request. The Owner then chose outright removal.
+//
+// What survives from the old oracle is the part that matters: removal must not
+// cost a single capability. That half is deliberately made STRICTER here.
+// Entrances are now counted only in the menu bar and the canvas context menu --
+// places a user can actually click. The previous version also searched
+// ContentView and KeyboardMonitor, where an internal plumbing string could
+// satisfy a needle while the user had no way to reach the feature at all.
+// The inspector toggle was exactly that shape of risk: before this change its
+// only entrance in the entire product was the toolbar button being deleted.
 let t043Check: () -> Void = {
     let source = projectSource("Sources/MindFlowKit/ContentView.swift")
-    guard let start = source.range(of: "        .toolbar {\n            ToolbarItemGroup {") else {
-        check(false, "T-043 toolbar declaration remains discoverable")
-        return
-    }
-    guard let end = source.range(of: "        .navigationTitle", range: start.upperBound..<source.endIndex) else {
-        check(false, "T-043 toolbar has a bounded declaration")
-        return
-    }
-    let toolbar = String(source[start.lowerBound..<end.lowerBound])
-    guard let moreStart = toolbar.range(of: "            ToolbarItem {\n                Menu {") else {
-        check(false, "T-043 More menu remains a native toolbar item")
-        return
-    }
-    let primary = String(toolbar[..<moreStart.lowerBound])
-    let more = String(toolbar[moreStart.lowerBound...])
-    let primaryLabels = [
-        "Label(\"子主題\", systemImage: \"plus.circle.fill\")",
-        "Label(\"兄弟主題\", systemImage: \"plus.square.on.square\")",
-        "Label(\"檢閱器\", systemImage: \"sidebar.trailing\")"
-    ]
-    check(primaryLabels.allSatisfy { primary.contains($0) }
-          && primary.components(separatedBy: "Label(").count - 1 == 3
-          && primary.contains("Toggle(isOn: $vm.showInspector)"),
-          "toolbar primary controls are exactly child, sibling, and inspector")
-    check(!primary.contains("刪除")
-          && !primary.contains("符合視窗")
-          && !primary.contains("全部展開")
-          && !primary.contains("複製 MD"),
-          "Delete and secondary actions are not direct toolbar neighbors")
-    check(more.components(separatedBy: "ellipsis.circle").count - 1 == 1
-          && more.contains("Label(\"更多\", systemImage: \"ellipsis.circle\")"),
-          "More is one native ellipsis-circle control")
-
-    let moreActions = [
-        "Label(\"符合視窗\"",
-        "Label(\"全部展開\"",
-        "Label(\"全部收合\"",
-        "Menu(\"展開至\")",
-        "if vm.focusBranchID != nil",
-        "Menu(\"版面\")",
-        "Label(\"複製 MD\"",
-        "Button(\"刪除\""
-    ]
-    check(moreActions.allSatisfy { more.contains($0) },
-          "More retains every toolbar capability")
-    check(more.contains("ForEach([1, 2, 3, 4]")
-          && more.contains("vm.expandToLevel(level)")
-          && more.contains("vm.focusBranchID = nil"),
-          "More retains level expansion and conditional focus cancellation")
-    let layoutActions = ["邏輯圖（右展）", "平衡圖（左右）", "魚骨圖", "括號圖", "回到自動排列"]
-    check(layoutActions.allSatisfy { more.contains($0) },
-          "More retains all layout choices and auto-layout reset")
-
-    let positions = moreActions.compactMap { more.range(of: $0)?.lowerBound }
-    check(positions.count == moreActions.count
-          && zip(positions, positions.dropFirst()).allSatisfy { $0 <= $1 },
-          "More action order ends with Delete")
-    if let divider = more.range(of: "Divider()", options: .backwards),
-       let delete = more.range(of: "Button(\"刪除\"") {
-        let between = String(more[divider.upperBound..<delete.lowerBound])
-        check(divider.lowerBound < delete.lowerBound
-              && !between.contains("Button(") && !between.contains("Menu("),
-              "More separates the final Delete action from non-destructive actions")
-        let afterDelete = String(more[delete.upperBound...])
-        check(!afterDelete.contains("Button(") && !afterDelete.contains("Menu("),
-              "Delete is the final More action")
-    } else {
-        check(false, "Divider and Delete are present for final-action validation")
-    }
-
-    check(source.contains("NotificationCenter.default.post(name: .mindFlowFit")
-          && source.contains("vm.copyAsMarkdown()")
-          && source.contains("focusBranchID")
-          && source.contains("contextMenu")
-          && source.contains("vm.resetAllOffsets()"),
-          "fit, copy, focus, delete, and layout retain alternate entrances")
-    let keyboard = projectSource("Sources/MindFlowKit/KeyboardMonitor.swift")
-    let appCommands = projectSource("Sources/MindFlow/MindFlowApp.swift")
-    check(keyboard.contains("vm.delete(id: selection)")
-          && appCommands.contains("Button(\"刪除主題\")")
-          && appCommands.contains("keyboardShortcut(\"c\", modifiers: [.command, .shift])")
-          && appCommands.contains("vm.resetAllOffsets()"),
-          "keyboard and App menu alternatives remain reachable")
-
-    // Canonical capability inventory (T-043 "能力零移除"): the 11 equal-weight
-    // toolbar buttons that existed before the collapse. Each capability must keep
-    // at least one entrance in the product, independent of the More-menu list
-    // above — deleting a capability from the product *and* from the menu
-    // expectation still fails here. Runtime reachability of the collapsed set is
-    // measured by scripts/uitest/u15-toolbar.sh.
     let canvas = projectSource("Sources/MindFlowKit/MapCanvasView.swift")
-    let product = source + canvas + appCommands + keyboard
+    let appCommands = projectSource("Sources/MindFlow/MindFlowApp.swift")
+
+    check(!source.contains("\n        .toolbar {"),
+          "T-043 the window toolbar declaration is gone")
+    check(!source.contains("ellipsis.circle"),
+          "T-043 no More menu survives in the shell")
+
+    // Only user-clickable surfaces count as an entrance.
+    let entrances = appCommands + canvas
     let capabilityEntrances: [(capability: String, needles: [String])] = [
-        ("子主題", ["Label(\"子主題\"", "加入子主題"]),
-        ("兄弟主題", ["Label(\"兄弟主題\"", "加入兄弟主題"]),
-        ("檢閱器", ["Label(\"檢閱器\"", "showInspector"]),
-        ("刪除", ["Button(\"刪除\"", "Button(\"刪除主題\")", "vm.delete(id: selection)"]),
-        ("全部展開", ["Label(\"全部展開\""]),
-        ("全部收合", ["Label(\"全部收合\""]),
-        ("展開至", ["Menu(\"展開至\")", "vm.expandToLevel(level)"]),
-        ("符合視窗", ["Label(\"符合視窗\"", ".mindFlowFit"]),
-        ("取消聚焦", ["Label(\"取消聚焦\"", "vm.focusBranchID = nil"]),
-        ("版面", ["Menu(\"版面\")", "邏輯圖（右展）", "vm.resetAllOffsets()"]),
-        ("複製 MD", ["Label(\"複製 MD\"", "vm.copyAsMarkdown()"]),
+        ("子主題", ["Button(\"加入子主題\")"]),
+        ("兄弟主題", ["Button(\"加入兄弟主題\")"]),
+        ("檢閱器", ["Toggle(\"檢閱器\", isOn: $vm.showInspector)"]),
+        ("刪除", ["Button(\"刪除主題\")"]),
+        // Deliberately NOT satisfied by the "全部收合／展開" toggle: a toggle is a
+        // different capability from the two explicit commands, and accepting it
+        // here let both expandAll and collapseAll fall out of reach until
+        // scripts/verify.sh caught them.
+        ("全部展開", ["Button(\"全部展開\") { vm.expandAll() }"]),
+        ("全部收合", ["Button(\"全部收合\") { vm.collapseAll() }"]),
+        ("展開至", ["Menu(\"展開至\")"]),
+        ("符合視窗", ["Button(\"符合視窗\")", "Button(\"全圖\")"]),
+        ("取消聚焦", ["Button(\"取消聚焦\")"]),
+        ("版面", ["CommandMenu(\"版面\")"]),
+        ("複製 MD", ["Button(\"複製為 Markdown\")"]),
     ]
     for entry in capabilityEntrances {
-        check(entry.needles.contains { product.contains($0) },
-              "T-043 capability \(entry.capability) keeps at least one entrance")
+        check(entry.needles.contains { entrances.contains($0) },
+              "T-043 capability \(entry.capability) keeps a user-clickable entrance")
     }
-}
 
+    // The three rehomed commands need working shortcuts, not just menu rows.
+    check(appCommands.contains("keyboardShortcut(\"0\", modifiers: [.command])"),
+          "T-043 fit-to-window is reachable by shortcut")
+    check(appCommands.contains("keyboardShortcut(\"i\", modifiers: [.command, .option])"),
+          "T-043 the inspector toggle is reachable by shortcut")
+}
 
 t043Check()
 

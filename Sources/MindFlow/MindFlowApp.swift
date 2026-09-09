@@ -115,6 +115,31 @@ struct MindFlowApp: App {
                     .keyboardShortcut("p", modifiers: [.command])
             }
             CommandMenu("顯示") {
+                // Homes for the four capabilities that used to live only in the
+                // window toolbar. The Owner asked for that toolbar to be removed
+                // outright; removing it must not remove any capability, and the
+                // inspector toggle in particular had no other entrance anywhere
+                // in the product.
+                Button("符合視窗") {
+                    NotificationCenter.default.post(name: .mindFlowFit, object: nil)
+                }
+                .keyboardShortcut("0", modifiers: [.command])
+                Toggle("檢閱器", isOn: $vm.showInspector)
+                    .keyboardShortcut("i", modifiers: [.command, .option])
+                // Explicit expand/collapse. The existing "全部收合／展開" entry is a
+                // toggle, which is not the same capability: it cannot express
+                // "expand everything" when the map is already partly expanded.
+                // These two lived only in the removed toolbar.
+                Button("全部展開") { vm.expandAll() }
+                Button("全部收合") { vm.collapseAll() }
+                Menu("展開至") {
+                    ForEach([1, 2, 3, 4], id: \.self) { level in
+                        Button("顯示到第 \(level) 層") { vm.expandToLevel(level) }
+                    }
+                }
+                Button("取消聚焦") { vm.focusBranchID = nil }
+                    .disabled(vm.focusBranchID == nil)
+                Divider()
                 // Menu registration and the local monitor share one exact dispatcher.
                 Button(vm.zenMode ? "離開專注模式" : "專注模式") {
                     KeyboardMonitor.performCoreShortcut(

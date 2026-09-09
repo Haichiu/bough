@@ -123,6 +123,14 @@
 **交付**：主列只留【子主題、兄弟｜檢閱器】；餘收進系統 `ellipsis.circle` Menu；Delete 置底、role destructive、Divider 隔開。分組只用 spacing 不用分隔線。
 **〔可觀察結果〕**：能力零移除（每項仍至少一個入口）；主列按鈕數 = 3。
 
+**結案記錄（2026-09-09，驗收條件經 Owner 裁示改寫）**：原規格「精簡到 3 顆」**其實早在 `30cca8f`（2026-09-02）就已交付**，而 Owner 正是看著那個已精簡的版本說「很醜很沒必要」——**照原文做完也不會解決他的問題**。p1 據此回報並提供選項，Owner 選擇**整條拿掉**。
+
+實作：先給四項「只住在工具列」的能力新家，再拆工具列。其中**檢閱器開關在全產品範圍內沒有第二個入口**，直接移除會讓檢閱器永遠打不開。新增於 `CommandMenu("顯示")`：符合視窗（⌘0）、檢閱器（⌥⌘I）、展開至 1–4 層、取消聚焦、全部展開、全部收合。ContentView 的 `.toolbar` 區塊（83 行）移除並留下說明註解。
+
+驗收改寫但**保留並收緊**能力清單：入口只承認 App 選單與畫布右鍵選單這類**使用者點得到**的地方，不再接受 ContentView／KeyboardMonitor 的內部管線字串（舊版正是這個寬鬆處讓「檢閱器」這種風險看不出來）。**`verify.sh` 抓到我新 oracle 漏掉的東西**：`expandAll`／`collapseAll` 成為孤兒 API，因為我誤把選單裡的「全部收合／展開」*切換*當成那兩個獨立命令的入口；已補上真正的入口並把 oracle 對應條目改成不接受切換。
+
+閘門：`MindFlowChecks` ALL CHECKS PASSED、`verify.sh` ALL GREEN。**Runtime 實測**：打包後 AX 掃描真實視窗，子主題／兄弟主題／檢閱器／更多／ellipsis 全部零命中。
+
 ### T-044 分頁標題可辨識（C2）
 **問題**（1）fallback 先取 root.text，預設「中心主題」遮住其他辨識來源；（2）active tab 讀 `sessions[active].document` 而編輯改的是 `vm.document`，標題在本分頁內會變舊。
 **交付**：純函式 `TabDisplayTitles`。序：非預設 root → file basename → 非預設 document.title → 第一個非空後代 → 中心主題。active slot 注入 live document／filePath。
