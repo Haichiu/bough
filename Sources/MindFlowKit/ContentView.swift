@@ -431,8 +431,16 @@ public struct ContentView: View {
                 .buttonStyle(.borderless)
                 .font(.caption)
         } else if let id = vm.selection, let node = vm.document.root.find(id) {
-            Text(node.id == vm.document.root.id ? "中心主題" : "主題")
-                .font(.subheadline).foregroundStyle(.secondary)
+            // Name the selected topic instead of restating its role. The old
+            // header always read 「主題」, which told the user nothing they did not
+            // already know — and told them nothing at all when search, focus mode
+            // or a scrolled canvas left the selection off screen.
+            Text(inspectorTitle(for: node))
+                .font(.subheadline).fontWeight(.medium)
+                .lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(node.text.isEmpty ? "" : node.text)
+                .accessibilityIdentifier("inspector-title")
             TextEditor(text: $noteDraft)
                 .focused($noteFocused)
                 .autocorrectionDisabled()
@@ -463,6 +471,14 @@ public struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
+    }
+
+    /// The inspector header. An unnamed topic still needs a stable identity, so
+    /// it falls back to the role it plays rather than showing an empty line.
+    private func inspectorTitle(for node: MindNode) -> String {
+        let trimmed = node.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return node.id == vm.document.root.id ? "中心主題" : "未命名主題"
     }
 
     private var outlineRows: [OutlineRow] {
