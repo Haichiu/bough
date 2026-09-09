@@ -23,7 +23,26 @@ public struct EditorSession: Equatable {
 @MainActor
 public final class MindMapViewModel: ObservableObject {
     @Published public var document: MindDocument
-    @Published public var selection: UUID?
+    /// Selecting a node takes selection away from every other selectable object.
+    ///
+    /// Without this the canvas can show two things wearing the selected accent at
+    /// once — a node ring and a boundary frame are drawn with the same colour —
+    /// and the Delete key then acts on whichever one the dispatch order happens
+    /// to reach first. One selected object at a time makes that ambiguity
+    /// unrepresentable rather than something every call site has to remember.
+    ///
+    /// Only a non-nil selection clears the others: clearing to nil is what the
+    /// canvas background tap does, and it already clears them explicitly. The
+    /// nil checks keep this off the hot path, since assigning a @Published var
+    /// republishes even when the value does not change.
+    @Published public var selection: UUID? {
+        didSet {
+            guard selection != nil else { return }
+            if selectedBoundaryID != nil { selectedBoundaryID = nil }
+            if selectedSummaryID != nil { selectedSummaryID = nil }
+            if selectedLinkID != nil { selectedLinkID = nil }
+        }
+    }
     @Published public var editingID: UUID?
     @Published public var filePath: URL?
     @Published public var dirty = false

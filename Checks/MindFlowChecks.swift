@@ -7190,6 +7190,50 @@ do {
           "boundary: 加入外框 is bound to XMind's ⇧⌘B")
 }
 
+// MARK: - One selected object at a time, and Delete acts on it
+//
+// A node ring and a boundary frame are stroked with the same accent, so two
+// objects could look selected at once while Delete silently acted on the node.
+// Measured before the fix with a real window: ⇧⌘B then Delete took the node
+// count from 21 to 16 — the frame's whole subtree, not the frame.
+
+do {
+    let vm = MindMapViewModel()
+    vm.newDocument()
+    let branch = vm.addChild(to: nil)!
+    let leaf = vm.addChild(to: branch)!
+    func nodeCount() -> Int {
+        func walk(_ n: MindNode) -> Int { 1 + n.children.reduce(0) { $0 + walk($1) } }
+        return walk(vm.document.root)
+    }
+    func pressDelete() -> Bool {
+        KeyboardMonitor.performDelete(vm: vm, textFieldEditing: false, editingHandoffActive: false)
+    }
+
+    _ = vm.addBoundary(rootID: branch)
+    check(vm.selectedBoundaryID != nil, "selection: creating a boundary selects it")
+
+    vm.selection = leaf
+    check(vm.selectedBoundaryID == nil,
+          "selection: selecting a node releases the boundary, so only one thing looks selected")
+
+    // Delete with a boundary selected removes the frame and leaves the tree.
+    _ = vm.addBoundary(rootID: branch)
+    let before = nodeCount()
+    check(pressDelete(), "selection: Delete is handled while a boundary is selected")
+    check(vm.document.boundaries.isEmpty,
+          "selection: Delete removes the selected boundary")
+    check(nodeCount() == before,
+          "selection: deleting a boundary destroys no nodes (the 21->16 defect)")
+
+    // Control: with nothing but a node selected, Delete still deletes the node.
+    vm.selection = leaf
+    let beforeNode = nodeCount()
+    _ = pressDelete()
+    check(nodeCount() == beforeNode - 1,
+          "selection: control — Delete still removes a plain selected node")
+}
+
 if failures == 0 {
     print("ALL CHECKS PASSED")
 } else {

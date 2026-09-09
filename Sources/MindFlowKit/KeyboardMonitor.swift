@@ -102,8 +102,17 @@ public final class KeyboardMonitor {
         case .swallowed:
             return true
         case .deleteSelection:
+            // Delete removes the object that looks selected. A boundary or a
+            // summary drawn in the selection accent used to fall through to the
+            // node branch, so pressing Delete right after ⇧⌘B destroyed the
+            // whole subtree the new frame was drawn around. The node is the last
+            // resort, not the default.
             if let linkID = vm.selectedLinkID {
                 vm.removeLink(id: linkID)
+            } else if let boundaryID = vm.selectedBoundaryID {
+                vm.removeBoundary(id: boundaryID)
+            } else if let summaryID = vm.selectedSummaryID {
+                vm.removeSummary(id: summaryID)
             } else if let selection = vm.selection {
                 vm.delete(id: selection)
             }
