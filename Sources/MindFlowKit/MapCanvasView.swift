@@ -297,6 +297,13 @@ struct MapCanvasView: View {
                 Divider()
                 Button("清除色標") { vm.setColorTag(id: item.node.id, tag: nil) }
             }
+            Menu("主題顏色") {
+                ForEach(Theme.colorTags, id: \.key) { tag in
+                    Button(tag.name) { vm.setNodeFill(id: item.node.id, tag: tag.key) }
+                }
+                Divider()
+                Button("清除填色") { vm.setNodeFill(id: item.node.id, tag: nil) }
+            }
             Menu("子樹批次") {
                 Menu("全部加上色標") {
                     ForEach(Theme.colorTags, id: \.key) { tag in

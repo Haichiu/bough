@@ -133,7 +133,7 @@ struct NodeView: View {
     private func background(depth: Int, radius: CGFloat) -> some View {
         let style = NodeStyle.of(depth: depth, palette: palette, branchColor: branchColor)
         return RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(style.fill)
+            .fill(NodeFill.resolved(tag: node.fillTag, style: style))
             .overlay {
                 if isDropTarget {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -285,5 +285,18 @@ struct NodeView: View {
                 .onTapGesture { onToggleCollapse?() }
                 .help("收合中（共 \(hiddenCount) 個主題）：\n" + node.hiddenTopicPreview().joined(separator: "\n"))
         }
+    }
+}
+
+/// Composes the fill a node actually paints: the depth default from `NodeStyle`,
+/// overridden by the node's `fillTag` when it names one of the six palette keys.
+///
+/// Public and pure on purpose. The canvas has no accessibility-readable colour,
+/// so the checks pin this rule instead of a rendered pixel; the view calls the
+/// same function, which is what keeps the two from drifting apart.
+public enum NodeFill {
+    public static func resolved(tag: String?, style: NodeStyle) -> Color {
+        guard let tag, let override = Theme.colorTag(named: tag) else { return style.fill }
+        return override
     }
 }

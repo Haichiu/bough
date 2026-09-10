@@ -730,6 +730,52 @@ do {
           "freemind does not carry the fill override (text format has no fill)")
 }
 
+do {
+    // The canvas has no accessibility-readable colour, so pin the composition
+    // rule the view calls: depth default when there is no override, the palette
+    // colour when there is. The same function paints the screen.
+    func hexOf(_ color: Color) -> String {
+        let ns = NSColor(color).usingColorSpace(.sRGB) ?? .black
+        return String(format: "#%02x%02x%02x", Int(round(ns.redComponent * 255)),
+                      Int(round(ns.greenComponent * 255)), Int(round(ns.blueComponent * 255)))
+    }
+    let rootStyle = NodeStyle.of(depth: 0, palette: .light, branchColor: .blue)
+    let leafStyle = NodeStyle.of(depth: 2, palette: .light, branchColor: .blue)
+    check(hexOf(NodeFill.resolved(tag: nil, style: rootStyle)) == hexOf(rootStyle.fill),
+          "node fill: no override keeps the root depth default (control)")
+    check(hexOf(NodeFill.resolved(tag: nil, style: leafStyle)) == hexOf(leafStyle.fill),
+          "node fill: no override keeps the leaf depth default (control)")
+    let paletteHexes = ["red": "#e05252", "orange": "#f08c3a", "yellow": "#f0c542",
+                        "green": "#51b573", "blue": "#4a90d9", "purple": "#9b6fd0"]
+    check(Theme.colorTags.count == paletteHexes.count
+          && Theme.colorTags.allSatisfy {
+              paletteHexes[$0.key] == hexOf(NodeFill.resolved(tag: $0.key, style: leafStyle))
+          },
+          "node fill: each of the six palette keys paints its own colour")
+    check(hexOf(NodeFill.resolved(tag: "red", style: rootStyle)) == "#e05252",
+          "node fill: an override beats the root depth default too")
+    check(hexOf(NodeFill.resolved(tag: "chartreuse", style: leafStyle)) == hexOf(leafStyle.fill),
+          "node fill: a tag outside the palette falls back to the depth default (control)")
+
+    let nodeSource = projectSource("Sources/MindFlowKit/NodeView.swift")
+    check(nodeSource.contains("NodeFill.resolved(tag: node.fillTag, style: style)"),
+          "the canvas node background paints the composed fill")
+    check(!nodeSource.contains(".fill(style.fill)"),
+          "the canvas no longer paints the raw style fill (control)")
+
+    let canvasSource = projectSource("Sources/MindFlowKit/MapCanvasView.swift")
+    check(canvasSource.contains("Menu(\"主題顏色\")"),
+          "the canvas context menu offers a fill-colour submenu")
+    check(canvasSource.contains("Button(tag.name) { vm.setNodeFill(id: item.node.id, tag: tag.key) }"),
+          "the fill submenu sets each palette key through setNodeFill")
+    check(canvasSource.contains("Button(\"清除填色\") { vm.setNodeFill(id: item.node.id, tag: nil) }"),
+          "the fill submenu clears the override")
+    check(canvasSource.components(separatedBy: "vm.setNodeFill(id: item.node.id").count - 1 == 2,
+          "the fill submenu is the only caller of setNodeFill in the canvas (control)")
+    check(canvasSource.components(separatedBy: "vm.setColorTag(id: item.node.id").count - 1 == 2,
+          "the existing color-tag submenu is untouched (control)")
+}
+
 // MARK: - v1.3: markdown import round-trip
 
 do {
