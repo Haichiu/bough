@@ -126,6 +126,57 @@ import MindFlowKit
 
 setvbuf(stdout, nil, _IONBF, 0)
 
+// MARK: - The checks process must never touch the Owner's real storage
+//
+// Every check here builds real view models, and a real view model restores and
+// autosaves through FileIO, whose directory comes from MINDFLOW_STORAGE_ROOT.
+// Nothing set it, so StoragePaths.resolve fell through to production: one run
+// loaded the 20 tabs in ~/Library/Application Support/MindFlow/tabs and wrote
+// every one of them back with a single fresh mtime. Point the whole process at a
+// marked temp root before the first check runs; FileIO resolves on every call,
+// so one environment variable reaches all 73 default constructions.
+let checksStorageRoot: URL = {
+    let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
+        .appendingPathComponent("mindflow-checks-storage-\(UUID().uuidString)", isDirectory: true)
+    try! FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    try! Data(StoragePaths.markerContents.utf8)
+        .write(to: root.appendingPathComponent(StoragePaths.markerFileName), options: .atomic)
+    return root
+}()
+var checksStorageRootToRemove: String? = checksStorageRoot.path
+atexit {
+    if let path = checksStorageRootToRemove {
+        try? FileManager.default.removeItem(atPath: path)
+    }
+}
+_ = setenv(StoragePaths.environmentKey, checksStorageRoot.path, 1)
+
+/// Names plus mtime and size for everything under a storage root. Read-only by
+/// construction: the assertion that uses it exists to prove the checks never
+/// write the real directory, so it may not touch it either.
+func storageSignature(_ root: URL) -> [String: String] {
+    let fileManager = FileManager.default
+    var isDirectory: ObjCBool = false
+    guard fileManager.fileExists(atPath: root.path, isDirectory: &isDirectory),
+          isDirectory.boolValue else { return [:] }
+    let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey]
+    var signature: [String: String] = [:]
+    guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: Array(keys)) else {
+        return signature
+    }
+    for case let url as URL in enumerator {
+        guard let values = try? url.resourceValues(forKeys: keys) else { continue }
+        let relative = url.path.hasPrefix(root.path) ? String(url.path.dropFirst(root.path.count)) : url.path
+        let modified = values.contentModificationDate?.timeIntervalSince1970 ?? -1
+        signature[relative] = "\(values.isDirectory == true ? "d" : "f")|\(modified)|\(values.fileSize ?? -1)"
+    }
+    return signature
+}
+
+// Snapshot the real root before the first check. The end of this file asserts it
+// is still identical; a run that writes it must not be able to pass.
+let realStorageBefore = storageSignature(StoragePaths.production().root)
+
 struct TabDirectoryEvidence: Equatable {
     let digest: String
     let files: [String: Data]
@@ -7461,6 +7512,28 @@ do {
     _ = pressDelete()
     check(nodeCount() == beforeNode - 1,
           "selection: control — Delete still removes a plain selected node")
+}
+
+// MARK: - The checks must leave the Owner's real storage alone
+//
+// Last on purpose: this covers the whole run, not one check. If a Bough window
+// is open and autosaving while the checks run, the printed diff names its files
+// — that is a concurrent writer, not this process.
+do {
+    check(StoragePaths.resolve().root == checksStorageRoot,
+          "checks storage: the process resolves to the isolated root, never production")
+    let realStorageAfter = storageSignature(StoragePaths.production().root)
+    var changed = Set(realStorageAfter.keys).symmetricDifference(Set(realStorageBefore.keys))
+    for (key, value) in realStorageAfter
+    where realStorageBefore[key] != nil && realStorageBefore[key] != value {
+        changed.insert(key)
+    }
+    if !changed.isEmpty {
+        print("   changed under \(StoragePaths.production().root.path): "
+              + changed.sorted().prefix(5).joined(separator: ", "))
+    }
+    check(changed.isEmpty,
+          "checks storage: the real storage root is untouched by the whole run (names, mtimes, sizes)")
 }
 
 if failures == 0 {
