@@ -7,7 +7,7 @@ set -uo pipefail
 
 UIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ="$(cd "$UIT_DIR/../.." && pwd)"
-APP="${UITEST_APP:-$HOME/Desktop/MindFlow.app}"
+APP="${UITEST_APP:-$HOME/Desktop/Bough.app}"
 SLOT_ID="0D3F1CE0-0000-4000-8000-0000000000F1"
 UIT_STORAGE_BASE="${UITEST_STORAGE_BASE:-/tmp/mindflow-uitest-storage}"
 UIT_STORAGE_ROOT="${UIT_STORAGE_ROOT:-}"
@@ -150,13 +150,13 @@ uit_register_cleanup(){
 }
 
 uit_pkill(){
-  pkill -x MindFlow 2>/dev/null || true
+  pkill -x Bough 2>/dev/null || true
   local _
   for _ in $(seq 1 50); do
-    if ! pgrep -x MindFlow >/dev/null 2>&1; then return 0; fi
+    if ! pgrep -x Bough >/dev/null 2>&1; then return 0; fi
     sleep 0.1
   done
-  echo "ERROR: MindFlow did not stop during harness cleanup" >&2
+  echo "ERROR: Bough did not stop during harness cleanup" >&2
   return 1
 }
 
@@ -222,8 +222,8 @@ uit_cleanup_all(){
 uit_require_frontmost(){
   local front
   front=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null || true)
-  if [[ "$front" == "MindFlow" ]]; then return 0; fi
-  echo "ERROR: global input blocked: frontmost='${front:-unknown}', expected MindFlow" >&2
+  if [[ "$front" == "Bough" ]]; then return 0; fi
+  echo "ERROR: global input blocked: frontmost='${front:-unknown}', expected Bough" >&2
   exit 70
 }
 
@@ -245,20 +245,20 @@ uit_launch(){ # <fixture-basename> [waitsec] -> echoes pid
   open "${open_env[@]}" "$APP"
   t0=$(date +%s)
   while :; do
-    if pgrep -x MindFlow >/dev/null 2>&1; then
+    if pgrep -x Bough >/dev/null 2>&1; then
       # Wait for the CANVAS window specifically (ghost untitled windows appear first).
-      w=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to count (windows whose name contains " – ")' 2>/dev/null || echo 0)
+      w=$(osascript -e 'tell application "System Events" to tell (first process whose name is "Bough") to count (windows whose name contains " – ")' 2>/dev/null || echo 0)
       [[ "${w:-0}" -ge 1 ]] && break
     fi
     sleep 0.3
     (( $(date +%s) - t0 >= waitsec )) && { echo "ERROR: app window timeout after ${waitsec}s" >&2; return 1; }
   done
-  osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1 || true
+  osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1 || true
   sleep 1
   # Close ghost untitled windows (multi-window state can appear from stray tabs).
   osascript <<'AS' >/dev/null 2>&1 || true
 tell application "System Events"
-  tell (first process whose name is "MindFlow")
+  tell (first process whose name is "Bough")
     repeat with i from (count of windows) to 1 by -1
       set w to window i
       try
@@ -277,21 +277,21 @@ end tell
 AS
   sleep 0.5
   # Re-verify the canvas window survived ghost cleanup.
-  w=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to count (windows whose name contains " – ")' 2>/dev/null || echo 0)
+  w=$(osascript -e 'tell application "System Events" to tell (first process whose name is "Bough") to count (windows whose name contains " – ")' 2>/dev/null || echo 0)
   [[ "${w:-0}" -ge 1 ]] || { echo "ERROR: canvas window missing after ghost cleanup" >&2; return 1; }
-  pgrep -x MindFlow | head -1
+  pgrep -x Bough | head -1
 }
 
 uit_quit_flush(){ # graceful Cmd+Q -> willTerminate autosave rewrites the tabs slot
-  osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to set frontmost to true' >/dev/null 2>&1
+  osascript -e 'tell application "System Events" to tell (first process whose name is "Bough") to set frontmost to true' >/dev/null 2>&1
   sleep 0.3
   uit_require_frontmost
   osascript -e 'tell application "System Events" to keystroke "q" using command down' >/dev/null 2>&1
   local alive=1
-  for _ in $(seq 1 100); do pgrep -x MindFlow >/dev/null 2>&1 || { alive=0; break; }; sleep 0.1; done
+  for _ in $(seq 1 100); do pgrep -x Bough >/dev/null 2>&1 || { alive=0; break; }; sleep 0.1; done
   if [[ "$alive" == "1" ]]; then
     echo "WARN: Cmd+Q did not quit; sending SIGTERM (autosave may be stale)" >&2
-    pkill -x MindFlow 2>/dev/null || true
+    pkill -x Bough 2>/dev/null || true
     sleep 1
   fi
   sleep 0.5
@@ -310,7 +310,7 @@ uit_report(){ # <name> <0|1> <msg-on-fail>
 
 uit_wingeom(){ # echoes: x y w h
   local s
-  s=$(osascript -e 'tell application "System Events" to tell (first process whose name is "MindFlow") to get {position, size} of (first window whose name contains " – ")' 2>/dev/null || true)
+  s=$(osascript -e 'tell application "System Events" to tell (first process whose name is "Bough") to get {position, size} of (first window whose name contains " – ")' 2>/dev/null || true)
   echo "$s" | tr -d ' ' | awk -F',' '{print $1, $2, $3, $4}'
 }
 
@@ -319,7 +319,7 @@ uit_axdump(){ # TSV: role x y w h value (entire contents of the canvas window)
   # Ghost untitled windows (empty title) must be ignored.
   osascript <<'AS'
 tell application "System Events"
-  tell (first process whose name is "MindFlow")
+  tell (first process whose name is "Bough")
     set tabCh to character id 9
     try
       set w to first window whose name contains " – "
@@ -361,7 +361,7 @@ uit_click(){ # x y — coordinate click (cliclick posts CGEvents; SE fallback)
   if [[ -x "$cc" ]]; then
     "$cc" -e 60 "c:$1,$2" >/dev/null 2>&1
   else
-    osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to click at {$1, $2}" >/dev/null 2>&1
+    osascript -e "tell application \"System Events\" to tell (first process whose name is \"Bough\") to click at {$1, $2}" >/dev/null 2>&1
   fi
 }
 
@@ -376,7 +376,7 @@ uit_drag(){ # x1 y1 x2 y2 — press, optional micro-move, release (cliclick)
 }
 
 uit_menu(){ # <menu bar item name> <menu item name> — AX menu click (IME-proof)
-  osascript -e "tell application \"System Events\" to tell (first process whose name is \"MindFlow\") to click menu item \"$2\" of menu 1 of menu bar item \"$1\" of menu bar 1" >/dev/null 2>&1
+  osascript -e "tell application \"System Events\" to tell (first process whose name is \"Bough\") to click menu item \"$2\" of menu 1 of menu bar item \"$1\" of menu bar 1" >/dev/null 2>&1
 }
 
 uit_export_svg(){ # <fixed-output-path> — nested File > Export menu + NSSavePanel
@@ -385,7 +385,7 @@ uit_export_svg(){ # <fixed-output-path> — nested File > Export menu + NSSavePa
   mkdir -p "$dir"; rm -f "$target"
   result=$(osascript <<'AS' 2>/dev/null
 tell application "System Events"
-  tell (first process whose name is "MindFlow")
+  tell (first process whose name is "Bough")
     set fileTitle to "File"
     if exists menu bar item "檔案" of menu bar 1 then set fileTitle to "檔案"
     click menu bar item fileTitle of menu bar 1
@@ -408,7 +408,7 @@ AS
 
   result=$(osascript <<AS 2>/dev/null
 tell application "System Events"
-  tell (first process whose name is "MindFlow")
+  tell (first process whose name is "Bough")
     set value of text field 1 of window "Save" to "$stem"
     perform action "AXPress" of button "Save" of window "Save"
     return "saved"
@@ -422,8 +422,8 @@ AS
   return 1
 }
 
-uit_capture_window(){ # <fixed-png-path> [owner; default MindFlow] — no foreground input
-  local target="$1" owner="${2:-MindFlow}" wid
+uit_capture_window(){ # <fixed-png-path> [owner; default Bough] — no foreground input
+  local target="$1" owner="${2:-Bough}" wid
   rm -f "$target"
   wid=$(swift "$UIT_DIR/windowid.swift" "$owner" 2>/dev/null) || {
     echo "ERROR: no capturable window owned by $owner" >&2; return 1;
@@ -475,7 +475,7 @@ uit_context_menu(){ # <N-xxxx> <menu item title> — AX right-click menu on a no
   # then AXPress the item. Coordinate-free; works under any IME.
   osascript <<AS 2>/dev/null
 tell application "System Events"
-  tell (first process whose name is "MindFlow")
+  tell (first process whose name is "Bough")
     set w to first window whose name contains " – "
     set els to entire contents of w
     repeat with el in els
@@ -505,7 +505,7 @@ AS
 uit_commit_field(){ # <expected-value> — AXConfirm the editing TextField holding it
   osascript <<AS 2>/dev/null
 tell application "System Events"
-  tell (first process whose name is "MindFlow")
+  tell (first process whose name is "Bough")
     set w to first window whose name contains " – "
     set els to entire contents of w
     repeat with el in els

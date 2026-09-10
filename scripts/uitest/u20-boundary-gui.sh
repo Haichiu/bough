@@ -27,9 +27,9 @@ ok(){ echo "PASS: $1"; PASS=$((PASS+1)); }
 no(){ echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 instrument(){ echo "INSTRUMENT: $1"; FAIL=$((FAIL+1)); }
 
-front(){ osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.7; }
+front(){ osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1; sleep 0.7; }
 frontmost_is_mindflow(){
-  [[ "$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)" == "MindFlow" ]]
+  [[ "$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)" == "Bough" ]]
 }
 
 # Full-screen capture cropped to the window. Frontmost is re-asserted and
@@ -71,7 +71,7 @@ uit_launch small-20 30 >/dev/null 2>&1 || { instrument "launch failed"; uit_clea
 front
 
 # --- entrance: the menu row exists and carries XMind's shortcut --------------
-MENU=$(osascript -e 'tell application "System Events" to tell process "MindFlow" to get name of every menu item of menu 1 of menu bar item "主題" of menu bar 1' 2>/dev/null)
+MENU=$(osascript -e 'tell application "System Events" to tell process "Bough" to get name of every menu item of menu 1 of menu bar item "主題" of menu bar 1' 2>/dev/null)
 if [[ "$MENU" == *"加入外框"* ]]; then ok "加入外框 is present in the 主題 menu"
 else no "加入外框 is absent from the 主題 menu (got: ${MENU:0:160})"; fi
 

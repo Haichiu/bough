@@ -18,7 +18,7 @@
 #
 # Selection is verified inside phase() by the Space path (A's own proven
 # mechanism): a phase only proceeds past a click it has proven selected the
-# intended node. osascript re-activates MindFlow before every synthetic
+# intended node. osascript re-activates Bough before every synthetic
 # keystroke and uit_require_frontmost gates it.
 set -u
 cd "$(dirname "$0")"; source ./lib.sh
@@ -31,17 +31,17 @@ rc=0
 phase(){ # <label> <node> -> verifies click selected that node via Space; sets P_EDITING
   uit_launch small-20 30 >/dev/null || { echo "fail:launch"; return; }
   sleep 0.6
-  # Ghost panes steal focus back after the previous phase quits MindFlow; the
+  # Ghost panes steal focus back after the previous phase quits Bough; the
   # shared helpers gate on frontmost and exit(70) the subshell, so reclaim
   # focus here before touching the keyboard.
   local front i
   for i in 1 2 3 4 5; do
-    osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1 || true
+    osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1 || true
     sleep 0.5
     front=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null || true)
-    [[ "$front" == "MindFlow" ]] && break
+    [[ "$front" == "Bough" ]] && break
   done
-  if [[ "$front" != "MindFlow" ]]; then echo "fail:frontmost got '${front:-unknown}'"; return; fi
+  if [[ "$front" != "Bough" ]]; then echo "fail:frontmost got '${front:-unknown}'"; return; fi
   uit_ime_switch
   local dump cx cy
   dump=$(uit_axdump)
@@ -58,11 +58,11 @@ phase(){ # <label> <node> -> verifies click selected that node via Space; sets P
     uit_key 53               # Esc, leave editing (Space/Esc never change the tree)
     sleep 0.5
     [[ "$P_EDITING" == "$2" ]] && break
-    osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1 || true
+    osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1 || true
     sleep 0.3
   done
   if [[ "$P_EDITING" != "$2" ]]; then echo "fail:selection got '$P_EDITING' want '$2'"; return; fi
-  osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1 || true
+  osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1 || true
   sleep 0.3
   # phase runs in a command-substitution subshell, so return the editing value
   # through stdout instead of relying on a variable surviving the subshell.

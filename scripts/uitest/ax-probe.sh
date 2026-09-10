@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # T-003 — Accessibility tree probe (DECISION PROBE, read-only: no clicks, no edits).
 #
-# Usage:  bash scripts/uitest/ax-probe.sh [pid]   # defaults to first MindFlow pid
+# Usage:  bash scripts/uitest/ax-probe.sh [pid]   # defaults to first Bough pid
 #
 # Answers exactly one question for the owner:
 #   Are the mind-map canvas nodes (fixture text "N-0042") present in the macOS
@@ -9,12 +9,12 @@
 #   Output: flat AX dump on stdout. Summary/HIT lines carry position/size/actions
 #   for each matched node element.
 #
-# Requires: MindFlow running with a fixture loaded (staging + launch are dev.sh's
+# Requires: Bough running with a fixture loaded (staging + launch are dev.sh's
 # job), and Accessibility permission for the calling terminal.
 set -euo pipefail
 
-PID="${1:-$(pgrep -x MindFlow | head -1)}"
-[[ -n "$PID" ]] || { echo "ERROR: MindFlow not running — load a fixture first (see scripts/dev.sh)" >&2; exit 1; }
+PID="${1:-$(pgrep -x Bough | head -1)}"
+[[ -n "$PID" ]] || { echo "ERROR: Bough not running — load a fixture first (see scripts/dev.sh)" >&2; exit 1; }
 
 osascript - "$PID" <<'AS'
 on run argv

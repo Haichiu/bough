@@ -47,6 +47,9 @@ public struct StoragePaths: Equatable {
 
     public static func production(fileManager: FileManager = .default) -> StoragePaths {
         let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        // The product is named Bough; this directory is deliberately not. It is
+        // invisible to the user, and renaming it would orphan every document
+        // saved before the rename for no benefit.
         return StoragePaths(root: applicationSupport.appendingPathComponent("MindFlow", isDirectory: true))
     }
 }

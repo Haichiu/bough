@@ -5,8 +5,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 LIB="$REPO/scripts/uitest/lib.sh"
 RUN="$REPO/scripts/uitest/run.sh"
-pgrep -x MindFlow >/dev/null 2>&1 && {
-  echo "ERROR: refuse storage-isolation test while MindFlow runs" >&2
+pgrep -x Bough >/dev/null 2>&1 && {
+  echo "ERROR: refuse storage-isolation test while Bough runs" >&2
   exit 3
 }
 

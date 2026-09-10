@@ -34,10 +34,10 @@ bad(){ echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
 CLICLICK="/opt/homebrew/bin/cliclick"
 
 activate(){ # focus failures are instrument failures, never product findings
-  osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.3
+  osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1; sleep 0.3
   local front
   front=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null || true)
-  if [[ "$front" != "MindFlow" ]]; then
+  if [[ "$front" != "Bough" ]]; then
     echo "ABORT: instrument failure — frontmost='${front:-unknown}', keys would land elsewhere" >&2
     uit_quit_flush >/dev/null 2>&1
     exit 70
@@ -85,7 +85,7 @@ assert_handled(){ # label
 
 uit_prepare_storage >/dev/null || exit 1
 uit_launch small-20 30 >/dev/null || { echo "ABORT launch"; exit 1; }
-APP_PID=$(pgrep -x MindFlow | head -1)
+APP_PID=$(pgrep -x Bough | head -1)
 ps eww -o command= -p "$APP_PID" | tr ' ' '\n' | grep -q "MINDFLOW_KEY_PROBE=$PROBE" \
   || { echo "ABORT: instrument not armed on pid $APP_PID"; uit_quit_flush >/dev/null; exit 1; }
 echo "app pid=$APP_PID probe=$PROBE"

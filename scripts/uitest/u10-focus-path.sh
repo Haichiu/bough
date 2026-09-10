@@ -73,7 +73,7 @@ f=$(focus_path)
 
 echo "=== 4. focus shows a root->focus path ==="
 r=$(uit_context_menu N-0005 聚焦此分支); sleep 1.5
-osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.6
+osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1; sleep 0.6
 [[ "$r" == "pressed" ]] || bad "could not enter focus (ctx='$r') — phases 4/5 uninterpretable"
 f=$(focus_path); echo "  focus path='$f'"
 [[ -n "$f" ]] && ok "focus path observable in AX" || bad "focus path not observable"

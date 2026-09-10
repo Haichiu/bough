@@ -16,9 +16,9 @@ ok(){ echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad(){ echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
 
 ensure_front(){
-  osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.6
+  osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1; sleep 0.6
   local f; f=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null)
-  [[ "$f" == "MindFlow" ]] || { echo "  INSTRUMENT: frontmost='$f'"; return 1; }
+  [[ "$f" == "Bough" ]] || { echo "  INSTRUMENT: frontmost='$f'"; return 1; }
 }
 
 uit_prepare_storage >/dev/null 2>&1

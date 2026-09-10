@@ -17,5 +17,5 @@ fi
 echo "==> Running MindFlowChecks…"
 swift run MindFlowChecks
 echo "==> Release build…"
-swift build -c release --product MindFlow 2>&1 | tail -1
+swift build -c release --product Bough 2>&1 | tail -1
 echo "==> ALL GREEN"

@@ -30,7 +30,7 @@ SLOT_ID="0D3F1CE0-0000-4000-8000-0000000000F1"   # fixed test session UUID
 
 if [[ "$NAME" == "restore" ]]; then
   [[ -d "$BACKUP" ]] || { echo "no backup at $BACKUP — nothing to restore"; exit 0; }
-  pkill -x MindFlow 2>/dev/null || true
+  pkill -x Bough 2>/dev/null || true
   sleep 1
   rm -rf "$TABS"
   cp -R "$BACKUP" "$TABS"
@@ -51,7 +51,7 @@ fi
 # previously built binary exists, run it with a LOUD warning so the feedback
 # loop stays alive; otherwise fail hard.
 echo "==> swift build"
-BIN="$ROOT/.build/debug/MindFlow"
+BIN="$ROOT/.build/debug/Bough"
 if ! swift build; then
   if [[ -x "$BIN" ]]; then
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
@@ -66,8 +66,8 @@ fi
 [[ -x "$BIN" ]] || { echo "ERROR: $BIN not found" >&2; exit 1; }
 
 # --- 3. terminate old instance, let its quit-autosave finish ---
-pkill -x MindFlow 2>/dev/null || true
-for _ in $(seq 1 50); do pgrep -x MindFlow >/dev/null 2>&1 || break; sleep 0.1; done
+pkill -x Bough 2>/dev/null || true
+for _ in $(seq 1 50); do pgrep -x Bough >/dev/null 2>&1 || break; sleep 0.1; done
 
 # --- 4. stage fixture as the only restore slot (backup first, once) ---
 mkdir -p "$APP_SUPPORT"
@@ -84,15 +84,15 @@ touch "$TABS/$SLOT_ID.mindmap"   # newest mtime => becomes the active tab
 nohup "$BIN" >/tmp/mindflow-dev.log 2>&1 &
 disown || true
 for _ in $(seq 1 100); do
-  pgrep -x MindFlow >/dev/null 2>&1 && break
+  pgrep -x Bough >/dev/null 2>&1 && break
   sleep 0.1
 done
 sleep 1
-PID="$(pgrep -x MindFlow | head -1 || true)"
+PID="$(pgrep -x Bough | head -1 || true)"
 if [[ -z "$PID" ]]; then
-  echo "ERROR: MindFlow did not start; log tail:" >&2
+  echo "ERROR: Bough did not start; log tail:" >&2
   tail -5 /tmp/mindflow-dev.log >&2 || true
   exit 1
 fi
-echo "==> MindFlow running (pid $PID), fixture loaded: $NAME"
+echo "==> Bough running (pid $PID), fixture loaded: $NAME"
 echo "    app log: /tmp/mindflow-dev.log"

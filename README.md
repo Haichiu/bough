@@ -1,135 +1,85 @@
-# MindFlow 🧠
+# Bough
 
-一款為 macOS 打造的心智圖 App，以 Swift + SwiftUI 從零開始撰寫。
-目標：重現 XMind 黃金時代的流暢體驗，去掉所有訂閱牆與干擾。
+**A native macOS mind-mapping app that stays out of your way.**
+一款不打擾你的 macOS 原生心智圖工具。
 
-## 下載與啟動
+Bough is written from scratch in Swift and SwiftUI. No Electron, no account,
+no network, no subscription, no AI assistant trying to finish your thoughts.
+You press <kbd>Tab</kbd>, a branch grows. That is the whole idea.
 
-1. 把 `MindFlow.app` 拖到「應用程式」資料夾（或留在桌面直接雙擊）
-2. 第一次打開會看到一張教學圖——照著做就學會了
-3. 不需要帳號、不需要網路、不需要按儲存
+---
 
-## 五分鐘上手
+## Why another mind map?
 
-| 你想做什麼 | 怎麼做 |
+Mind mapping used to be fast. You typed, you pressed Tab, the map grew as
+quickly as you could think. Then the good tools grew login screens, sync
+conflicts, upgrade prompts, and an AI button where the New Topic button used
+to be.
+
+Bough is an attempt to keep the fast part and throw away the rest.
+
+| | |
 |---|---|
-| 長出一個新想法 | 選取節點後按 **Tab** |
-| 編輯選中的想法 | 按 **Return**，或直接開始打字 |
-| 加一個隔壁的想法 | 編輯中按 **Return** |
-| 改文字 | 選取後再點一次（或直接打字） |
-| 收納到另一個想法底下 | 直接把節點拖過去 |
-| 調整順序 | 拖曳到兄弟的上/下緣出現藍線時放開 |
-| 找東西 | **⌘F** |
+| **Keyboard first** | <kbd>Tab</kbd> for a child, <kbd>Return</kbd> for a sibling, arrows to move. Your hands never need the mouse. |
+| **Your files are yours** | Every map is one `.mindmap` file, which is plain JSON with a [documented format](docs/FORMAT.md). Open it in any text editor. Nothing is locked in. |
+| **Nothing to sign up for** | No account, no cloud, no telemetry. It has never made a network request and it does not intend to start. |
+| **Native, not a web page** | Swift + SwiftUI. It launches instantly and it does not eat a gigabyte of memory to draw rectangles. |
+| **Finished, not featured** | Undo goes back a hundred steps. Autosave fires 1.5 seconds after you stop typing, and again on quit. Close a tab by accident and <kbd>⌘⇧T</kbd> brings it back. |
 
-所有變更都會自動保存。關掉再開，一切都在。
+## What it does
 
-## 功能總覽
+- **Four layouts** — logic (right), balanced, fishbone, bracket. Switch any time with <kbd>⌥⌘1</kbd>–<kbd>⌥⌘4</kbd>.
+- **Boundaries** — <kbd>⇧⌘B</kbd> draws a frame around a branch and everything visible under it.
+- **Summaries** — bracket several adjacent topics together and annotate them.
+- **Relationship links** — draw a labelled arc between any two topics, across branches.
+- **Outline mode** — the same document as a keyboard-navigable tree.
+- **Focus and presentation** — <kbd>⌘⌥F</kbd> hides the entire interface; <kbd>⌘⌥P</kbd> reveals the map level by level for an audience.
+- **Import** — Markdown outlines, OPML, FreeMind `.mm`, or a bullet list straight off the clipboard.
+- **Export** — Markdown, OPML, FreeMind, PNG, PDF, and real vector SVG. Any single branch can be exported on its own.
+- **Images** — drag a file onto a topic or paste a screenshot. Embedded in the document, so sharing never breaks it.
+- **Themes** — several restrained colour schemes; each one changes the shape of the map, not only its palette.
 
-### 四種版面
-選單列「版面」選單隨時切換（**⌥⌘1–4** 指定、**⌥⌘L** 循環）：
-- **邏輯圖（右展）**— 發想與筆記
-- **平衡圖（左右）**— 對稱主題
-- **魚骨圖** — 因果分析
-- **括號圖** — 清單與組織
+## Install
 
-### 大綱模式
-檢閱器切到「大綱」頁籤：樹狀列表瀏覽全圖、點選後直接輸入新名稱、▸▾ 直接收合。
+Download the latest `.dmg` from [Releases](../../releases), drag Bough to
+Applications, and open it. The first launch opens a tutorial map — follow it
+and you have learned the app.
 
-### 關聯線
-選取 A → 對 B 右鍵「從選取主題建立關聯線」，表達跨分支的關係。點線中間圓點可選取刪除。
-
-### 星星與備註
-- **⌘L** 加星星；有備註的節點會顯示小圖示
-- 備註在右側檢閱器編輯
-
-### 多分頁
-⌘N 或分頁列「＋」開新圖；拖曳排序；⌃Tab 切換；⌘W 關閉、⌘⇧T 反悔；每個分頁獨立自動保存，重啟完整還原。
-
-### 微調與標記
-- **⌘方向鍵** 微調節點位置（突破自動版面的限制）
-- **⌘L** 星星標記；**⌘+ / ⌘-** 縮放、**⌘0** 回到 100%
-- 搜尋時所有符合節點亮黃圈，⌘G 逐一定位
-
-### 匯入 / 匯出
-- 匯入：Markdown 大綱（⇧⌘I）、OPML、FreeMind (.mm)、剪貼簿條列（⌘⇧V）
-- 匯出：Markdown、OPML、FreeMind (.mm)、PNG、PDF、SVG 向量圖；分支可單獨匯出 PNG／SVG
-- 匯入是「檔案」選單的直接項目；匯出收在「檔案 → 匯出」子選單
-
-### 圖片附件
-把圖片檔拖到主題上，或截圖後按 **⌘⇧V** 貼上（剪貼簿裡是文字時，同一鍵改為把條列建成節點）——節點會顯示縮圖，版面自動長高。PNG／PDF／SVG 匯出都會呈現；單檔內嵌，分享不失真。
-
-### 子樹批次操作
-右鍵「子樹批次」一次為整棵分支加上色標／星星，或全部清除——不用逐點慢慢改。
-
-### 概要括線
-右鍵「加入概要括線（含下一個兄弟）」為相鄰主題加註摘要文字；點括線膠囊可在檢閱器編輯、用 ◀▶ 按鈕調整涵蓋範圍。SVG／PNG／PDF 匯出都會呈現。
-
-### 外框
-選取一個主題後按 **⇧⌘B**（或右鍵「加入外框」）把整條分支框起來——框住的是該主題與它**可見**的子孫，被收合的子孫不算。剛建立的外框是選中狀態，此時按 **Delete** 只會拿掉那個框，不會動到裡面的主題；也可以用右鍵「移除外框」或「主題 → 移除外框」。匯出的 SVG 會帶上外框。
-
-### 批次多選
-按住 **Shift** 點選多個主題（虛線外框標示），或 **Shift＋拖曳**畫出框一次圈選——右鍵即可整批上色／標星／刪除。Esc 清空批次。
-
-### 簡報模式
-上台報告用：按 **⌘⌥P**（或顯示選單 →「簡報模式」）逐層揭開地圖。→ 或空白鍵前進、← 退回、Esc 結束並還原原狀。簡報中自動取景，編輯全部鎖定。
-
-### 關聯線標籤
-節點之間可拉關聯線，點線中間的圓點後在右側檢閱器輸入標籤文字（如「導致」「參考」），標籤會顯示在線上並隨 SVG 一起匯出。
-
-### 範本
-空白／會議記錄／專案計畫／每週回顧，⌘N 即選即用（會議與回顧自動帶今天日期）。
-
-### 專注模式與分支聚焦
-- **⌘⌥F** 一鍵隱藏所有介面，只留純淨畫布；進入時自動取景整張圖
-- 聚焦所選分支：從右鍵或「顯示」選單進入，其他分支會淡化；Esc 或再次選取即可離開
-
-### 文件統計
-檢閱器底部常駐顯示：主題總數・最深層級・星標數・備註數。
-
-## 快捷鍵完整列表
-App 內從「說明」選單開啟快捷鍵表（**⇧⌘/**，即 macOS 的標準說明鍵 **⌘?**）；**⌘/** 依 XMind 語義用來收合／展開目前分支，**⌥⌘/** 全部收合／展開。
-
-## 資料在哪裡？
-
-自動保存在 `~/Library/Application Support/MindFlow/`。
-
-`.mindmap` 檔案就是開放的 JSON 文字檔，完整格式規格見 [docs/FORMAT.md](docs/FORMAT.md)——你的圖永遠不會被鎖在任何工具裡。
-
-完整功能驗收清單見 [docs/TESTING.md](docs/TESTING.md)。
-另存新檔（⌘S）後的 `.mindmap` 檔案是開放格式（JSON），可用任何文字編輯器打開。
-
-## 常見問題
-
-**Q：我關掉了一個分頁，還救得回來嗎？**
-可以。⌘⇧T 重新開啟最近關閉的分頁；每個被關閉的分頁也都在
-`~/Library/Application Support/MindFlow/recovery/` 留有副本。
-
-**Q：不小心刪了主題？**
-按 ⌘Z 復原，可以一路退回到一百步之前。
-
-**Q：資料會不會不見？**
-所有變更每 1.5 秒自動保存一次，退出程式時再存一次。
-就算強制結束程式，重開後內容都還在。
-
-**Q：可以同時開好幾張圖嗎？**
-可以，用分頁；也可以「檔案 → 新增視窗」（⌘⌥N）開第二個視窗並排對照。
-
-## 分享給別人
+Building it yourself needs only the Xcode Command Line Tools:
 
 ```bash
-cd projects/mindflow
-bash scripts/make-dmg.sh 9.4
+git clone https://github.com/Haichiu/bough.git
+cd bough
+bash scripts/package.sh        # produces ~/Desktop/Bough.app
 ```
-會在桌面產生 `MindFlow-9.4.dmg`——對方雙擊、把 App 拖進應用程式資料夾即可使用。
 
-## 給開發者
+## Documentation
+
+- **[使用手冊 / Full manual](docs/MANUAL.md)** — every feature and every shortcut, in Traditional Chinese.
+- **[File format](docs/FORMAT.md)** — the `.mindmap` JSON schema, in full.
+- **[Testing](docs/TESTING.md)** — the acceptance checklist.
+
+## For developers
 
 ```bash
-cd projects/mindflow
-swift run MindFlow          # 開發模式啟動
-swift run MindFlowChecks    # 75+ 項核心邏輯檢查
-swift build -c release      # 最佳化建置
-bash scripts/package.sh     # 打包成 Desktop/MindFlow.app
+swift run Bough             # run from source
+swift run MindFlowChecks    # the assertion suite
+bash scripts/package.sh     # package the .app
 ```
 
-架構：`MindFlowKit`（Model/Layout/ViewModel/IO/UI 全部邏輯）＋ `MindFlow`（@main 進入點）＋ `Checks`（斷言式測試，無需 Xcode XCTest）。技能指引位於 `skills/`。
+The code is one library target, `MindFlowKit`, holding the model, layout
+engine, view model, file IO and all SwiftUI views; a thin `Bough` executable
+that supplies `@main`; and `Checks`, an assertion suite that runs as a plain
+executable so it works with the Command Line Tools alone, no Xcode required.
+
+`MindFlowKit` still carries the project's former name. Renaming a module is
+churn that no user can see, so it was left alone.
+
+## Status
+
+Bough is used daily by its author and is still moving quickly. The document
+format is stable and every release reads files written by earlier ones.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).

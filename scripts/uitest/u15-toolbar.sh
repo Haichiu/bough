@@ -19,10 +19,10 @@ PASS=0; FAIL=0
 ok(){ echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad(){ echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
 activate(){
-  osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.3
+  osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1; sleep 0.3
   local front
   front=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null || true)
-  if [[ "$front" != "MindFlow" ]]; then
+  if [[ "$front" != "Bough" ]]; then
     echo "ABORT: instrument failure — frontmost='${front:-unknown}', AX/menu would be read elsewhere" >&2
     uit_quit_flush >/dev/null 2>&1
     exit 70
@@ -31,7 +31,7 @@ activate(){
 
 toolbar_tsv(){ # role<TAB>description<TAB>title, one line per toolbar control
   osascript <<'AS' 2>/dev/null
-tell application "System Events" to tell (first process whose name is "MindFlow")
+tell application "System Events" to tell (first process whose name is "Bough")
   set tabCh to character id 9
   set w to first window whose name contains " – "
   set tb to toolbar 1 of w
@@ -73,7 +73,7 @@ AS
 
 more_menu_tsv(){ # press the More pop-up, dump items and one level of submenus
   osascript <<'AS' 2>/dev/null
-tell application "System Events" to tell (first process whose name is "MindFlow")
+tell application "System Events" to tell (first process whose name is "Bough")
   set tabCh to character id 9
   set w to first window whose name contains " – "
   set tb to toolbar 1 of w

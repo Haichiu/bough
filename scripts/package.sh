@@ -1,29 +1,29 @@
 #!/bin/bash
-# Builds the release binary and packages MindFlow.app.
+# Builds the release binary and packages Bough.app.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION=${1:-3.8}
-swift build -c release --product MindFlow 2>&1 | tail -1
+swift build -c release --product Bough 2>&1 | tail -1
 swift build -c release --product MindFlowIconGen 2>&1 | tail -1
-APP="${MINDFLOW_PACKAGE_APP:-$HOME/Desktop/MindFlow.app}"
+APP="${MINDFLOW_PACKAGE_APP:-$HOME/Desktop/Bough.app}"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/MindFlow "$APP/Contents/MacOS/MindFlow"
+cp .build/release/Bough "$APP/Contents/MacOS/Bough"
 .build/release/MindFlowIconGen "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>MindFlow</string>
-    <key>CFBundleDisplayName</key><string>MindFlow</string>
-    <key>CFBundleIdentifier</key><string>com.agenthub.mindflow</string>
-    <key>CFBundleExecutable</key><string>MindFlow</string>
+    <key>CFBundleName</key><string>Bough</string>
+    <key>CFBundleDisplayName</key><string>Bough</string>
+    <key>CFBundleIdentifier</key><string>com.agenthub.bough</string>
+    <key>CFBundleExecutable</key><string>Bough</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
-            <key>CFBundleTypeName</key><string>MindFlow Document</string>
+            <key>CFBundleTypeName</key><string>Bough Document</string>
             <key>CFBundleTypeRole</key><string>Editor</string>
             <key>LSHandlerRank</key><string>Owner</string>
             <key>LSItemContentTypes</key>
@@ -36,7 +36,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <array>
         <dict>
             <key>UTTypeIdentifier</key><string>com.agenthub.mindmap</string>
-            <key>UTTypeDescription</key><string>MindFlow Document</string>
+            <key>UTTypeDescription</key><string>Bough Document</string>
             <key>UTTypeConformsTo</key><array><string>public.json</string></array>
             <key>UTTypeTagSpecification</key>
             <dict>

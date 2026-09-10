@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T-002 — MindFlow fixture map generator.
+# T-002 — Bough fixture map generator.
 #
 # Usage:  bash scripts/make-fixture.sh   # generates all three sizes into scripts/fixtures/
 #

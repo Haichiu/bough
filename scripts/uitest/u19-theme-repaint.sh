@@ -29,14 +29,14 @@ ok(){ echo "PASS: $1"; PASS=$((PASS+1)); }
 no(){ echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 instrument(){ echo "INSTRUMENT: $1"; FAIL=$((FAIL+1)); }
 
-front(){ osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.7; }
+front(){ osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1; sleep 0.7; }
 
 # Whoever owns the menu bar owns the pixels at the window rect. A full-screen
-# capture cropped to MindFlow's frame shows whatever is stacked above it, so a
+# capture cropped to Bough's frame shows whatever is stacked above it, so a
 # sample taken while another app is frontmost silently measures that app (this
 # probe once read Ghostty's #282c34 that way). Assert, don't assume.
 frontmost_is_mindflow(){
-  [[ "$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)" == "MindFlow" ]]
+  [[ "$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)" == "Bough" ]]
 }
 
 DARK=0
@@ -93,7 +93,7 @@ canvas_hex(){
 
 pick_theme(){ # $1 = menu item title
   front
-  osascript -e "tell application \"System Events\" to tell process \"MindFlow\" to click menu item \"$1\" of menu 1 of menu item \"主題\" of menu 1 of menu bar item \"顯示\" of menu bar 1" >/dev/null 2>&1
+  osascript -e "tell application \"System Events\" to tell process \"Bough\" to click menu item \"$1\" of menu 1 of menu item \"主題\" of menu 1 of menu bar item \"顯示\" of menu bar 1" >/dev/null 2>&1
   sleep 1.5
 }
 

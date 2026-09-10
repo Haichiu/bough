@@ -26,9 +26,9 @@ T=treecompare.py
 doc_path(){ ls "$UIT_STORAGE_ROOT"/tabs/*.mindmap 2>/dev/null | head -1; }
 
 ensure_front(){
-  osascript -e 'tell application "MindFlow" to activate' >/dev/null 2>&1; sleep 0.5
+  osascript -e 'tell application "Bough" to activate' >/dev/null 2>&1; sleep 0.5
   local f; f=$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null)
-  [[ "$f" == "MindFlow" ]] || { echo "  INSTRUMENT: frontmost='$f'"; return 1; }
+  [[ "$f" == "Bough" ]] || { echo "  INSTRUMENT: frontmost='$f'"; return 1; }
 }
 
 select_node(){

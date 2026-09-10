@@ -19,7 +19,7 @@ export UIT_STORAGE_BASE UIT_STORAGE_ROOT UIT_STORAGE_OWNER UIT_STORAGE_CREATOR M
 uit_prepare_storage || exit 1
 PASS=0; FAIL=0; SKIP=0
 COMMIT="${UITEST_COMMIT:-$(git -C "$PROJ" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
-BINARY_SHA=$(shasum -a 256 "$APP/Contents/MacOS/MindFlow" 2>/dev/null | awk '{print substr($1,1,16)}')
+BINARY_SHA=$(shasum -a 256 "$APP/Contents/MacOS/Bough" 2>/dev/null | awk '{print substr($1,1,16)}')
 SCEN="${*:-u1 u2 u3 u4 u5 u6 u7 u8}"
 for s in $SCEN; do
   echo "===== $s ====="
