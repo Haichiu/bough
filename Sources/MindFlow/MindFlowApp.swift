@@ -112,6 +112,23 @@ struct MindFlowApp: App {
                     .keyboardShortcut(.tab, modifiers: [.control])
                 Button("上一個分頁") { vm.cycleTab(-1) }
                     .keyboardShortcut(.tab, modifiers: [.control, .shift])
+                // The on-screen tab strip is gone, so this menu is now the only
+                // place that shows which maps are open. Listing them here keeps
+                // "jump straight to that map" possible without any visible chrome.
+                if vm.sessions.count > 1 {
+                    Divider()
+                    let titles = TabDisplayTitles.resolve(
+                        sessions: vm.sessions,
+                        activeIndex: vm.activeIndex,
+                        liveDocument: vm.document,
+                        liveFilePath: vm.filePath,
+                        maximumGraphemes: TabDisplayTitles.defaultMaximumGraphemes)
+                    ForEach(Array(titles.enumerated()), id: \.offset) { index, title in
+                        Button((index == vm.activeIndex ? "✓ " : "　") + title) {
+                            vm.switchTab(to: index)
+                        }
+                    }
+                }
                 Divider()
                 Button("建立目前分頁副本") { vm.duplicateActiveTab() }
                     .keyboardShortcut("d", modifiers: [.command, .option])

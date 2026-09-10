@@ -31,9 +31,10 @@ public struct ContentView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if !vm.zenMode {
-                tabBar
-            }
+            // No tab strip. A row of near-identical 「中心主題 · 2」 labels was chrome
+            // that earned its space only when several maps were open, which is the
+            // rare case. Tabs stay fully reachable from the 分頁 menu, which lists
+            // every open map and switches to it directly, and from ⌃Tab / ⌘W / ⇧⌘T.
             HStack(spacing: 0) {
                 MapCanvasView()
                 if vm.showInspector && !vm.zenMode {
@@ -431,16 +432,7 @@ public struct ContentView: View {
                 .buttonStyle(.borderless)
                 .font(.caption)
         } else if let id = vm.selection, let node = vm.document.root.find(id) {
-            // Name the selected topic instead of restating its role. The old
-            // header always read 「主題」, which told the user nothing they did not
-            // already know — and told them nothing at all when search, focus mode
-            // or a scrolled canvas left the selection off screen.
-            Text(inspectorTitle(for: node))
-                .font(.subheadline).fontWeight(.medium)
-                .lineLimit(1).truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .help(node.text.isEmpty ? "" : node.text)
-                .accessibilityIdentifier("inspector-title")
+            inspectorEditingBar(id: id, node: node)
             TextEditor(text: $noteDraft)
                 .focused($noteFocused)
                 .autocorrectionDisabled()
@@ -473,12 +465,41 @@ public struct ContentView: View {
         }
     }
 
-    /// The inspector header. An unnamed topic still needs a stable identity, so
-    /// it falls back to the role it plays rather than showing an empty line.
-    private func inspectorTitle(for node: MindNode) -> String {
-        let trimmed = node.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { return trimmed }
-        return node.id == vm.document.root.id ? "中心主題" : "未命名主題"
+    /// The inspector's top strip.
+    ///
+    /// It briefly named the selected topic. The owner judged that unnecessary,
+    /// and was right: the canvas already draws a selection ring, so the name was
+    /// a restatement that cost a row and earned nothing. The strip now carries
+    /// the per-topic edits that otherwise exist only in the right-click menu.
+    private func inspectorEditingBar(id: UUID, node: MindNode) -> some View {
+        HStack(spacing: 6) {
+            Button { vm.toggleMark(id: id) } label: {
+                Image(systemName: node.marked ? "star.fill" : "star")
+            }
+            .buttonStyle(.borderless)
+            .help(node.marked ? "取消星標（⌘L）" : "加上星標（⌘L）")
+            .accessibilityIdentifier("inspector-star")
+
+            Divider().frame(height: 12)
+
+            Text("填色").font(.caption).foregroundStyle(.secondary)
+            ForEach(Theme.colorTags, id: \.key) { tag in
+                Circle()
+                    .fill(tag.color)
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().stroke(
+                        node.fillTag == tag.key
+                            ? Color(nsColor: .labelColor) : Color.clear,
+                        lineWidth: 2))
+                    .onTapGesture { vm.setNodeFill(id: id, tag: tag.key) }
+                    .help(tag.name)
+                    .accessibilityLabel("填色 \(tag.name)")
+            }
+            Button("清除") { vm.setNodeFill(id: id, tag: nil) }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            Spacer(minLength: 0)
+        }
     }
 
     private var outlineRows: [OutlineRow] {
